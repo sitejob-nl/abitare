@@ -1,117 +1,141 @@
-# Implementatieplan: Abitare Database Schema
 
-## Status: ✅ VOLLEDIG GECONFIGUREERD
+# UI-Database Koppeling - Analyse & Implementatieplan
 
-Het volledige database schema is geïmplementeerd en geverifieerd:
+## Huidige Status: Niet Gekoppeld
 
----
+Na analyse van de codebase blijkt dat de UI momenteel **volledig draait op statische mock data**:
 
-## Geverifieerde Componenten
+| Component | Status | Probleem |
+|-----------|--------|----------|
+| `Customers.tsx` | Hardcoded array (regel 27-88) | 5 fake klanten in JavaScript |
+| `RecentOrders.tsx` | Hardcoded array (regel 11-33) | 3 fake orders |
+| `ActionList.tsx` | Hardcoded array (regel 11-40) | 4 fake actiepunten |
+| `AgendaToday.tsx` | Hardcoded array | 4 fake agenda items |
+| `ServiceBudget.tsx` | Hardcoded values | Fake budget cijfers |
+| `StatCard.tsx` | Props met hardcoded waarden | Dashboard stats zijn fake |
+| `Sidebar.tsx` | Hardcoded "Roermond" (regel 71) | Geen echte vestigingen |
 
-### ✅ Alle 22 Tabellen Aanwezig
-
-| Categorie | Tabellen |
-|-----------|----------|
-| Core (3) | `divisions`, `profiles`, `user_roles` |
-| Producten (6) | `suppliers`, `product_categories`, `product_ranges`, `product_colors`, `products`, `product_prices` |
-| Sales (9) | `customers`, `quotes`, `quote_sections`, `quote_lines`, `orders`, `order_lines`, `order_documents`, `order_notes`, `order_status_history` |
-| Extra (5) | `subcontractors`, `subcontractor_orders`, `referral_rewards`, `service_budgets`, `service_transactions` |
-
-### ✅ Alle Enums Geconfigureerd
-- `app_role`: admin, manager, verkoper, assistent, monteur, werkvoorbereiding, administratie
-- `customer_type`: particulier, zakelijk
-- `quote_status`: concept, verstuurd, bekeken, vervallen, geaccepteerd, afgewezen
-- `order_status`: nieuw, bestel_klaar, controle, besteld, in_productie, levering_gepland, geleverd, montage_gepland, gemonteerd, nazorg, afgerond
-- `payment_status`: open, deels_betaald, betaald
-
-### ✅ Security Helper Functies
-- `has_role(_user_id, _role)` - Controleer of gebruiker een rol heeft
-- `is_admin(_user_id)` - Check admin status
-- `is_admin_or_manager(_user_id)` - Check admin of manager status
-- `get_user_division_id(_user_id)` - Haal vestiging op van gebruiker
-
-### ✅ Alle Foreign Keys Aanwezig
-- customers → divisions, profiles (salesperson/assistant)
-- quotes → customers, divisions, profiles, product_ranges, product_colors
-- orders → customers, quotes, divisions, profiles (salesperson/assistant/installer)
-- order_lines → orders, products, suppliers, quote_lines
-- product_* → suppliers, product_ranges
-- etc.
-
-### ✅ Alle Indexes Aanwezig
-- `idx_customers_name`, `idx_customers_email`, `idx_customers_phone`, `idx_customers_division`
-- `idx_quotes_customer`, `idx_quotes_status`, `idx_quotes_number`
-- `idx_orders_customer`, `idx_orders_quote`, `idx_orders_status`, `idx_orders_number`
-- `idx_products_supplier`, `idx_products_category`, `idx_products_code`
-- `idx_order_lines_order`, `idx_quote_lines_quote`
-
-### ✅ Alle Triggers Aanwezig
-- `customers_updated_at`
-- `quotes_updated_at`
-- `orders_updated_at`
-- `products_updated_at`
-- `subcontractor_orders_updated_at`
-
-### ✅ RLS Policies Actief
-Alle tabellen hebben Row Level Security met vestiging-isolatie:
-- Admin: Volledige toegang
-- Manager: Lezen/schrijven binnen eigen vestiging
-- Verkoper: CRUD op eigen klanten/offertes/orders
-- Assistent: Lezen/schrijven op toegewezen items
-- Monteur: Alleen lezen van toegewezen orders
-
-### ✅ Database Linter: Geen Issues
-Alle security checks passeren zonder waarschuwingen.
+**De Supabase client is wel correct geconfigureerd**, maar wordt nergens gebruikt in de applicatie.
 
 ---
 
-## Architectuur Overzicht
+## Wat Moet Gebeuren
 
-```
-                                    ┌──────────────┐
-                                    │  DIVISIONS   │
-                                    └──────┬───────┘
-                                           │
-              ┌────────────────────────────┼────────────────────────────┐
-              │                            │                            │
-              ▼                            ▼                            ▼
-       ┌──────────────┐             ┌──────────────┐             ┌──────────────┐
-       │   PROFILES   │             │  CUSTOMERS   │             │   QUOTES     │
-       │ + USER_ROLES │             └──────┬───────┘             └──────┬───────┘
-       └──────────────┘                    │                            │
-                                           │                            │
-                                           ▼                            ▼
-                                    ┌──────────────┐          ┌──────────────┐
-                                    │   ORDERS     │          │ QUOTE_LINES  │
-                                    └──────┬───────┘          └──────────────┘
-                                           │
-              ┌────────────┬───────────────┼───────────────┬────────────┐
-              ▼            ▼               ▼               ▼            ▼
-       ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────┐
-       │ORDER_LINE│ │ORDER_DOCUMENT│ │ORDER_NOTE│ │STATUS_HISTORY│ │SUBCON_ORD│
-       └──────────┘ └──────────────┘ └──────────┘ └──────────────┘ └──────────┘
+### Blokkerende Factor: Authenticatie
 
+Voordat de UI kan koppelen aan de database, moet **authenticatie** geïmplementeerd worden. Dit is noodzakelijk omdat:
 
-       ┌──────────────┐             ┌──────────────┐
-       │  SUPPLIERS   │─────────────│   PRODUCTS   │
-       └──────────────┘             └──────┬───────┘
-              │                            │
-              ▼                            ▼
-       ┌──────────────┐             ┌──────────────┐
-       │PRODUCT_RANGES│             │PRODUCT_PRICES│
-       └──────┬───────┘             └──────────────┘
-              │
-              ▼
-       ┌──────────────┐
-       │PRODUCT_COLORS│
-       └──────────────┘
+1. **RLS Policies** - Alle tabellen hebben Row Level Security die `auth.uid()` gebruikt
+2. **Vestiging-isolatie** - Data filtering is gebaseerd op de ingelogde gebruiker
+3. **Rol-gebaseerde toegang** - Functionaliteit verschilt per gebruikersrol
+
+Zonder authenticatie retourneren alle queries **lege resultaten** vanwege de RLS policies.
+
+---
+
+## Implementatieplan in 3 Fasen
+
+### Fase 1: Authenticatie Systeem
+- Login pagina met email/wachtwoord
+- Registratie pagina (optioneel, kan admin-only zijn)
+- Auth context provider voor sessie management
+- Protected routes wrapper
+- Automatisch profiel aanmaken bij registratie via database trigger
+
+### Fase 2: Data Hooks & Providers
+- Custom React hooks voor database operaties:
+  - `useCustomers()` - CRUD voor klanten
+  - `useOrders()` - Orders ophalen met filters
+  - `useQuotes()` - Offertes beheren
+  - `useDivisions()` - Vestigingen laden
+  - `useCurrentUser()` - Gebruikersprofiel en rol
+- TanStack Query integratie voor caching en real-time updates
+- Loading states en error handling
+
+### Fase 3: UI Componenten Koppelen
+**Sidebar:**
+- Vestigingen dynamisch laden uit `divisions` tabel
+- Gebruiker info uit `profiles` tabel
+- Rol weergeven uit `user_roles` tabel
+
+**Dashboard:**
+- Stats ophalen via aggregate queries (COUNT, SUM)
+- Recente orders uit `orders` tabel met customer join
+- Agenda items (vereist nog een `appointments` tabel of view)
+- Service budget uit `service_budgets` tabel
+
+**Klanten pagina:**
+- Alle klanten ophalen met TanStack Query
+- Zoeken, filteren op vestiging en status
+- Klant toevoegen/bewerken formulieren
+- Initialen genereren uit naam
+
+---
+
+## Technische Aanpak
+
+### Auth Flow
+```text
+App Start
+    │
+    ▼
+┌─────────────┐
+│ Check Auth  │
+└──────┬──────┘
+       │
+   Logged in?
+       │
+  No ──┴── Yes
+   │        │
+   ▼        ▼
+┌──────┐  ┌──────────┐
+│Login │  │ Laad     │
+│Page  │  │ Profile  │
+└──────┘  │ + Roles  │
+          └────┬─────┘
+               │
+               ▼
+         ┌───────────┐
+         │ Dashboard │
+         └───────────┘
 ```
 
+### Data Hook Voorbeeld (useCustomers)
+De hook zal:
+- `useQuery` gebruiken voor data fetching
+- Filters accepteren (division_id, search, status)
+- Automatisch herladen bij wijzigingen
+- Loading en error states teruggeven
+
 ---
 
-## Volgende Stappen
+## Vereiste Database Wijzigingen
 
-1. **Authenticatie implementeren** - Login/registratie pagina met Supabase Auth
-2. **Seed data toevoegen** - Vestigingen, categorieën, leveranciers
-3. **Frontend koppelen** - Customers pagina aan database verbinden
-4. **Admin gebruiker aanmaken** - Eerste gebruiker met admin rol
+1. **Trigger voor profile aanmaken** - Bij nieuwe auth.user automatisch profiel record maken
+2. **Seed data** - Initiële vestigingen, categorieën en admin gebruiker toevoegen
+3. **Dashboard views** (optioneel) - Voor efficiënte aggregate queries
+
+---
+
+## Aanbevolen Volgorde
+
+1. **Eerst**: Authenticatie implementeren met login pagina
+2. **Dan**: Seed data toevoegen (vestigingen, admin user)
+3. **Daarna**: Klanten pagina koppelen aan database
+4. **Vervolgens**: Dashboard componenten koppelen
+5. **Tot slot**: Overige pagina's (Offertes, Orders, etc.)
+
+---
+
+## Samenvatting
+
+| Onderdeel | Actie |
+|-----------|-------|
+| Supabase Client | Correct geconfigureerd |
+| Database Schema | Volledig aanwezig (22 tabellen) |
+| RLS Policies | Actief en werkend |
+| TypeScript Types | Automatisch gegenereerd |
+| **UI Koppeling** | **NIET AANWEZIG - moet gebouwd worden** |
+| **Authenticatie** | **NIET AANWEZIG - is vereist voor UI koppeling** |
+
+Wil je dat ik begin met **Fase 1: Authenticatie** implementeren?
