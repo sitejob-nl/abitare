@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { useLocation, Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.svg";
 import {
@@ -68,7 +68,18 @@ const navSections: NavSection[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const [selectedDivision] = useState("Roermond");
+  const { profile, roles, signOut } = useAuth();
+
+  const displayName = profile?.full_name || profile?.email || "Gebruiker";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const roleDisplay = roles.length > 0 
+    ? roles[0].charAt(0).toUpperCase() + roles[0].slice(1) 
+    : "Gebruiker";
 
   return (
     <aside className="flex h-screen w-[260px] flex-shrink-0 flex-col bg-sidebar">
@@ -82,7 +93,7 @@ export function Sidebar() {
         <button className="flex w-full items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5 transition-colors hover:bg-white/[0.1]">
           <span className="h-2 w-2 rounded-full bg-success" />
           <span className="flex-1 text-left text-[13px] font-medium text-white">
-            {selectedDivision}
+            Roermond
           </span>
           <ChevronDown className="h-4 w-4 text-sidebar-muted" />
         </button>
@@ -129,13 +140,17 @@ export function Sidebar() {
 
       {/* User Card */}
       <div className="border-t border-white/[0.08] p-4">
-        <div className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors hover:bg-white/[0.06]">
+        <div 
+          className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors hover:bg-white/[0.06]"
+          onClick={signOut}
+          title="Klik om uit te loggen"
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-dark text-sm font-semibold text-white">
-            TT
+            {initials}
           </div>
           <div className="flex-1">
-            <div className="text-[13px] font-semibold text-white">Thom Tomesen</div>
-            <div className="text-[11px] text-sidebar-muted">Admin</div>
+            <div className="text-[13px] font-semibold text-white">{displayName}</div>
+            <div className="text-[11px] text-sidebar-muted">{roleDisplay}</div>
           </div>
         </div>
       </div>
