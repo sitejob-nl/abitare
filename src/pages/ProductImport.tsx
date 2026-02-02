@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductImport, parsePrice } from '@/hooks/useProductImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
 import * as XLSX from 'xlsx';
 
 interface ParsedRow {
@@ -112,9 +113,9 @@ export default function ProductImport() {
     return mapping;
   };
 
-  // Preview data (first 10 rows)
-  const previewData = useMemo(() => {
-    return fileData.slice(0, 10).map(row => ({
+  // Mapped products for validation and import
+  const mappedProducts = useMemo(() => {
+    return fileData.map(row => ({
       article_code: columnMapping.article_code ? row[columnMapping.article_code]?.toString() || '' : '',
       name: columnMapping.name ? row[columnMapping.name]?.toString() || '' : '',
       cost_price: columnMapping.cost_price ? parsePrice(row[columnMapping.cost_price]) : undefined,
@@ -122,8 +123,20 @@ export default function ProductImport() {
     }));
   }, [fileData, columnMapping]);
 
+  // Preview data (first 10 rows)
+  const previewData = useMemo(() => mappedProducts.slice(0, 10), [mappedProducts]);
+
+  // Validation result
+  const validation: ValidationResult = useMemo(() => {
+    if (mappedProducts.length === 0 || !columnMapping.article_code) {
+      return { isValid: true, errors: [], warnings: [], stats: { totalRows: 0, validRows: 0, duplicateCount: 0, priceIssueCount: 0, missingCodeCount: 0 } };
+    }
+    return validateImportData(mappedProducts);
+  }, [mappedProducts, columnMapping.article_code]);
+
   // Total count
   const totalCount = fileData.length;
+  const importableCount = validation.stats.validRows;
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -191,16 +204,19 @@ export default function ProductImport() {
 
   const handleImport = async () => {
     if (!selectedSupplierId || !columnMapping.article_code) return;
-
-    const products = fileData.map(row => ({
-      article_code: row[columnMapping.article_code]?.toString() || '',
-      name: columnMapping.name ? row[columnMapping.name]?.toString() || '' : row[columnMapping.article_code]?.toString() || '',
-      cost_price: columnMapping.cost_price ? parsePrice(row[columnMapping.cost_price]) : undefined,
-      base_price: columnMapping.base_price ? parsePrice(row[columnMapping.base_price]) : undefined,
-    })).filter(p => p.article_code);
+    
+    // Only import valid products (with article_code)
+    const validProducts = mappedProducts.filter(p => p.article_code && p.article_code.trim() !== '');
+    
+    // Deduplicate - keep last occurrence of each article code
+    const deduplicatedMap = new Map<string, typeof validProducts[0]>();
+    validProducts.forEach(p => {
+      deduplicatedMap.set(p.article_code.trim().toUpperCase(), p);
+    });
+    const productsToImport = Array.from(deduplicatedMap.values());
 
     await importProducts({
-      products,
+      products: productsToImport,
       supplierId: selectedSupplierId,
       categoryId: selectedCategoryId || undefined,
     });
@@ -455,6 +471,11 @@ export default function ProductImport() {
                 </div>
               </div>
 
+              {/* Validation Results */}
+              {columnMapping.article_code && mappedProducts.length > 0 && (
+                <ImportValidation validation={validation} />
+              )}
+
               {!columnMapping.article_code && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -466,14 +487,28 @@ export default function ProductImport() {
 
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setStep(2)}>Terug</Button>
-                <Button onClick={handleImport} disabled={isImporting || !columnMapping.article_code}>
+                <Button 
+                  onClick={handleImport} 
+                  disabled={isImporting || !columnMapping.article_code || !validation.isValid}
+                  variant={validation.warnings.length > 0 && validation.isValid ? "default" : "default"}
+                >
                   {isImporting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Importeren...
                     </>
+                  ) : !validation.isValid ? (
+                    <>
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Fouten oplossen
+                    </>
+                  ) : validation.warnings.length > 0 ? (
+                    <>
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Importeer toch ({importableCount} producten)
+                    </>
                   ) : (
-                    `Importeer ${totalCount} producten`
+                    `Importeer ${importableCount} producten`
                   )}
                 </Button>
               </div>
