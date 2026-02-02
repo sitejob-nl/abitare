@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Plus, Loader2, Send, Save } from "lucide-react";
+import { Plus, Loader2, Send, Save, FileDown } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useQuote, useUpdateQuote, QuoteStatus } from "@/hooks/useQuotes";
@@ -9,6 +9,7 @@ import { QuoteHeader } from "@/components/quotes/QuoteHeader";
 import { QuoteSectionCard } from "@/components/quotes/QuoteSectionCard";
 import { QuoteTotals } from "@/components/quotes/QuoteTotals";
 import { AddSectionDialog } from "@/components/quotes/AddSectionDialog";
+import { generateQuotePdf } from "@/lib/generateQuotePdf";
 import { toast } from "@/hooks/use-toast";
 
 function getCustomerName(customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null): string {
@@ -104,6 +105,37 @@ const QuoteDetail = () => {
     }
   };
 
+  const handleExportPdf = () => {
+    if (!quote || !sections) return;
+
+    try {
+      generateQuotePdf(
+        {
+          quote_number: quote.quote_number,
+          quote_date: quote.quote_date,
+          valid_until: quote.valid_until,
+          payment_terms_description: quote.payment_terms_description,
+          discount_amount: quote.discount_amount,
+          customer: quote.customer as any,
+          division: quote.division as any,
+        },
+        sections
+      );
+
+      toast({
+        title: "PDF geëxporteerd",
+        description: `De offerte is gedownload als PDF.`,
+      });
+    } catch (error) {
+      console.error("Error exporting PDF:", error);
+      toast({
+        title: "Fout bij exporteren",
+        description: "Er is iets misgegaan bij het genereren van de PDF.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSend = () => {
     // Future: implement sending functionality
     toast({
@@ -185,19 +217,31 @@ const QuoteDetail = () => {
 
       {/* Action buttons */}
       <div className="mt-6 flex items-center justify-between">
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={handleSave}
-          disabled={updateQuote.isPending}
-        >
-          {updateQuote.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Opslaan
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleSave}
+            disabled={updateQuote.isPending}
+          >
+            {updateQuote.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Opslaan
+          </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleExportPdf}
+            disabled={!sections || sections.length === 0}
+          >
+            <FileDown className="h-4 w-4" />
+            PDF Exporteren
+          </Button>
+        </div>
 
         <Button className="gap-2" onClick={handleSend}>
           <Send className="h-4 w-4" />
