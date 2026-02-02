@@ -1,153 +1,188 @@
 
 
-# Product Import - Prijslijsten Laden
+# Offerte Layout Aanpassen naar Abitare Format
 
-## Samenvatting
+## Wat is het verschil?
 
-Je hebt 3 prijslijsten geüpload die ik wil importeren in de database:
-
-| Bestand | Leverancier | Type | Formaat | Status |
-|---------|-------------|------|---------|--------|
-| Siemens_Prijslist.xlsx | Siemens | Apparatuur | Excel | Goed leesbaar - ~530 producten |
-| ARTIMAR_PRIJSLIJST.pdf | Artimar | Werkbladen | PDF | Complex formaat - handmatige mapping nodig |
-| LISTINO_VENDITA_STOSA.xlsx | Stosa | Keukens | Excel | Parsing mislukt - bestand mogelijk beschadigd |
-
-De **Siemens prijslijst** is het makkelijkst te importeren omdat deze gestructureerd is in kolommen.
+Na analyse van jullie huidige orderbevestiging (PDF) en de huidige implementatie zijn er belangrijke verschillen gevonden die moeten worden aangepast.
 
 ---
 
-## Wat wordt er gebouwd?
+## Huidige Situatie vs. Gewenste Situatie
 
-### 1. Product Import Pagina
-Een nieuwe pagina `/settings/import` waar je:
-- Een prijslijst-bestand kunt uploaden (CSV/Excel)
-- Een preview ziet van de data voor import
-- Kolommen kunt mappen naar database velden
-- De import kunt starten
+| Aspect | Huidige Implementatie | PDF Voorbeeld |
+|--------|----------------------|---------------|
+| **Header** | Simpele header met status dropdown | Volledige briefhoofd met bedrijfsinfo, klantadres, referentie |
+| **Configuratie sectie** | Niet aanwezig | Per sectie: frontnummer, kleur, plint, corpus, scharnier, etc. |
+| **Tabel kolommen** | Artikel, Omschrijving, Aantal, Eenheid, Prijs, %, Totaal | no, code, omschrijving, hg, br, aantal, bedrag |
+| **Subregels** | Niet ondersteund | Regels met "." prefix voor accessoires (bv `.1 PUSHPULL-C`) |
+| **Groepkoppen** | `is_group_header` veld bestaat | "Eiland bestaande uit:", "Diversen bestaande uit:" |
+| **Afmetingen** | Niet zichtbaar | Hoogte (hg) en Breedte (br) per product |
+| **Secties** | Generieke types | Specifiek: Meubelen, Apparatuur/Accessoires, Werkblad(en), Montage |
+| **Totalen** | Simpele card onderaan | "Totaal te betalen (inclusief montage): € 44.195,00" |
+| **Betalingsvoorwaarden** | Niet aanwezig | "25% aanbetaling, 75% voor levering" |
 
-### 2. Siemens Import (Directe Import)
-Voor de Siemens prijslijst maak ik een directe import met mapping:
+---
 
-| Kolom Excel | Database Veld |
-|-------------|---------------|
-| Artikel | article_code |
-| Omschrijving | name |
-| Netto Factuur Prijs | cost_price (inkoopprijs) |
-| Adviesprijs exc. BTW | base_price (verkoopprijs) |
-| Artikelgroep | category (via lookup) |
+## Wat wordt er aangepast?
 
-**Leverancier**: Siemens (bestaat al: `c5669d28-f277-4043-a3fb-c2c593b0be63`)
-**Categorie**: Apparatuur (`891805b7-58bc-4e4d-aa9f-4874954190ee`)
-
-### 3. Artimar Leverancier Toevoegen
-Artimar bestaat nog niet als leverancier. Ik voeg deze toe:
+### 1. Nieuwe Sectie Configuratie Header
+Elke sectie (vooral "Meubelen") krijgt een configuratieblok:
 
 ```text
-Code: ARTIMAR
-Naam: Artimar
-Type: werkblad
-Levertijd: 2 weken
++----------------------------------------------------------+
+| MEUBELEN                                                  |
+|----------------------------------------------------------|
+| Stosa Evolution Metropolis greeploos front met kunststof  |
+| toplaag rondom afgewerkt met ABS                         |
+|                                                          |
+| Frontnummer: MPTS GL LB    | Kleur front: Rovere Nodato  |
+| Plintkleur: Bronze         | Corpuskleur: Rose          |
+| Kolomkast hoogte: 2400 mm  | Scharnier kleur: Peltro    |
+| Greepnummer: Greeploos     | Lade kleur: Titanium       |
+| Aanrecht hoogte: 970 mm    | Blad dikte: 60 mm          |
++----------------------------------------------------------+
+```
+
+### 2. Aangepaste Tabel met Afmetingen
+
+```text
+| no | code       | omschrijving                    | hg  | br  | aantal | bedrag |
+|----|------------|--------------------------------|-----|-----|--------|--------|
+| 1  | CB00T00    | Hoog passtuk                   | 234 | 10  | 1.32   | € 150  |
+|    |            | Passtuk hoge kast 132 x 2340mm |     |     |        |        |
+| 2  | CD60T12 L  | Hoge voorraadkast              | 234 | 60  | 1      | € 890  |
+| 3  | CH60T00 L  | Hoge kast t.b.v. inbouwapp.    | 234 | 60  | 1      | € 750  |
+```
+
+### 3. Sub-regels Ondersteuning
+Regels die beginnen met een punt zijn accessoires bij het vorige product:
+
+```text
+| 6  | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
+|    |            | 1050mm                         |     |     |        |        |
+| .1 | PUSHPULL-C | Meerprijs systeem open/sluit   |     |     | 1      | € 45   |
+| .2 | PUSH50     | Ladegeleidingsrail             |     |     | 1      | € 35   |
+```
+
+### 4. Groepskoppen (Gele Headers)
+Voor logische groepering van producten:
+
+```text
+|    |            | Eiland bestaande uit:          |     |     |        |        |
+| 18 | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
+| 19 | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
+```
+
+### 5. Werkblad Sectie met Specificaties
+
+```text
++----------------------------------------------------------+
+| WERKBLAD(EN)                                             |
+|----------------------------------------------------------|
+| Uitvoering: Keramiek 12 mm dikte met facet randafwerking |
+| Randafwerking: 1P                                        |
+| Kleur: QUARZO GOLD ARTON BM                              |
++----------------------------------------------------------+
+| no | code | omschrijving                     | aantal    |
+| 2  | 9999 | Werkblad kastenwand 2000 x 616mm | 1.32 m²   |
+| 3  | 9999 | Opdikking korte zijde 50 x 60mm  | 0.03 m²   |
 ```
 
 ---
 
-## Technische Aanpak
+## Database Wijzigingen
 
-### Edge Function: `import-products`
-Een Supabase Edge Function die:
-1. CSV/Excel data ontvangt (als JSON)
-2. Kolom mapping toepast
-3. Producten upsert (insert of update bij bestaand article_code)
-4. Resultaat teruggeeft (aantal toegevoegd/bijgewerkt)
+### Nieuwe kolommen voor `quote_sections`:
 
-### Frontend Import Flow
+| Kolom | Type | Doel |
+|-------|------|------|
+| `front_number` | VARCHAR(50) | "MPTS GL LB" |
+| `front_color` | VARCHAR(100) | "Rovere Nodato" |
+| `plinth_color` | VARCHAR(100) | "Bronze" |
+| `corpus_color` | VARCHAR(100) | "Rose" |
+| `hinge_color` | VARCHAR(100) | "Peltro" |
+| `drawer_color` | VARCHAR(100) | "Titanium" |
+| `column_height_mm` | INTEGER | 2400 |
+| `countertop_height_mm` | INTEGER | 970 |
+| `countertop_thickness_mm` | INTEGER | 60 |
+| `workbench_material` | VARCHAR(255) | "Keramiek 12 mm dikte" |
+| `workbench_edge` | VARCHAR(50) | "1P" |
+| `workbench_color` | VARCHAR(255) | "QUARZO GOLD ARTON" |
+| `configuration` | JSONB | Overige configuratie |
 
-```text
-+------------------------------------------------------------------+
-|  Product Import                                                   |
-+------------------------------------------------------------------+
-|                                                                   |
-|  Stap 1: Bestand selecteren                                      |
-|  +------------------------------------------------------------+  |
-|  | [Upload prijslijst (.xlsx, .csv)]                          |  |
-|  +------------------------------------------------------------+  |
-|                                                                   |
-|  Stap 2: Leverancier kiezen                                      |
-|  +------------------------------------------------------------+  |
-|  | [Siemens                                              v]    |  |
-|  +------------------------------------------------------------+  |
-|                                                                   |
-|  Stap 3: Kolommen mappen                                         |
-|  +------------------------------------------------------------+  |
-|  | Excel Kolom          ->  Database Veld                      |  |
-|  | Artikel             ->  [article_code           v]         |  |
-|  | Omschrijving        ->  [name                   v]         |  |
-|  | Netto Factuur Prijs ->  [cost_price             v]         |  |
-|  | Adviesprijs exc BTW ->  [base_price             v]         |  |
-|  +------------------------------------------------------------+  |
-|                                                                   |
-|  Stap 4: Preview (eerste 10 rijen)                               |
-|  +------------------------------------------------------------+  |
-|  | Code     | Naam                  | Inkoop   | Verkoop      |  |
-|  | VB578D0S0| Bakoven 90 cm Pyrolyse| € 1,275  | € 2,247      |  |
-|  | HB978GUB1| Bakoven Pyrolyse      | € 1,454  | € 2,189      |  |
-|  +------------------------------------------------------------+  |
-|                                                                   |
-|  [Annuleren]                              [Importeer 530 items]  |
-+------------------------------------------------------------------+
-```
+### Nieuwe kolommen voor `quote_lines`:
+
+| Kolom | Type | Doel |
+|-------|------|------|
+| `height_mm` | INTEGER | Hoogte in mm (hg) |
+| `width_mm` | INTEGER | Breedte in mm (br) |
+| `parent_line_id` | UUID | Verwijzing naar hoofdregel voor subregels |
+| `sub_line_number` | VARCHAR(10) | ".1", ".2" voor subregels |
+| `extra_description` | TEXT | Tweede regel omschrijving |
 
 ---
 
-## Nieuwe Bestanden
-
-| Bestand | Doel |
-|---------|------|
-| `src/pages/ProductImport.tsx` | Import wizard pagina |
-| `src/components/import/FileUploader.tsx` | Bestand upload component |
-| `src/components/import/ColumnMapper.tsx` | Kolom mapping interface |
-| `src/components/import/ImportPreview.tsx` | Preview tabel |
-| `src/hooks/useProductImport.ts` | Import logica en mutaties |
-| `supabase/functions/import-products/index.ts` | Edge function voor bulk insert |
-
-## Bestaande Bestanden Aanpassen
+## Nieuwe/Aangepaste Bestanden
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/App.tsx` | Route toevoegen: `/settings/import` |
-| Database | Artimar leverancier toevoegen via migratie |
+| `src/components/quotes/QuoteSectionCard.tsx` | Configuratieheader toevoegen |
+| `src/components/quotes/QuoteLineRow.tsx` | Afmetingskolommen, subregels styling |
+| `src/components/quotes/QuoteSectionConfig.tsx` | **NIEUW** - Configuratie formulier |
+| `src/components/quotes/AddProductDialog.tsx` | Afmetingen en subregels velden |
+| `src/components/quotes/QuoteTotals.tsx` | Aanpassen naar PDF format |
+| `src/pages/QuoteDetail.tsx` | Betalingsvoorwaarden sectie |
+| `src/hooks/useQuoteSections.ts` | Nieuwe velden ondersteunen |
+| `src/hooks/useQuoteLines.ts` | Nieuwe velden ondersteunen |
+| Database migratie | Nieuwe kolommen toevoegen |
 
 ---
 
-## Database Migratie
+## Nieuwe Componenten
 
-```sql
--- Artimar leverancier toevoegen
-INSERT INTO suppliers (code, name, supplier_type, lead_time_weeks, is_active)
-VALUES ('ARTIMAR', 'Artimar', 'werkblad', 2, true);
+### QuoteSectionConfig (Configuratie bewerken)
+
+Een modal/expandable sectie waar je de configuratie van een sectie kunt invullen:
+- Frontnummer en kleur
+- Plint en corpuskleur
+- Scharnier en lade kleur
+- Kastmaten
+- Werkblad specificaties (voor werkbladen sectie)
+
+### QuoteSubLineRow
+
+Specifieke styling voor subregels:
+- Inspringen met `.1`, `.2` nummering
+- Kleinere tekst
+- Geen afmetingskolommen tonen
+
+---
+
+## Visuele Veranderingen
+
+### Sectie Header Voorbeeld
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ ≡ MEUBELEN - Keuken Kastenwand                    [⚙] [✎] [🗑] │
+├─────────────────────────────────────────────────────────────────┤
+│ Stosa Evolution Metropolis greeploos front met kunststof       │
+│ toplaag rondom afgewerkt met ABS                               │
+│                                                                 │
+│ Frontnummer: MPTS GL LB      │ Kleur front: Rovere Nodato      │
+│ Plintkleur: Bronze           │ Corpuskleur: Rose               │
+│ Kolomkast hoogte: 2400 mm    │ Scharnier kleur: Peltro         │
+│ Greepnummer: Greeploos       │ Lade kleur: Titanium            │
+├─────────────────────────────────────────────────────────────────┤
+│ no │ code       │ omschrijving           │ hg  │ br  │ # │ €   │
+│────│────────────│────────────────────────│─────│─────│───│─────│
+│ 1  │ CB00T00    │ Hoog passtuk           │ 234 │ 10  │1.3│€150 │
+│    │            │ Passtuk 132 x 2340mm   │     │     │   │     │
+├─────────────────────────────────────────────────────────────────┤
+│ [+ Product toevoegen]                    Sectie totaal: € 8.500 │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## Import Stappen
-
-### Fase 1: Siemens (Automatisch)
-1. Lees Excel data (al geparsed)
-2. Map naar product structuur
-3. Bulk insert ~530 producten
-
-### Fase 2: Artimar (Later - Handmatig)
-De Artimar PDF bevat complexe tabellen met:
-- Materiaalsoorten (Graniet, Composiet, Keramiek)
-- Verschillende diktes (20mm, 30mm, 40mm)
-- Verschillende afwerkingen (Poli, Honed, Artiskin)
-
-Dit vereist handmatige data-extractie of een aparte import tool.
-
-### Fase 3: Stosa (Later)
-Het Stosa bestand kon niet geparsed worden. Kun je controleren of:
-- Het bestand niet beschadigd is?
-- Je een CSV-versie hebt?
 
 ---
 
@@ -155,10 +190,12 @@ Het Stosa bestand kon niet geparsed worden. Kun je controleren of:
 
 | Onderdeel | Status |
 |-----------|--------|
-| Import pagina UI | Nieuw |
-| Edge function voor bulk import | Nieuw |
-| Siemens import (~530 producten) | Eerste prioriteit |
-| Artimar leverancier | Nieuw (via migratie) |
-| Artimar producten | Later (complex formaat) |
-| Stosa producten | Later (bestand check nodig) |
+| Sectie configuratie velden (database) | Nieuw - migratie nodig |
+| Quote lines afmetingen (database) | Nieuw - migratie nodig |
+| Subregels ondersteuning | Nieuw |
+| Configuratie header per sectie | Nieuw component |
+| Tabel met hg/br kolommen | Aanpassing |
+| Groepkoppen styling | Aanpassing |
+| Tweede regel omschrijving | Nieuw |
+| Werkblad specificaties | Nieuw component |
 
