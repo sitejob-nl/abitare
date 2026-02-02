@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File, AlertTriangle, Package } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useProductImport, parsePrice } from '@/hooks/useProductImport';
+import { useProductImport, usePriceGroupImport, parsePrice } from '@/hooks/useProductImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Badge } from '@/components/ui/badge';
 import * as XLSX from 'xlsx';
 
 interface ParsedRow {
@@ -26,24 +28,41 @@ interface ColumnMapping {
   description?: string;
 }
 
+interface PriceGroupMapping extends ColumnMapping {
+  range_code: string;
+  range_name: string;
+  dimension_1: string;
+  dimension_2: string;
+  dimension_3: string;
+}
+
+type ImportMode = 'standard' | 'price_groups';
+
 export default function ProductImport() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
+  const [importMode, setImportMode] = useState<ImportMode>('standard');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [fileData, setFileData] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [parseError, setParseError] = useState<string>('');
-  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
+  const [columnMapping, setColumnMapping] = useState<PriceGroupMapping>({
     article_code: '',
     name: '',
     cost_price: '',
     base_price: '',
+    range_code: '',
+    range_name: '',
+    dimension_1: '',
+    dimension_2: '',
+    dimension_3: '',
   });
   
   const { importProducts, isImporting, importResult } = useProductImport();
+  const { importPriceGroups, isImporting: isImportingPriceGroups, importResult: priceGroupResult } = usePriceGroupImport();
 
   // Fetch suppliers
   const { data: suppliers = [] } = useQuery({
@@ -80,18 +99,28 @@ export default function ProductImport() {
   }, [fileData]);
 
   // Auto-detect column mapping based on common column names
-  const autoDetectMapping = (columns: string[]) => {
-    const mapping: ColumnMapping = {
+  const autoDetectMapping = (columns: string[]): PriceGroupMapping => {
+    const mapping: PriceGroupMapping = {
       article_code: '',
       name: '',
       cost_price: '',
       base_price: '',
+      range_code: '',
+      range_name: '',
+      dimension_1: '',
+      dimension_2: '',
+      dimension_3: '',
     };
 
-    const articlePatterns = ['artikel', 'article', 'code', 'sku', 'artikelcode', 'article_code', 'product_code', 'artikelnummer'];
-    const namePatterns = ['omschrijving', 'naam', 'name', 'description', 'product', 'title', 'productnaam'];
-    const costPatterns = ['inkoop', 'cost', 'netto', 'factuur', 'inkoopprijs', 'cost_price', 'netto factuur'];
-    const pricePatterns = ['verkoop', 'advies', 'price', 'prijs', 'base', 'verkoopprijs', 'base_price', 'adviesprijs'];
+    const articlePatterns = ['artikel', 'article', 'codice', 'code', 'sku', 'artikelcode', 'article_code', 'product_code', 'artikelnummer', 'codice listino'];
+    const namePatterns = ['omschrijving', 'naam', 'name', 'descrizione', 'description', 'product', 'title', 'productnaam'];
+    const costPatterns = ['inkoop', 'cost', 'netto', 'factuur', 'inkoopprijs', 'cost_price', 'netto factuur', 'costo'];
+    const pricePatterns = ['verkoop', 'advies', 'price', 'prijs', 'base', 'verkoopprijs', 'base_price', 'adviesprijs', 'prezzo', 'listino'];
+    const rangeCodePatterns = ['variante 1', 'variante', 'range_code', 'prijsgroep_code', 'variant'];
+    const rangeNamePatterns = ['descrizione 1', 'variabile', 'range_name', 'prijsgroep_naam'];
+    const dim1Patterns = ['dimensione 1', 'breedte', 'width', 'larghezza', 'dim1'];
+    const dim2Patterns = ['dimensione 2', 'hoogte', 'height', 'altezza', 'dim2'];
+    const dim3Patterns = ['dimensione 3', 'diepte', 'depth', 'profondità', 'dim3'];
 
     columns.forEach(col => {
       const colLower = col.toLowerCase();
@@ -99,7 +128,7 @@ export default function ProductImport() {
       if (!mapping.article_code && articlePatterns.some(p => colLower.includes(p))) {
         mapping.article_code = col;
       }
-      if (!mapping.name && namePatterns.some(p => colLower.includes(p))) {
+      if (!mapping.name && namePatterns.some(p => colLower.includes(p)) && !colLower.includes('variabile')) {
         mapping.name = col;
       }
       if (!mapping.cost_price && costPatterns.some(p => colLower.includes(p))) {
@@ -108,12 +137,27 @@ export default function ProductImport() {
       if (!mapping.base_price && pricePatterns.some(p => colLower.includes(p)) && !colLower.includes('inkoop') && !colLower.includes('cost')) {
         mapping.base_price = col;
       }
+      if (!mapping.range_code && rangeCodePatterns.some(p => colLower.includes(p))) {
+        mapping.range_code = col;
+      }
+      if (!mapping.range_name && rangeNamePatterns.some(p => colLower.includes(p))) {
+        mapping.range_name = col;
+      }
+      if (!mapping.dimension_1 && dim1Patterns.some(p => colLower.includes(p))) {
+        mapping.dimension_1 = col;
+      }
+      if (!mapping.dimension_2 && dim2Patterns.some(p => colLower.includes(p))) {
+        mapping.dimension_2 = col;
+      }
+      if (!mapping.dimension_3 && dim3Patterns.some(p => colLower.includes(p))) {
+        mapping.dimension_3 = col;
+      }
     });
 
     return mapping;
   };
 
-  // Mapped products for validation and import
+  // Mapped products for standard import
   const mappedProducts = useMemo(() => {
     return fileData.map(row => ({
       article_code: columnMapping.article_code ? row[columnMapping.article_code]?.toString() || '' : '',
@@ -123,20 +167,113 @@ export default function ProductImport() {
     }));
   }, [fileData, columnMapping]);
 
+  // Extract unique price groups for price_groups mode
+  const extractedPriceGroups = useMemo(() => {
+    if (importMode !== 'price_groups' || !columnMapping.range_code) return [];
+    
+    const rangeMap = new Map<string, { code: string; name: string; count: number }>();
+    
+    fileData.forEach(row => {
+      const code = row[columnMapping.range_code]?.toString().trim();
+      const name = columnMapping.range_name ? row[columnMapping.range_name]?.toString().trim() : code;
+      
+      if (code) {
+        if (rangeMap.has(code)) {
+          rangeMap.get(code)!.count++;
+        } else {
+          rangeMap.set(code, { code, name: name || code, count: 1 });
+        }
+      }
+    });
+    
+    return Array.from(rangeMap.values()).sort((a, b) => b.count - a.count);
+  }, [fileData, columnMapping.range_code, columnMapping.range_name, importMode]);
+
+  // Extract unique products for price_groups mode
+  const extractedProducts = useMemo(() => {
+    if (importMode !== 'price_groups' || !columnMapping.article_code) return [];
+    
+    const productMap = new Map<string, { 
+      article_code: string; 
+      name: string; 
+      width_mm?: number;
+      height_mm?: number;
+      depth_mm?: number;
+    }>();
+    
+    fileData.forEach(row => {
+      const code = row[columnMapping.article_code]?.toString().trim();
+      if (code && !productMap.has(code)) {
+        productMap.set(code, {
+          article_code: code,
+          name: columnMapping.name ? row[columnMapping.name]?.toString().trim() || code : code,
+          width_mm: columnMapping.dimension_1 ? parsePrice(row[columnMapping.dimension_1]) : undefined,
+          height_mm: columnMapping.dimension_2 ? parsePrice(row[columnMapping.dimension_2]) : undefined,
+          depth_mm: columnMapping.dimension_3 ? parsePrice(row[columnMapping.dimension_3]) : undefined,
+        });
+      }
+    });
+    
+    return Array.from(productMap.values());
+  }, [fileData, columnMapping, importMode]);
+
+  // Extract prices per product-range for price_groups mode
+  const extractedPrices = useMemo(() => {
+    if (importMode !== 'price_groups' || !columnMapping.article_code || !columnMapping.range_code || !columnMapping.base_price) return [];
+    
+    return fileData.map(row => ({
+      article_code: row[columnMapping.article_code]?.toString().trim() || '',
+      range_code: row[columnMapping.range_code]?.toString().trim() || '',
+      price: parsePrice(row[columnMapping.base_price]) || 0,
+    })).filter(p => p.article_code && p.range_code && p.price > 0);
+  }, [fileData, columnMapping, importMode]);
+
   // Preview data (first 10 rows)
   const previewData = useMemo(() => mappedProducts.slice(0, 10), [mappedProducts]);
 
-  // Validation result
+  // Validation result for standard mode
   const validation: ValidationResult = useMemo(() => {
-    if (mappedProducts.length === 0 || !columnMapping.article_code) {
+    if (importMode === 'price_groups' || mappedProducts.length === 0 || !columnMapping.article_code) {
       return { isValid: true, errors: [], warnings: [], stats: { totalRows: 0, validRows: 0, duplicateCount: 0, priceIssueCount: 0, missingCodeCount: 0 } };
     }
     return validateImportData(mappedProducts);
-  }, [mappedProducts, columnMapping.article_code]);
+  }, [mappedProducts, columnMapping.article_code, importMode]);
+
+  // Validation for price groups mode
+  const priceGroupValidation = useMemo(() => {
+    if (importMode !== 'price_groups') {
+      return { isValid: true, errors: [], warnings: [] };
+    }
+    
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    if (!columnMapping.article_code) {
+      errors.push('Artikelcode kolom is verplicht');
+    }
+    if (!columnMapping.range_code) {
+      errors.push('Prijsgroep code kolom is verplicht');
+    }
+    if (!columnMapping.base_price) {
+      errors.push('Prijs kolom is verplicht');
+    }
+    if (extractedPriceGroups.length === 0) {
+      errors.push('Geen prijsgroepen gevonden in de data');
+    }
+    if (extractedProducts.length === 0) {
+      errors.push('Geen producten gevonden in de data');
+    }
+    
+    if (extractedPrices.filter(p => p.price <= 0).length > 0) {
+      warnings.push(`${extractedPrices.filter(p => p.price <= 0).length} rijen met ongeldige prijs worden overgeslagen`);
+    }
+    
+    return { isValid: errors.length === 0, errors, warnings };
+  }, [importMode, columnMapping, extractedPriceGroups, extractedProducts, extractedPrices]);
 
   // Total count
   const totalCount = fileData.length;
-  const importableCount = validation.stats.validRows;
+  const importableCount = importMode === 'price_groups' ? extractedProducts.length : validation.stats.validRows;
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,6 +309,11 @@ export default function ProductImport() {
       const detectedMapping = autoDetectMapping(columns);
       setColumnMapping(detectedMapping);
       
+      // Auto-detect import mode if price group columns are found
+      if (detectedMapping.range_code) {
+        setImportMode('price_groups');
+      }
+      
       setStep(2);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Fout bij het lezen van het bestand';
@@ -205,21 +347,31 @@ export default function ProductImport() {
   const handleImport = async () => {
     if (!selectedSupplierId || !columnMapping.article_code) return;
     
-    // Only import valid products (with article_code)
-    const validProducts = mappedProducts.filter(p => p.article_code && p.article_code.trim() !== '');
-    
-    // Deduplicate - keep last occurrence of each article code
-    const deduplicatedMap = new Map<string, typeof validProducts[0]>();
-    validProducts.forEach(p => {
-      deduplicatedMap.set(p.article_code.trim().toUpperCase(), p);
-    });
-    const productsToImport = Array.from(deduplicatedMap.values());
+    if (importMode === 'price_groups') {
+      await importPriceGroups({
+        products: extractedProducts,
+        ranges: extractedPriceGroups,
+        prices: extractedPrices,
+        supplierId: selectedSupplierId,
+        categoryId: selectedCategoryId || undefined,
+      });
+    } else {
+      // Only import valid products (with article_code)
+      const validProducts = mappedProducts.filter(p => p.article_code && p.article_code.trim() !== '');
+      
+      // Deduplicate - keep last occurrence of each article code
+      const deduplicatedMap = new Map<string, typeof validProducts[0]>();
+      validProducts.forEach(p => {
+        deduplicatedMap.set(p.article_code.trim().toUpperCase(), p);
+      });
+      const productsToImport = Array.from(deduplicatedMap.values());
 
-    await importProducts({
-      products: productsToImport,
-      supplierId: selectedSupplierId,
-      categoryId: selectedCategoryId || undefined,
-    });
+      await importProducts({
+        products: productsToImport,
+        supplierId: selectedSupplierId,
+        categoryId: selectedCategoryId || undefined,
+      });
+    }
     
     setStep(4);
   };
@@ -229,6 +381,7 @@ export default function ProductImport() {
     setFileData([]);
     setFileName('');
     setParseError('');
+    setImportMode('standard');
     setSelectedSupplierId('');
     setSelectedCategoryId('');
     setColumnMapping({
@@ -236,11 +389,20 @@ export default function ProductImport() {
       name: '',
       cost_price: '',
       base_price: '',
+      range_code: '',
+      range_name: '',
+      dimension_1: '',
+      dimension_2: '',
+      dimension_3: '',
     });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  const currentIsImporting = importMode === 'price_groups' ? isImportingPriceGroups : isImporting;
+  const currentResult = importMode === 'price_groups' ? priceGroupResult : importResult;
+  const currentValidation = importMode === 'price_groups' ? priceGroupValidation : validation;
 
   return (
     <AppLayout title="Product Import">
@@ -342,16 +504,40 @@ export default function ProductImport() {
           </Card>
         )}
 
-        {/* Step 2: Supplier & Category Selection */}
+        {/* Step 2: Supplier, Mode & Category Selection */}
         {step === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle>Stap 2: Leverancier & Categorie</CardTitle>
+              <CardTitle>Stap 2: Import instellingen</CardTitle>
               <CardDescription>
                 Bestand: <span className="font-medium">{fileName}</span> ({fileData.length} rijen)
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Import Mode Selection */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium">Import type</Label>
+                <RadioGroup value={importMode} onValueChange={(v) => setImportMode(v as ImportMode)} className="grid gap-3">
+                  <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-colors ${importMode === 'standard' ? 'border-primary bg-primary/5' : 'border-muted'}`}>
+                    <RadioGroupItem value="standard" id="standard" className="mt-1" />
+                    <div className="flex-1">
+                      <Label htmlFor="standard" className="font-medium cursor-pointer">Standaard</Label>
+                      <p className="text-sm text-muted-foreground">Eén prijs per product - voor simpele prijslijsten</p>
+                    </div>
+                  </div>
+                  <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-colors ${importMode === 'price_groups' ? 'border-primary bg-primary/5' : 'border-muted'}`}>
+                    <RadioGroupItem value="price_groups" id="price_groups" className="mt-1" />
+                    <div className="flex-1">
+                      <Label htmlFor="price_groups" className="font-medium cursor-pointer">Prijsgroepen</Label>
+                      <p className="text-sm text-muted-foreground">Meerdere prijzen per product - voor Stosa en vergelijkbare leveranciers</p>
+                    </div>
+                    {columnMapping.range_code && (
+                      <Badge variant="secondary" className="ml-2">Aanbevolen</Badge>
+                    )}
+                  </div>
+                </RadioGroup>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Leverancier *</Label>
@@ -404,79 +590,294 @@ export default function ProductImport() {
               <CardDescription>Koppel de kolommen uit je bestand aan de database velden</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Column Mapping */}
-              <div className="grid gap-4 md:grid-cols-2">
-                {[
-                  { key: 'article_code', label: 'Artikelcode *', required: true },
-                  { key: 'name', label: 'Naam', required: false },
-                  { key: 'cost_price', label: 'Inkoopprijs', required: false },
-                  { key: 'base_price', label: 'Verkoopprijs', required: false },
-                ].map(({ key, label }) => (
-                  <div key={key} className="space-y-2">
-                    <Label>{label}</Label>
-                    <Select 
-                      value={columnMapping[key as keyof ColumnMapping] || ''} 
-                      onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecteer kolom" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">-- Niet mappen --</SelectItem>
-                        {availableColumns.map((col) => (
-                          <SelectItem key={col} value={col}>{col}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
+              {/* Column Mapping - Standard mode */}
+              {importMode === 'standard' && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    { key: 'article_code', label: 'Artikelcode *', required: true },
+                    { key: 'name', label: 'Naam', required: false },
+                    { key: 'cost_price', label: 'Inkoopprijs', required: false },
+                    { key: 'base_price', label: 'Verkoopprijs', required: false },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="space-y-2">
+                      <Label>{label}</Label>
+                      <Select 
+                        value={columnMapping[key as keyof ColumnMapping] || ''} 
+                        onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kolom" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">-- Niet mappen --</SelectItem>
+                          {availableColumns.map((col) => (
+                            <SelectItem key={col} value={col}>{col}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              {/* Preview Table */}
-              <div>
-                <h4 className="font-medium mb-2">Preview (eerste 10 rijen)</h4>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Artikelcode</TableHead>
-                        <TableHead>Naam</TableHead>
-                        <TableHead className="text-right">Inkoopprijs</TableHead>
-                        <TableHead className="text-right">Verkoopprijs</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewData.length > 0 ? (
-                        previewData.map((row, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-mono">{row.article_code || '-'}</TableCell>
-                            <TableCell>{row.name || '-'}</TableCell>
-                            <TableCell className="text-right">
-                              {row.cost_price !== undefined ? `€ ${row.cost_price.toFixed(2)}` : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {row.base_price !== undefined ? `€ ${row.base_price.toFixed(2)}` : '-'}
+              {/* Column Mapping - Price Groups mode */}
+              {importMode === 'price_groups' && (
+                <div className="space-y-6">
+                  {/* Basic fields */}
+                  <div>
+                    <h4 className="font-medium mb-3">Product velden</h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {[
+                        { key: 'article_code', label: 'Artikelcode *' },
+                        { key: 'name', label: 'Naam' },
+                        { key: 'base_price', label: 'Prijs *' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <Select 
+                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecteer kolom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              {availableColumns.map((col) => (
+                                <SelectItem key={col} value={col}>{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Price group fields */}
+                  <div>
+                    <h4 className="font-medium mb-3">Prijsgroep velden</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {[
+                        { key: 'range_code', label: 'Prijsgroep code *' },
+                        { key: 'range_name', label: 'Prijsgroep naam' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <Select 
+                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecteer kolom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              {availableColumns.map((col) => (
+                                <SelectItem key={col} value={col}>{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dimension fields */}
+                  <div>
+                    <h4 className="font-medium mb-3">Afmetingen (optioneel)</h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {[
+                        { key: 'dimension_1', label: 'Breedte (mm)' },
+                        { key: 'dimension_2', label: 'Hoogte (mm)' },
+                        { key: 'dimension_3', label: 'Diepte (mm)' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <Select 
+                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecteer kolom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              {availableColumns.map((col) => (
+                                <SelectItem key={col} value={col}>{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview Table - Standard mode */}
+              {importMode === 'standard' && (
+                <div>
+                  <h4 className="font-medium mb-2">Preview (eerste 10 rijen)</h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Artikelcode</TableHead>
+                          <TableHead>Naam</TableHead>
+                          <TableHead className="text-right">Inkoopprijs</TableHead>
+                          <TableHead className="text-right">Verkoopprijs</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {previewData.length > 0 ? (
+                          previewData.map((row, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono">{row.article_code || '-'}</TableCell>
+                              <TableCell>{row.name || '-'}</TableCell>
+                              <TableCell className="text-right">
+                                {row.cost_price !== undefined ? `€ ${row.cost_price.toFixed(2)}` : '-'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.base_price !== undefined ? `€ ${row.base_price.toFixed(2)}` : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground">
+                              Selecteer kolommen om preview te zien
                             </TableCell>
                           </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground">
-                            Selecteer kolommen om preview te zien
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Validation Results */}
-              {columnMapping.article_code && mappedProducts.length > 0 && (
+              {/* Preview - Price Groups mode */}
+              {importMode === 'price_groups' && columnMapping.article_code && columnMapping.range_code && (
+                <div className="space-y-4">
+                  {/* Statistics */}
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Producten</span>
+                      </div>
+                      <div className="text-2xl font-bold">{extractedProducts.length.toLocaleString()}</div>
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Prijsgroepen</div>
+                      <div className="text-2xl font-bold">{extractedPriceGroups.length}</div>
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Prijzen</div>
+                      <div className="text-2xl font-bold">{extractedPrices.length.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  {/* Price groups preview */}
+                  {extractedPriceGroups.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2">Gevonden prijsgroepen (top 10)</h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Code</TableHead>
+                              <TableHead>Naam</TableHead>
+                              <TableHead className="text-right">Aantal prijzen</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {extractedPriceGroups.slice(0, 10).map((group, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-mono">{group.code}</TableCell>
+                                <TableCell>{group.name}</TableCell>
+                                <TableCell className="text-right">{group.count.toLocaleString()}</TableCell>
+                              </TableRow>
+                            ))}
+                            {extractedPriceGroups.length > 10 && (
+                              <TableRow>
+                                <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                  ... en {extractedPriceGroups.length - 10} meer prijsgroepen
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Products preview */}
+                  {extractedProducts.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2">Preview producten (eerste 10)</h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Artikelcode</TableHead>
+                              <TableHead>Naam</TableHead>
+                              <TableHead className="text-right">B x H x D (mm)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {extractedProducts.slice(0, 10).map((product, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-mono">{product.article_code}</TableCell>
+                                <TableCell>{product.name}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">
+                                  {product.width_mm || '-'} x {product.height_mm || '-'} x {product.depth_mm || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Validation Results - Standard mode */}
+              {importMode === 'standard' && columnMapping.article_code && mappedProducts.length > 0 && (
                 <ImportValidation validation={validation} />
               )}
 
-              {!columnMapping.article_code && (
+              {/* Validation Results - Price Groups mode */}
+              {importMode === 'price_groups' && (
+                <>
+                  {priceGroupValidation.errors.length > 0 && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <ul className="list-disc pl-4">
+                          {priceGroupValidation.errors.map((error, idx) => (
+                            <li key={idx}>{error}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {priceGroupValidation.warnings.length > 0 && (
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        <ul className="list-disc pl-4">
+                          {priceGroupValidation.warnings.map((warning, idx) => (
+                            <li key={idx}>{warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              )}
+
+              {importMode === 'standard' && !columnMapping.article_code && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -489,19 +890,20 @@ export default function ProductImport() {
                 <Button variant="outline" onClick={() => setStep(2)}>Terug</Button>
                 <Button 
                   onClick={handleImport} 
-                  disabled={isImporting || !columnMapping.article_code || !validation.isValid}
-                  variant={validation.warnings.length > 0 && validation.isValid ? "default" : "default"}
+                  disabled={currentIsImporting || !currentValidation.isValid}
                 >
-                  {isImporting ? (
+                  {currentIsImporting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Importeren...
                     </>
-                  ) : !validation.isValid ? (
+                  ) : !currentValidation.isValid ? (
                     <>
                       <AlertCircle className="h-4 w-4 mr-2" />
                       Fouten oplossen
                     </>
+                  ) : importMode === 'price_groups' ? (
+                    `Importeer ${extractedProducts.length.toLocaleString()} producten met ${extractedPriceGroups.length} prijsgroepen`
                   ) : validation.warnings.length > 0 ? (
                     <>
                       <AlertTriangle className="h-4 w-4 mr-2" />
@@ -517,7 +919,7 @@ export default function ProductImport() {
         )}
 
         {/* Step 4: Results */}
-        {step === 4 && importResult && (
+        {step === 4 && currentResult && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -526,26 +928,47 @@ export default function ProductImport() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-3xl font-bold text-green-600">{importResult.inserted}</div>
-                  <div className="text-sm text-muted-foreground">Nieuwe producten</div>
+              {importMode === 'price_groups' && priceGroupResult ? (
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold text-green-600">{priceGroupResult.products_inserted}</div>
+                    <div className="text-sm text-muted-foreground">Nieuwe producten</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold text-blue-600">{priceGroupResult.products_updated}</div>
+                    <div className="text-sm text-muted-foreground">Bijgewerkt</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold text-purple-600">{priceGroupResult.ranges_created}</div>
+                    <div className="text-sm text-muted-foreground">Prijsgroepen</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold">{priceGroupResult.prices_inserted.toLocaleString()}</div>
+                    <div className="text-sm text-muted-foreground">Prijzen</div>
+                  </div>
                 </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-3xl font-bold text-blue-600">{importResult.updated}</div>
-                  <div className="text-sm text-muted-foreground">Bijgewerkt</div>
+              ) : importResult && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold text-green-600">{importResult.inserted}</div>
+                    <div className="text-sm text-muted-foreground">Nieuwe producten</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold text-blue-600">{importResult.updated}</div>
+                    <div className="text-sm text-muted-foreground">Bijgewerkt</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-3xl font-bold">{importResult.total}</div>
+                    <div className="text-sm text-muted-foreground">Totaal verwerkt</div>
+                  </div>
                 </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-3xl font-bold">{importResult.total}</div>
-                  <div className="text-sm text-muted-foreground">Totaal verwerkt</div>
-                </div>
-              </div>
+              )}
 
-              {importResult.errors && importResult.errors.length > 0 && (
+              {currentResult && 'errors' in currentResult && currentResult.errors && currentResult.errors.length > 0 && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Er waren {importResult.errors.length} fouten tijdens de import.
+                    Er waren {currentResult.errors.length} fouten tijdens de import.
                   </AlertDescription>
                 </Alert>
               )}

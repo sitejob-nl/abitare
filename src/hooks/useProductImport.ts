@@ -19,9 +19,37 @@ interface ImportResult {
   errors?: string[];
 }
 
+interface PriceGroupProduct {
+  article_code: string;
+  name: string;
+  width_mm?: number;
+  height_mm?: number;
+  depth_mm?: number;
+}
+
+interface PriceGroupRange {
+  code: string;
+  name: string;
+  count: number;
+}
+
+interface PriceGroupPrice {
+  article_code: string;
+  range_code: string;
+  price: number;
+}
+
+interface PriceGroupImportResult {
+  success: boolean;
+  products_inserted: number;
+  products_updated: number;
+  ranges_created: number;
+  prices_inserted: number;
+  errors?: string[];
+}
+
 export function useProductImport() {
   const { toast } = useToast();
-  const [isImporting, setIsImporting] = useState(false);
 
   const importMutation = useMutation({
     mutationFn: async ({
@@ -51,6 +79,7 @@ export function useProductImport() {
             products,
             supplier_id: supplierId,
             category_id: categoryId,
+            import_mode: 'standard',
           }),
         }
       );
@@ -79,6 +108,80 @@ export function useProductImport() {
 
   return {
     importProducts: importMutation.mutateAsync,
+    isImporting: importMutation.isPending,
+    importResult: importMutation.data,
+    importError: importMutation.error,
+  };
+}
+
+export function usePriceGroupImport() {
+  const { toast } = useToast();
+
+  const importMutation = useMutation({
+    mutationFn: async ({
+      products,
+      ranges,
+      prices,
+      supplierId,
+      categoryId,
+    }: {
+      products: PriceGroupProduct[];
+      ranges: PriceGroupRange[];
+      prices: PriceGroupPrice[];
+      supplierId: string;
+      categoryId?: string;
+    }): Promise<PriceGroupImportResult> => {
+      const { data: session } = await supabase.auth.getSession();
+      
+      if (!session.session) {
+        throw new Error('Niet ingelogd');
+      }
+
+      const response = await fetch(
+        `https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/import-products`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            import_mode: 'price_groups',
+            supplier_id: supplierId,
+            category_id: categoryId,
+            price_group_data: {
+              products,
+              ranges: ranges.map(r => ({ code: r.code, name: r.name })),
+              prices,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Import mislukt');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Import geslaagd',
+        description: `${data.products_inserted + data.products_updated} producten verwerkt, ${data.ranges_created} prijsgroepen aangemaakt, ${data.prices_inserted.toLocaleString()} prijzen toegevoegd.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Import mislukt',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  return {
+    importPriceGroups: importMutation.mutateAsync,
     isImporting: importMutation.isPending,
     importResult: importMutation.data,
     importError: importMutation.error,
