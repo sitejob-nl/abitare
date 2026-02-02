@@ -965,12 +965,42 @@ export default function ProductImport() {
               )}
 
               {currentResult && 'errors' in currentResult && currentResult.errors && currentResult.errors.length > 0 && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Er waren {currentResult.errors.length} fouten tijdens de import.
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-2">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Er waren {currentResult.errors.length} fouten tijdens de import.
+                    </AlertDescription>
+                  </Alert>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                        Import fouten ({currentResult.errors.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="max-h-60 overflow-y-auto border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12">#</TableHead>
+                              <TableHead>Foutmelding</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {currentResult.errors.map((error, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-mono text-xs">{idx + 1}</TableCell>
+                                <TableCell className="text-sm text-destructive">{error}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
 
               <div className="flex justify-center gap-4 pt-4">
