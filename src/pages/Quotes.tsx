@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,7 @@ function getCustomerName(customer: { first_name?: string | null; last_name?: str
 }
 
 const Quotes = () => {
+  const navigate = useNavigate();
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -174,6 +176,7 @@ const Quotes = () => {
                   <tr
                     key={quote.id}
                     className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                    onClick={() => navigate(`/quotes/${quote.id}`)}
                   >
                     <td className="px-5 py-4">
                       <span className="text-sm font-medium text-foreground">
