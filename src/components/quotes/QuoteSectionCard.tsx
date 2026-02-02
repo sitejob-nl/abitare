@@ -173,6 +173,7 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
         onOpenChange={setShowAddProduct}
         quoteId={quoteId}
         sectionId={section.id}
+        sectionRangeId={section.range_id}
       />
 
       <QuoteSectionConfig

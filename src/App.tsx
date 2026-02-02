@@ -15,6 +15,7 @@ import Installation from "./pages/Installation";
 import Inbox from "./pages/Inbox";
 import Products from "./pages/Products";
 import ProductImport from "./pages/ProductImport";
+import PriceGroups from "./pages/PriceGroups";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/products/import" element={<ProtectedRoute><ProductImport /></ProtectedRoute>} />
+            <Route path="/settings/price-groups" element={<ProtectedRoute><PriceGroups /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             
