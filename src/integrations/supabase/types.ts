@@ -32,6 +32,7 @@ export type Database = {
           delivery_street_address: string | null
           division_id: string | null
           email: string | null
+          exact_account_id: string | null
           first_name: string | null
           id: string
           last_name: string
@@ -67,6 +68,7 @@ export type Database = {
           delivery_street_address?: string | null
           division_id?: string | null
           email?: string | null
+          exact_account_id?: string | null
           first_name?: string | null
           id?: string
           last_name: string
@@ -102,6 +104,7 @@ export type Database = {
           delivery_street_address?: string | null
           division_id?: string | null
           email?: string | null
+          exact_account_id?: string | null
           first_name?: string | null
           id?: string
           last_name?: string
@@ -175,6 +178,56 @@ export type Database = {
           postal_code?: string | null
         }
         Relationships: []
+      }
+      exact_online_connections: {
+        Row: {
+          access_token: string | null
+          connected_at: string | null
+          connected_by: string | null
+          created_at: string | null
+          division_id: string | null
+          exact_division: number | null
+          id: string
+          is_active: boolean | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          connected_at?: string | null
+          connected_by?: string | null
+          created_at?: string | null
+          division_id?: string | null
+          exact_division?: number | null
+          id?: string
+          is_active?: boolean | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          connected_at?: string | null
+          connected_by?: string | null
+          created_at?: string | null
+          division_id?: string | null
+          exact_division?: number | null
+          id?: string
+          is_active?: boolean | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exact_online_connections_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: true
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       order_documents: {
         Row: {
@@ -431,6 +484,7 @@ export type Database = {
           division_id: string | null
           exact_customer_id: string | null
           exact_invoice_id: string | null
+          exact_sales_order_id: string | null
           expected_delivery_date: string | null
           expected_installation_date: string | null
           id: string
@@ -470,6 +524,7 @@ export type Database = {
           division_id?: string | null
           exact_customer_id?: string | null
           exact_invoice_id?: string | null
+          exact_sales_order_id?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string
@@ -509,6 +564,7 @@ export type Database = {
           division_id?: string | null
           exact_customer_id?: string | null
           exact_invoice_id?: string | null
+          exact_sales_order_id?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string

@@ -2,3 +2,12 @@ project_id = "lqfqxspaamzhtgxhvlib"
 
 [functions.import-products]
 verify_jwt = false
+
+[functions.exact-auth]
+verify_jwt = false
+
+[functions.exact-auth-callback]
+verify_jwt = false
+
+[functions.exact-api]
+verify_jwt = false

@@ -1,10 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Shield } from "lucide-react";
+import { Loader2, Building2, Users, Shield, Link2 } from "lucide-react";
+import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,6 +92,10 @@ const Settings = () => {
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
               Gebruikers
+            </TabsTrigger>
+            <TabsTrigger value="integrations" className="gap-2">
+              <Link2 className="h-4 w-4" />
+              Koppelingen
             </TabsTrigger>
           </TabsList>
 
@@ -204,6 +207,11 @@ const Settings = () => {
                 </tbody>
               </table>
             </div>
+          </TabsContent>
+
+          {/* Integrations Tab */}
+          <TabsContent value="integrations" className="space-y-4">
+            <ExactOnlineSettings />
           </TabsContent>
         </Tabs>
       )}
