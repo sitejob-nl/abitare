@@ -1,311 +1,173 @@
 
-# Complete Pagina Implementatie - Abitare CRM/ERP
+# Performance Verbetering & CRUD Functionaliteit
 
-## Huidige Status
+## Gevonden Problemen
 
-Na grondige analyse van de codebase blijkt het volgende:
+### 1. Trage Laadtijden
+De RLS policies roepen bij elke query meerdere functies aan (`is_admin()`, `get_user_division_id()`) die elk een aparte database query uitvoeren. Dit veroorzaakt trage laadtijden.
 
-| Route | Huidige Pagina | Database Gekoppeld |
-|-------|---------------|-------------------|
-| `/` | Dashboard | Deels (stats wel, ActionList/Agenda niet) |
-| `/customers` | Customers.tsx | Ja |
-| `/quotes` | Dashboard (placeholder) | Nee |
-| `/orders` | Dashboard (placeholder) | Nee |
-| `/calendar` | Dashboard (placeholder) | Nee |
-| `/installation` | Dashboard (placeholder) | Nee |
-| `/inbox` | Dashboard (placeholder) | Nee |
-| `/products` | Dashboard (placeholder) | Nee |
-| `/reports` | Dashboard (placeholder) | Nee |
-| `/settings` | Dashboard (placeholder) | Nee |
+**Voorbeeld van huidige RLS op `customers`:**
+```
+is_admin(auth.uid()) OR 
+division_id = get_user_division_id(auth.uid()) OR 
+salesperson_id = auth.uid()
+```
 
-**Probleem:** 8 van de 10 routes wijzen naar de Dashboard pagina als tijdelijke placeholder.
+Elke keer als je klanten ophaalt worden er 2+ extra queries uitgevoerd per rij.
+
+### 2. Gebruiker Niet Gekoppeld aan Vestiging
+De huidige admin gebruiker (`demo@sitejob.nl`) heeft **geen `division_id`** in het profiel, waardoor de `get_user_division_id()` functie `NULL` retourneert.
+
+### 3. Ontbrekende CRUD Functionaliteit
+De "Nieuwe offerte" en "Nieuwe klant" knoppen doen momenteel niets.
 
 ---
 
-## Implementatieplan
+## Oplossingsplan
 
-### Prioriteit 1: Core Sales Pagina's
+### Stap 1: Database Optimalisaties
 
-#### 1.1 Offertes Pagina (`/quotes`)
-**Doel:** Overzicht van alle offertes met filtering en zoeken
+**1.1 Koppel admin aan vestiging**
+```sql
+UPDATE profiles 
+SET division_id = '11111111-1111-1111-1111-111111111111' 
+WHERE id = '94f1ad4d-2cf1-4978-bb6b-f61c820b2fa9';
+```
+
+**1.2 Voeg indexes toe voor RLS performance**
+```sql
+CREATE INDEX IF NOT EXISTS idx_customers_division_id ON customers(division_id);
+CREATE INDEX IF NOT EXISTS idx_customers_salesperson_id ON customers(salesperson_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_division_id ON quotes(division_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_salesperson_id ON quotes(salesperson_id);
+CREATE INDEX IF NOT EXISTS idx_orders_division_id ON orders(division_id);
+```
+
+**1.3 Optimaliseer RLS helper functies met SECURITY DEFINER en caching**
+De functies `is_admin()` en `get_user_division_id()` worden gemarkeerd als `STABLE` zodat PostgreSQL ze kan cachen binnen dezelfde query.
+
+### Stap 2: Klant Aanmaken Modal
 
 **Nieuwe bestanden:**
-- `src/pages/Quotes.tsx` - Hoofdpagina
-- `src/hooks/useQuotes.ts` - Data hook voor offertes
+- `src/components/customers/CustomerFormDialog.tsx`
 
 **Functionaliteit:**
-- Tabel met offertes (nummer, klant, bedrag, status, datum)
-- Filteren op status (concept, verstuurd, bekeken, geaccepteerd, etc.)
-- Filteren op vestiging
-- Zoeken op klantnaam of offertenummer
-- Status badges met kleuren
-- Link naar nieuwe offerte maken
+- Modal/dialog voor nieuwe klant
+- Formulier met verplichte velden: achternaam
+- Optionele velden: voornaam, bedrijf, email, telefoon, stad
+- Automatisch division_id en salesperson_id van huidige gebruiker
+- Validatie met zod + react-hook-form
+- Toast feedback bij succes/fout
 
-**Database koppeling:**
-```text
-quotes -> customers (klant info)
-       -> divisions (vestiging)
-       -> profiles (verkoper naam)
-```
+**Aanpassing `Customers.tsx`:**
+- "Nieuwe klant" knop opent de modal
+- Na aanmaken wordt de lijst automatisch ververst
 
-#### 1.2 Orders Pagina (`/orders`)
-**Doel:** Overzicht van alle orders met status workflow
+### Stap 3: Offerte Aanmaken
 
 **Nieuwe bestanden:**
-- `src/pages/Orders.tsx` - Hoofdpagina
+- `src/components/quotes/QuoteFormDialog.tsx`
 
 **Functionaliteit:**
-- Tabel met orders (nummer, klant, status, bedrag, leverdatum)
-- Filteren op status (nieuw, besteld, in_productie, etc.)
-- Filteren op betaalstatus
-- Zoeken op klantnaam of ordernummer
-- Workflow status indicator
-- Betalingsstatus weergave
+- Modal voor nieuwe offerte
+- Klant selecteren uit bestaande klanten (combobox/search)
+- Offerte geldig tot datum (default +30 dagen)
+- Automatisch: division_id, salesperson_id, created_by, status = 'concept'
+- Quote_number wordt automatisch gegenereerd door database
 
----
+**Aanpassing `Quotes.tsx`:**
+- "Nieuwe offerte" knop opent de modal
+- Na aanmaken wordt de lijst ververst
 
-### Prioriteit 2: Planning Pagina's
+### Stap 4: Query Optimalisaties
 
-#### 2.1 Agenda Pagina (`/calendar`)
-**Doel:** Agenda overzicht voor afspraken
+**Pagination toevoegen aan lijsten:**
+De hooks krijgen een `limit` parameter en er komt infinite scroll of pagination.
 
-**Vereist:** Een `appointments` tabel is nog niet aanwezig in de database.
-
-**Opties:**
-1. Simpele versie: Toon geplande leveringen en montages uit orders tabel
-2. Volledige versie: Nieuwe appointments tabel aanmaken
-
-**Voorgestelde aanpak (simpele versie):**
-- `src/pages/Calendar.tsx` - Kalender view
-- Toon `expected_delivery_date` en `expected_installation_date` uit orders
-- Groepeer op dag
-- Filter op type (levering/montage)
-
-#### 2.2 Montage Pagina (`/installation`)
-**Doel:** Overzicht van montages en planning
-
-**Nieuwe bestanden:**
-- `src/pages/Installation.tsx`
-
-**Functionaliteit:**
-- Orders met status `montage_gepland` of `gemonteerd`
-- Monteur toewijzing
-- Geplande vs uitgevoerde datum
-- Kooiaap indicator
-
----
-
-### Prioriteit 3: Beheer Pagina's
-
-#### 3.1 Producten Pagina (`/products`)
-**Doel:** Product catalogus beheer
-
-**Nieuwe bestanden:**
-- `src/pages/Products.tsx`
-- `src/hooks/useProducts.ts`
-- `src/hooks/useSuppliers.ts`
-
-**Functionaliteit:**
-- Tabel met producten (code, naam, prijs, leverancier)
-- Filteren op leverancier en categorie
-- Zoeken op artikelcode of naam
-- Alleen zichtbaar voor admin/manager
-
-#### 3.2 Rapportages Pagina (`/reports`)
-**Doel:** Overzichten en statistieken
-
-**Nieuwe bestanden:**
-- `src/pages/Reports.tsx`
-
-**Functionaliteit:**
-- Omzet per periode
-- Conversieratio grafiek
-- Top verkopers
-- Orders per status
-- Alleen zichtbaar voor admin/manager
-
-#### 3.3 Instellingen Pagina (`/settings`)
-**Doel:** Systeem configuratie
-
-**Nieuwe bestanden:**
-- `src/pages/Settings.tsx`
-
-**Functionaliteit:**
-- Vestigingen beheer
-- Gebruikers beheer
-- Rol toewijzing
-- Alleen zichtbaar voor admin
-
----
-
-### Prioriteit 4: Communicatie
-
-#### 4.1 Inbox Pagina (`/inbox`)
-**Doel:** Berichten en notificaties
-
-**Vereist:** Een `messages` of `notifications` tabel is nog niet aanwezig.
-
-**Voorgestelde aanpak:**
-- Placeholder pagina met "Komt binnenkort" bericht
-- Of: Toon order_notes als activiteitenstroom
-
----
-
-### Dashboard Componenten Koppelen
-
-#### ActionList Component
-**Probleem:** Hardcoded data
-
-**Oplossing:** Genereer actiepunten uit bestaande data:
-- Verlopen offertes (valid_until < vandaag, status = verstuurd)
-- Orders die actie vereisen (status = nieuw of controle)
-- Nieuwe leads (klanten zonder offerte)
-
-#### AgendaToday Component
-**Probleem:** Hardcoded data
-
-**Oplossing:** Haal vandaag's planning uit orders:
-- Leveringen (`expected_delivery_date` = vandaag)
-- Montages (`expected_installation_date` = vandaag)
-
----
-
-## Nieuwe Data Hooks
-
-### useQuotes Hook
-```text
-Functies:
-- useQuotes({ divisionId, status, search })
-- useQuote(id)
-- useCreateQuote()
-- useUpdateQuote()
+```typescript
+// useCustomers update
+const { data: customers } = useCustomers({
+  divisionId: filter,
+  search: query,
+  limit: 50, // Beperk eerste load
+});
 ```
 
-### useProducts Hook
-```text
-Functies:
-- useProducts({ supplierId, categoryId, search })
-- useProduct(id)
+**staleTime en cacheTime configureren:**
+```typescript
+{
+  staleTime: 5 * 60 * 1000, // 5 minuten
+  cacheTime: 30 * 60 * 1000, // 30 minuten
+}
 ```
-
-### useSuppliers Hook
-```text
-Functies:
-- useSuppliers()
-- useSupplier(id)
-```
-
-### useActionItems Hook
-```text
-Genereert actiepunten uit:
-- Verlopen offertes
-- Nieuwe orders
-- Incomplete orders
-```
-
-### useTodayAgenda Hook
-```text
-Haalt vandaag's planning op:
-- Leveringen gepland
-- Montages gepland
-```
-
----
-
-## Routing Update
-
-In `App.tsx` worden alle placeholders vervangen:
-
-```text
-/quotes      -> Quotes.tsx
-/orders      -> Orders.tsx  
-/calendar    -> Calendar.tsx
-/installation -> Installation.tsx
-/inbox       -> Inbox.tsx
-/products    -> Products.tsx
-/reports     -> Reports.tsx
-/settings    -> Settings.tsx
-```
-
----
-
-## Sidebar Badges
-
-Dynamische badges op basis van database:
-- Klanten: Aantal nieuwe klanten deze week
-- Offertes: Openstaande offertes
-- Inbox: Ongelezen notificaties
-
----
-
-## Implementatievolgorde
-
-1. **Stap 1:** useQuotes hook + Quotes.tsx
-2. **Stap 2:** Orders.tsx (hergebruik useOrders)
-3. **Stap 3:** ActionList koppelen aan database
-4. **Stap 4:** AgendaToday koppelen aan database
-5. **Stap 5:** useProducts + Products.tsx
-6. **Stap 6:** Calendar.tsx
-7. **Stap 7:** Installation.tsx
-8. **Stap 8:** Reports.tsx
-9. **Stap 9:** Settings.tsx
-10. **Stap 10:** Inbox.tsx (placeholder)
-11. **Stap 11:** Sidebar badges dynamisch maken
 
 ---
 
 ## Technische Details
 
-### Bestandsstructuur na implementatie:
+### CustomerFormDialog Component
 
 ```text
-src/
-├── pages/
-│   ├── Customers.tsx     (bestaand, gekoppeld)
-│   ├── Dashboard.tsx     (bestaand, deels gekoppeld)
-│   ├── Quotes.tsx        (nieuw)
-│   ├── Orders.tsx        (nieuw)
-│   ├── Calendar.tsx      (nieuw)
-│   ├── Installation.tsx  (nieuw)
-│   ├── Inbox.tsx         (nieuw)
-│   ├── Products.tsx      (nieuw)
-│   ├── Reports.tsx       (nieuw)
-│   ├── Settings.tsx      (nieuw)
-│   ├── Login.tsx         (bestaand)
-│   └── NotFound.tsx      (bestaand)
-├── hooks/
-│   ├── useCustomers.ts   (bestaand)
-│   ├── useOrders.ts      (bestaand)
-│   ├── useDivisions.ts   (bestaand)
-│   ├── useQuotes.ts      (nieuw)
-│   ├── useProducts.ts    (nieuw)
-│   ├── useSuppliers.ts   (nieuw)
-│   ├── useActionItems.ts (nieuw)
-│   └── useTodayAgenda.ts (nieuw)
+┌─────────────────────────────────────┐
+│  Nieuwe klant                     X │
+├─────────────────────────────────────┤
+│  Type: ○ Particulier ○ Zakelijk     │
+│                                     │
+│  Aanhef:    [Dhr./Mevr. ▼]          │
+│  Voornaam:  [                ]      │
+│  Achternaam:[                ] *    │
+│  Bedrijf:   [                ]      │
+│                                     │
+│  Email:     [                ]      │
+│  Telefoon:  [                ]      │
+│  Mobiel:    [                ]      │
+│                                     │
+│  Straat:    [                ]      │
+│  Postcode:  [      ] Plaats: [    ] │
+│                                     │
+│  [ Annuleren ]        [ Opslaan ]   │
+└─────────────────────────────────────┘
 ```
 
-### Rol-gebaseerde toegang:
+### QuoteFormDialog Component
 
-| Pagina | Admin | Manager | Verkoper | Assistent | Monteur |
-|--------|-------|---------|----------|-----------|---------|
-| Dashboard | Ja | Ja | Ja | Ja | Ja |
-| Klanten | Ja | Ja | Ja | Ja | Nee |
-| Offertes | Ja | Ja | Ja | Nee | Nee |
-| Orders | Ja | Ja | Ja | Ja | Alleen eigen |
-| Products | Ja | Ja | Lezen | Nee | Nee |
-| Reports | Ja | Ja | Nee | Nee | Nee |
-| Settings | Ja | Nee | Nee | Nee | Nee |
+```text
+┌─────────────────────────────────────┐
+│  Nieuwe offerte                   X │
+├─────────────────────────────────────┤
+│  Klant: *                           │
+│  [Zoek klant...              ▼]     │
+│                                     │
+│  Geldig tot: [dd-mm-yyyy]           │
+│                                     │
+│  Notities:                          │
+│  [                              ]   │
+│  [                              ]   │
+│                                     │
+│  [ Annuleren ]        [ Aanmaken ]  │
+└─────────────────────────────────────┘
+```
+
+### Bestandswijzigingen
+
+| Bestand | Actie |
+|---------|-------|
+| `supabase/migrations/xxx.sql` | Database fixes + indexes |
+| `src/components/customers/CustomerFormDialog.tsx` | Nieuw |
+| `src/components/quotes/QuoteFormDialog.tsx` | Nieuw |
+| `src/pages/Customers.tsx` | Integreer dialog |
+| `src/pages/Quotes.tsx` | Integreer dialog |
+| `src/hooks/useCustomers.ts` | Voeg limit + staleTime toe |
+| `src/hooks/useQuotes.ts` | Voeg limit + staleTime toe |
 
 ---
 
 ## Samenvatting
 
-| Onderdeel | Actie |
-|-----------|-------|
-| Nieuwe pagina's | 8 stuks aanmaken |
-| Nieuwe hooks | 5 stuks aanmaken |
-| Dashboard updates | ActionList + AgendaToday koppelen |
-| Sidebar updates | Dynamische badges |
-| Routing | Alle placeholders vervangen |
-
-Dit plan zorgt ervoor dat alle 10 routes volledig functionele, database-gekoppelde pagina's worden.
+| Probleem | Oplossing |
+|----------|-----------|
+| Trage queries | Database indexes + optimalisatie |
+| Gebruiker zonder vestiging | Admin koppelen aan Roermond |
+| Geen offerte aanmaken | QuoteFormDialog component |
+| Geen klant aanmaken | CustomerFormDialog component |
+| Geen limiet op data | Pagination/limits toevoegen |
