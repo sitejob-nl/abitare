@@ -16,6 +16,7 @@ import { useQuotes, QuoteStatus } from "@/hooks/useQuotes";
 import { useDivisions } from "@/hooks/useDivisions";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { QuoteFormDialog } from "@/components/quotes/QuoteFormDialog";
 
 const statusConfig: Record<QuoteStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   concept: { label: "Concept", variant: "secondary" },
@@ -54,6 +55,7 @@ const Quotes = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showNewDialog, setShowNewDialog] = useState(false);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -76,11 +78,13 @@ const Quotes = () => {
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Offertes
         </h1>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowNewDialog(true)}>
           <Plus className="h-4 w-4" />
           Nieuwe offerte
         </Button>
       </div>
+
+      <QuoteFormDialog open={showNewDialog} onOpenChange={setShowNewDialog} />
 
       {/* Filters Bar */}
       <div className="mb-5 flex flex-wrap items-center gap-3">

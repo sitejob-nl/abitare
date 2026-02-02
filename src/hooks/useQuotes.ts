@@ -16,7 +16,7 @@ interface UseQuotesOptions {
 }
 
 export function useQuotes(options: UseQuotesOptions = {}) {
-  const { divisionId, status, search, limit, enabled = true } = options;
+  const { divisionId, status, search, limit = 100, enabled = true } = options;
 
   return useQuery({
     queryKey: ["quotes", { divisionId, status, search, limit }],
@@ -29,7 +29,8 @@ export function useQuotes(options: UseQuotesOptions = {}) {
           division:divisions(id, name),
           salesperson:profiles!quotes_salesperson_id_fkey(id, full_name)
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (divisionId && divisionId !== "all") {
         query = query.eq("division_id", divisionId);
@@ -40,14 +41,11 @@ export function useQuotes(options: UseQuotesOptions = {}) {
       }
 
       if (search) {
-        // Search on quote number or customer name
-        query = query.or(
-          `quote_number.eq.${parseInt(search) || 0},customer.last_name.ilike.%${search}%,customer.first_name.ilike.%${search}%,customer.company_name.ilike.%${search}%`
-        );
-      }
-
-      if (limit) {
-        query = query.limit(limit);
+        // Search on quote number - can't search on joined tables in Supabase
+        const quoteNum = parseInt(search);
+        if (!isNaN(quoteNum)) {
+          query = query.eq("quote_number", quoteNum);
+        }
       }
 
       const { data, error } = await query;
@@ -56,6 +54,7 @@ export function useQuotes(options: UseQuotesOptions = {}) {
       return data;
     },
     enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 

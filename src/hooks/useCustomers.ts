@@ -9,14 +9,15 @@ export type CustomerUpdate = TablesUpdate<"customers">;
 interface UseCustomersOptions {
   divisionId?: string | null;
   search?: string;
+  limit?: number;
   enabled?: boolean;
 }
 
 export function useCustomers(options: UseCustomersOptions = {}) {
-  const { divisionId, search, enabled = true } = options;
+  const { divisionId, search, limit = 100, enabled = true } = options;
 
   return useQuery({
-    queryKey: ["customers", { divisionId, search }],
+    queryKey: ["customers", { divisionId, search, limit }],
     queryFn: async () => {
       let query = supabase
         .from("customers")
@@ -25,7 +26,8 @@ export function useCustomers(options: UseCustomersOptions = {}) {
           division:divisions(id, name),
           salesperson:profiles!customers_salesperson_id_fkey(id, full_name)
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (divisionId && divisionId !== "all") {
         query = query.eq("division_id", divisionId);
@@ -43,6 +45,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
       return data;
     },
     enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
