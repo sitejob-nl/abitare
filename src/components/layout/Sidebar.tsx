@@ -8,6 +8,7 @@ import {
   Users,
   FileText,
   Package,
+  Receipt,
   Calendar,
   Wrench,
   MessageSquare,
@@ -44,6 +45,7 @@ const navSections: NavSection[] = [
       { icon: Users, label: "Klanten", href: "/customers", badge: 3 },
       { icon: FileText, label: "Offertes", href: "/quotes", badge: 8 },
       { icon: Package, label: "Orders", href: "/orders" },
+      { icon: Receipt, label: "Facturen", href: "/invoices" },
     ],
   },
   {

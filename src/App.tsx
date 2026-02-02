@@ -10,6 +10,7 @@ import Customers from "./pages/Customers";
 import Quotes from "./pages/Quotes";
 import QuoteDetail from "./pages/QuoteDetail";
 import Orders from "./pages/Orders";
+import Invoices from "./pages/Invoices";
 import Calendar from "./pages/Calendar";
 import Installation from "./pages/Installation";
 import Inbox from "./pages/Inbox";
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
             <Route path="/quotes/:id" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+            <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/installation" element={<ProtectedRoute><Installation /></ProtectedRoute>} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
