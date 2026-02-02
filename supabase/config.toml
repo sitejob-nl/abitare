@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.exact-api]
 verify_jwt = false
+
+[functions.exact-webhook]
+verify_jwt = false
+
+[functions.exact-webhooks-manage]
+verify_jwt = false

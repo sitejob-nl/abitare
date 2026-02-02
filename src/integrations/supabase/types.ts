@@ -192,6 +192,7 @@ export type Database = {
           refresh_token: string | null
           token_expires_at: string | null
           updated_at: string | null
+          webhooks_enabled: boolean | null
         }
         Insert: {
           access_token?: string | null
@@ -205,6 +206,7 @@ export type Database = {
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string | null
+          webhooks_enabled?: boolean | null
         }
         Update: {
           access_token?: string | null
@@ -218,6 +220,7 @@ export type Database = {
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string | null
+          webhooks_enabled?: boolean | null
         }
         Relationships: [
           {
@@ -225,6 +228,56 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: true
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exact_webhook_logs: {
+        Row: {
+          action: string
+          connection_id: string | null
+          created_at: string | null
+          endpoint: string | null
+          entity_key: string | null
+          error_message: string | null
+          exact_division: number | null
+          id: string
+          processed: boolean | null
+          processed_at: string | null
+          topic: string
+        }
+        Insert: {
+          action: string
+          connection_id?: string | null
+          created_at?: string | null
+          endpoint?: string | null
+          entity_key?: string | null
+          error_message?: string | null
+          exact_division?: number | null
+          id?: string
+          processed?: boolean | null
+          processed_at?: string | null
+          topic: string
+        }
+        Update: {
+          action?: string
+          connection_id?: string | null
+          created_at?: string | null
+          endpoint?: string | null
+          entity_key?: string | null
+          error_message?: string | null
+          exact_division?: number | null
+          id?: string
+          processed?: boolean | null
+          processed_at?: string | null
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exact_webhook_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "exact_online_connections"
             referencedColumns: ["id"]
           },
         ]

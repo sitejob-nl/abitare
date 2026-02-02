@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff } from "lucide-react";
 import { useDivisions } from "@/hooks/useDivisions";
-import { useExactOnlineConnections, useStartExactAuth, useDisconnectExact } from "@/hooks/useExactOnline";
+import { useExactOnlineConnections, useStartExactAuth, useDisconnectExact, useManageWebhooks } from "@/hooks/useExactOnline";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -14,6 +15,7 @@ export function ExactOnlineSettings() {
   const { data: connections, isLoading: connectionsLoading } = useExactOnlineConnections();
   const startAuth = useStartExactAuth();
   const disconnectExact = useDisconnectExact();
+  const manageWebhooks = useManageWebhooks();
 
   // Handle OAuth callback result
   useEffect(() => {
@@ -53,6 +55,13 @@ export function ExactOnlineSettings() {
     if (confirm("Weet je zeker dat je deze Exact Online koppeling wilt verwijderen?")) {
       disconnectExact.mutate(connectionId);
     }
+  };
+
+  const handleToggleWebhooks = (divisionId: string, currentlyEnabled: boolean) => {
+    manageWebhooks.mutate({
+      action: currentlyEnabled ? "unsubscribe" : "subscribe",
+      divisionId,
+    });
   };
 
   if (isLoading) {
@@ -157,7 +166,7 @@ export function ExactOnlineSettings() {
                 </CardHeader>
 
                 {isConnected && connection.exact_division && (
-                  <CardContent className="pt-0">
+                  <CardContent className="pt-0 space-y-4">
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>Exact Division: <strong>{connection.exact_division}</strong></span>
                       {connection.connected_at && (
@@ -165,6 +174,28 @@ export function ExactOnlineSettings() {
                           Gekoppeld op: {new Date(connection.connected_at).toLocaleDateString("nl-NL")}
                         </span>
                       )}
+                    </div>
+
+                    {/* Webhook Toggle */}
+                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                      <div className="flex items-center gap-3">
+                        {connection.webhooks_enabled ? (
+                          <Bell className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <BellOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <div>
+                          <p className="text-sm font-medium">Real-time webhooks</p>
+                          <p className="text-xs text-muted-foreground">
+                            Ontvang updates wanneer data in Exact wijzigt
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={connection.webhooks_enabled ?? false}
+                        onCheckedChange={() => handleToggleWebhooks(division.id, connection.webhooks_enabled ?? false)}
+                        disabled={manageWebhooks.isPending}
+                      />
                     </div>
                   </CardContent>
                 )}
