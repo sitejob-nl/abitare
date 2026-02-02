@@ -216,11 +216,11 @@ const QuoteDetail = () => {
       )}
 
       {/* Action buttons */}
-      <div className="mt-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
-            className="gap-2"
+            className="gap-2 flex-1 sm:flex-none"
             onClick={handleSave}
             disabled={updateQuote.isPending}
           >
@@ -229,23 +229,26 @@ const QuoteDetail = () => {
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Opslaan
+            <span className="hidden sm:inline">Opslaan</span>
+            <span className="sm:hidden">Opslaan</span>
           </Button>
 
           <Button
             variant="outline"
-            className="gap-2"
+            className="gap-2 flex-1 sm:flex-none"
             onClick={handleExportPdf}
             disabled={!sections || sections.length === 0}
           >
             <FileDown className="h-4 w-4" />
-            PDF Exporteren
+            <span className="hidden sm:inline">PDF Exporteren</span>
+            <span className="sm:hidden">PDF</span>
           </Button>
         </div>
 
-        <Button className="gap-2" onClick={handleSend}>
+        <Button className="gap-2 w-full sm:w-auto" onClick={handleSend}>
           <Send className="h-4 w-4" />
-          Versturen naar klant
+          <span className="hidden sm:inline">Versturen naar klant</span>
+          <span className="sm:hidden">Versturen</span>
         </Button>
       </div>
 

@@ -15,7 +15,9 @@ import {
   BarChart3,
   Settings,
   ChevronDown,
+  X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface NavItem {
   icon: React.ElementType;
@@ -67,7 +69,13 @@ const navSections: NavSection[] = [
   },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  isMobile?: boolean;
+}
+
+export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarProps) {
   const location = useLocation();
   const { profile, roles, signOut } = useAuth();
   const { data: divisions } = useDivisions();
@@ -89,11 +97,37 @@ export function Sidebar() {
     : divisions?.[0];
   const divisionName = userDivision?.name || "Geen vestiging";
 
+  const handleNavClick = () => {
+    if (isMobile && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="flex h-screen w-[260px] flex-shrink-0 flex-col bg-sidebar">
-      {/* Logo */}
-      <div className="border-b border-white/[0.08] px-6 py-5">
+    <aside 
+      className={cn(
+        "flex h-screen flex-shrink-0 flex-col bg-sidebar transition-transform duration-300 ease-in-out",
+        isMobile 
+          ? cn(
+              "fixed inset-y-0 left-0 z-50 w-[280px]",
+              isOpen ? "translate-x-0" : "-translate-x-full"
+            )
+          : "relative w-[260px]"
+      )}
+    >
+      {/* Logo & Close button */}
+      <div className="flex items-center justify-between border-b border-white/[0.08] px-6 py-5">
         <img src={logo} alt="Abitare" className="h-6" />
+        {isMobile && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8 text-white hover:bg-white/10"
+            onClick={onClose}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        )}
       </div>
 
       {/* Division Selector */}
@@ -115,13 +149,15 @@ export function Sidebar() {
               {section.title}
             </div>
             {section.items.map((item) => {
-              const isActive = location.pathname === item.href;
+              const isActive = location.pathname === item.href || 
+                (item.href !== "/" && location.pathname.startsWith(item.href));
               const Icon = item.icon;
 
               return (
                 <Link
                   key={item.href}
                   to={item.href}
+                  onClick={handleNavClick}
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                     isActive

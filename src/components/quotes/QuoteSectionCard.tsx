@@ -63,17 +63,17 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
   return (
     <>
       <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-muted/30 py-3 px-4">
-          <div className="flex items-center gap-2">
-            <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab" />
-            <CardTitle className="text-base font-semibold uppercase tracking-wide">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-muted/30 py-2.5 md:py-3 px-3 md:px-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0 hidden sm:block" />
+            <CardTitle className="text-sm md:text-base font-semibold uppercase tracking-wide truncate">
               {section.title || sectionLabel}
             </CardTitle>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground hidden sm:inline shrink-0">
               ({sectionLabel})
             </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
             <Button
               variant="ghost"
               size="icon"
@@ -86,7 +86,7 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-muted-foreground"
+              className="h-7 w-7 text-muted-foreground hidden sm:flex"
               onClick={onEdit}
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -150,17 +150,17 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
           )}
 
           {/* Section footer */}
-          <div className="flex items-center justify-between border-t bg-muted/10 px-4 py-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t bg-muted/10 px-3 md:px-4 py-3">
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 w-full sm:w-auto"
               onClick={() => setShowAddProduct(true)}
             >
               <Plus className="h-3.5 w-3.5" />
               Product toevoegen
             </Button>
-            <div className="text-sm">
+            <div className="text-sm text-center sm:text-right">
               <span className="text-muted-foreground">Sectie totaal:</span>
               <span className="ml-2 font-semibold">{formatCurrency(subtotal)}</span>
             </div>
