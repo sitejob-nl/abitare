@@ -1,146 +1,59 @@
+# Abitare Keukens - Development Plan
 
-# UI-Database Koppeling - Analyse & Implementatieplan
-
-## Huidige Status: Fase 1 Voltooid ✅
+## Status: Fase 1, 2 & 3 Voltooid ✅
 
 ### Geïmplementeerd:
+
+#### Fase 1: Authenticatie ✅
 - ✅ Database trigger `on_auth_user_created` voor automatisch profiel aanmaken
 - ✅ AuthContext met sessie management en rol-ondersteuning
 - ✅ Login pagina met email/wachtwoord authenticatie
 - ✅ ProtectedRoute component voor beveiligde pagina's
 - ✅ Sidebar toont ingelogde gebruiker (naam, initialen, rol)
 
-| Component | Status | Probleem |
-|-----------|--------|----------|
-| `Customers.tsx` | Hardcoded array (regel 27-88) | 5 fake klanten in JavaScript |
-| `RecentOrders.tsx` | Hardcoded array (regel 11-33) | 3 fake orders |
-| `ActionList.tsx` | Hardcoded array (regel 11-40) | 4 fake actiepunten |
-| `AgendaToday.tsx` | Hardcoded array | 4 fake agenda items |
-| `ServiceBudget.tsx` | Hardcoded values | Fake budget cijfers |
-| `StatCard.tsx` | Props met hardcoded waarden | Dashboard stats zijn fake |
-| `Sidebar.tsx` | Hardcoded "Roermond" (regel 71) | Geen echte vestigingen |
+#### Fase 2: Data Hooks ✅
+- ✅ `useCustomers()` - CRUD voor klanten met zoeken en filteren
+- ✅ `useOrders()` / `useRecentOrders()` - Orders ophalen met filters
+- ✅ `useDivisions()` - Vestigingen laden
+- ✅ `useServiceBudget()` - Service budget voor admin/manager
 
-**De Supabase client is wel correct geconfigureerd**, maar wordt nergens gebruikt in de applicatie.
-
----
-
-## Wat Moet Gebeuren
-
-### Blokkerende Factor: Authenticatie
-
-Voordat de UI kan koppelen aan de database, moet **authenticatie** geïmplementeerd worden. Dit is noodzakelijk omdat:
-
-1. **RLS Policies** - Alle tabellen hebben Row Level Security die `auth.uid()` gebruikt
-2. **Vestiging-isolatie** - Data filtering is gebaseerd op de ingelogde gebruiker
-3. **Rol-gebaseerde toegang** - Functionaliteit verschilt per gebruikersrol
-
-Zonder authenticatie retourneren alle queries **lege resultaten** vanwege de RLS policies.
+#### Fase 3: UI Gekoppeld ✅
+- ✅ Customers.tsx - Klanten uit database met zoeken en vestiging filter
+- ✅ RecentOrders.tsx - Recente orders uit database
+- ✅ ServiceBudget.tsx - Dynamisch budget uit database
+- ✅ Sidebar.tsx - Vestigingen dynamisch geladen
 
 ---
 
-## Implementatieplan in 3 Fasen
+## Component Status
 
-### Fase 1: Authenticatie Systeem
-- Login pagina met email/wachtwoord
-- Registratie pagina (optioneel, kan admin-only zijn)
-- Auth context provider voor sessie management
-- Protected routes wrapper
-- Automatisch profiel aanmaken bij registratie via database trigger
-
-### Fase 2: Data Hooks & Providers
-- Custom React hooks voor database operaties:
-  - `useCustomers()` - CRUD voor klanten
-  - `useOrders()` - Orders ophalen met filters
-  - `useQuotes()` - Offertes beheren
-  - `useDivisions()` - Vestigingen laden
-  - `useCurrentUser()` - Gebruikersprofiel en rol
-- TanStack Query integratie voor caching en real-time updates
-- Loading states en error handling
-
-### Fase 3: UI Componenten Koppelen
-**Sidebar:**
-- Vestigingen dynamisch laden uit `divisions` tabel
-- Gebruiker info uit `profiles` tabel
-- Rol weergeven uit `user_roles` tabel
-
-**Dashboard:**
-- Stats ophalen via aggregate queries (COUNT, SUM)
-- Recente orders uit `orders` tabel met customer join
-- Agenda items (vereist nog een `appointments` tabel of view)
-- Service budget uit `service_budgets` tabel
-
-**Klanten pagina:**
-- Alle klanten ophalen met TanStack Query
-- Zoeken, filteren op vestiging en status
-- Klant toevoegen/bewerken formulieren
-- Initialen genereren uit naam
+| Component | Status | Gekoppeld aan |
+|-----------|--------|---------------|
+| `Customers.tsx` | ✅ Database | `customers` tabel |
+| `RecentOrders.tsx` | ✅ Database | `orders` tabel + customer join |
+| `ServiceBudget.tsx` | ✅ Database | `service_budgets` tabel |
+| `Sidebar.tsx` | ✅ Database | `divisions` + `profiles` tabel |
+| `ActionList.tsx` | ⏳ Nog hardcoded | Moet nog gekoppeld |
+| `AgendaToday.tsx` | ⏳ Nog hardcoded | Vereist appointments tabel |
+| `StatCard.tsx` | ⏳ Hardcoded props | Dashboard aggregate queries |
 
 ---
 
-## Technische Aanpak
+## Hooks Overzicht
 
-### Auth Flow
-```text
-App Start
-    │
-    ▼
-┌─────────────┐
-│ Check Auth  │
-└──────┬──────┘
-       │
-   Logged in?
-       │
-  No ──┴── Yes
-   │        │
-   ▼        ▼
-┌──────┐  ┌──────────┐
-│Login │  │ Laad     │
-│Page  │  │ Profile  │
-└──────┘  │ + Roles  │
-          └────┬─────┘
-               │
-               ▼
-         ┌───────────┐
-         │ Dashboard │
-         └───────────┘
-```
-
-### Data Hook Voorbeeld (useCustomers)
-De hook zal:
-- `useQuery` gebruiken voor data fetching
-- Filters accepteren (division_id, search, status)
-- Automatisch herladen bij wijzigingen
-- Loading en error states teruggeven
+| Hook | Bestand | Functionaliteit |
+|------|---------|-----------------|
+| `useCustomers` | `src/hooks/useCustomers.ts` | CRUD + zoeken + filteren |
+| `useOrders` | `src/hooks/useOrders.ts` | Orders ophalen met filters |
+| `useDivisions` | `src/hooks/useDivisions.ts` | Vestigingen laden |
+| `useServiceBudget` | `src/hooks/useServiceBudget.ts` | Budget per jaar |
 
 ---
 
-## Vereiste Database Wijzigingen
+## Volgende Stappen
 
-1. **Trigger voor profile aanmaken** - Bij nieuwe auth.user automatisch profiel record maken
-2. **Seed data** - Initiële vestigingen, categorieën en admin gebruiker toevoegen
-3. **Dashboard views** (optioneel) - Voor efficiënte aggregate queries
-
----
-
-## Aanbevolen Volgorde
-
-1. **Eerst**: Authenticatie implementeren met login pagina
-2. **Dan**: Seed data toevoegen (vestigingen, admin user)
-3. **Daarna**: Klanten pagina koppelen aan database
-4. **Vervolgens**: Dashboard componenten koppelen
-5. **Tot slot**: Overige pagina's (Offertes, Orders, etc.)
-
----
-
-## Samenvatting
-
-| Onderdeel | Actie |
-|-----------|-------|
-| Supabase Client | Correct geconfigureerd |
-| Database Schema | Volledig aanwezig (22 tabellen) |
-| RLS Policies | Actief en werkend |
-| TypeScript Types | Automatisch gegenereerd |
-| **UI Koppeling** | **NIET AANWEZIG - moet gebouwd worden** |
-| **Authenticatie** | **NIET AANWEZIG - is vereist voor UI koppeling** |
-
-Wil je dat ik begin met **Fase 1: Authenticatie** implementeren?
+1. **Seed data toevoegen** - Vestigingen, admin gebruiker, rollen
+2. **Dashboard stats** - Aggregate queries voor echte statistieken
+3. **Klant CRUD** - Modal voor toevoegen/bewerken klanten
+4. **Offertes pagina** - Koppelen aan quotes tabel
+5. **Orders pagina** - Koppelen aan orders tabel
