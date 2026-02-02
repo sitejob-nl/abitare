@@ -7,6 +7,7 @@ import { QuoteLine } from "@/hooks/useQuoteLines";
 interface QuoteTotalsProps {
   sections: (QuoteSection & { quote_lines: QuoteLine[] })[];
   discountAmount?: number;
+  paymentTerms?: string;
 }
 
 function formatCurrency(value: number): string {
@@ -16,7 +17,7 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-export function QuoteTotals({ sections, discountAmount = 0 }: QuoteTotalsProps) {
+export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: QuoteTotalsProps) {
   const totals = useMemo(() => {
     let subtotalProducts = 0;
     let subtotalMontage = 0;
@@ -87,10 +88,41 @@ export function QuoteTotals({ sections, discountAmount = 0 }: QuoteTotalsProps) 
 
           <Separator />
 
-          <div className="flex justify-between text-lg font-semibold">
-            <span>Totaal incl. BTW</span>
-            <span>{formatCurrency(totals.totalInclVat)}</span>
+          {/* Main total - styled like PDF */}
+          <div className="flex justify-between items-center py-2">
+            <span className="text-base font-semibold">
+              Totaal te betalen (inclusief montage)
+            </span>
+            <span className="text-xl font-bold">{formatCurrency(totals.totalInclVat)}</span>
           </div>
+
+          {/* Payment terms */}
+          {paymentTerms && (
+            <>
+              <Separator />
+              <div className="pt-2">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium">Betalingsvoorwaarden: </span>
+                  {paymentTerms}
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Default payment terms if not specified */}
+          {!paymentTerms && (
+            <>
+              <Separator />
+              <div className="pt-2 space-y-1">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium">Betalingsvoorwaarden:</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  25% aanbetaling bij akkoord, 75% voor levering
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +13,7 @@ import { QuoteSection, useDeleteQuoteSection, SECTION_TYPES } from "@/hooks/useQ
 import { QuoteLine } from "@/hooks/useQuoteLines";
 import { QuoteLineRow } from "./QuoteLineRow";
 import { AddProductDialog } from "./AddProductDialog";
+import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 
 interface QuoteSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
@@ -30,6 +31,7 @@ function formatCurrency(value: number | null): string {
 
 export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardProps) {
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const deleteSection = useDeleteQuoteSection();
 
   const handleDelete = () => {
@@ -41,8 +43,22 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
   const sectionLabel = SECTION_TYPES.find(t => t.value === section.section_type)?.label || section.section_type;
   const lines = section.quote_lines || [];
   
+  // Separate main lines from sub-lines for proper rendering
+  const mainLines = lines.filter(line => !line.parent_line_id);
+  const subLinesMap = new Map<string, QuoteLine[]>();
+  lines.filter(line => line.parent_line_id).forEach(subLine => {
+    const parentId = subLine.parent_line_id!;
+    if (!subLinesMap.has(parentId)) {
+      subLinesMap.set(parentId, []);
+    }
+    subLinesMap.get(parentId)!.push(subLine);
+  });
+
   // Calculate section subtotal from lines
   const subtotal = lines.reduce((sum, line) => sum + (line.line_total || 0), 0);
+
+  // Number the lines sequentially
+  let lineNumber = 0;
 
   return (
     <>
@@ -50,7 +66,7 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
         <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-muted/30 py-3 px-4">
           <div className="flex items-center gap-2">
             <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab" />
-            <CardTitle className="text-base font-semibold">
+            <CardTitle className="text-base font-semibold uppercase tracking-wide">
               {section.title || sectionLabel}
             </CardTitle>
             <span className="text-xs text-muted-foreground">
@@ -58,6 +74,15 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
             </span>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={() => setShowConfig(true)}
+              title="Configuratie"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -77,26 +102,44 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
             </Button>
           </div>
         </CardHeader>
+
+        {/* Configuration display */}
+        <SectionConfigDisplay section={section} />
+
         <CardContent className="p-0">
           {lines.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableHead className="w-24 text-[11px] uppercase tracking-wide">Artikel</TableHead>
-                    <TableHead className="text-[11px] uppercase tracking-wide">Omschrijving</TableHead>
-                    <TableHead className="w-20 text-right text-[11px] uppercase tracking-wide">Aantal</TableHead>
-                    <TableHead className="w-16 text-[11px] uppercase tracking-wide">Eenheid</TableHead>
-                    <TableHead className="w-24 text-right text-[11px] uppercase tracking-wide">Prijs</TableHead>
-                    <TableHead className="w-16 text-right text-[11px] uppercase tracking-wide">%</TableHead>
-                    <TableHead className="w-28 text-right text-[11px] uppercase tracking-wide">Totaal</TableHead>
+                    <TableHead className="w-12 text-center text-[11px] uppercase tracking-wide">no</TableHead>
+                    <TableHead className="w-24 text-[11px] uppercase tracking-wide">code</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide">omschrijving</TableHead>
+                    <TableHead className="w-14 text-center text-[11px] uppercase tracking-wide">hg</TableHead>
+                    <TableHead className="w-14 text-center text-[11px] uppercase tracking-wide">br</TableHead>
+                    <TableHead className="w-20 text-right text-[11px] uppercase tracking-wide">aantal</TableHead>
+                    <TableHead className="w-28 text-right text-[11px] uppercase tracking-wide">bedrag</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lines.map((line) => (
-                    <QuoteLineRow key={line.id} line={line} quoteId={quoteId} />
-                  ))}
+                  {mainLines.map((line) => {
+                    // Increment line number for non-group-header lines
+                    if (!line.is_group_header) {
+                      lineNumber++;
+                    }
+                    const subLines = subLinesMap.get(line.id) || [];
+                    
+                    return (
+                      <QuoteLineRow 
+                        key={line.id} 
+                        line={line} 
+                        quoteId={quoteId}
+                        lineNumber={line.is_group_header ? undefined : lineNumber}
+                        subLines={subLines}
+                      />
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -130,6 +173,12 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
         onOpenChange={setShowAddProduct}
         quoteId={quoteId}
         sectionId={section.id}
+      />
+
+      <QuoteSectionConfig
+        section={section}
+        open={showConfig}
+        onOpenChange={setShowConfig}
       />
     </>
   );
