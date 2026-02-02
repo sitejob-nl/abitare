@@ -1,1 +1,4 @@
 project_id = "lqfqxspaamzhtgxhvlib"
+
+[functions.import-products]
+verify_jwt = false
