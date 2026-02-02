@@ -9,6 +9,7 @@ interface ExactOnlineConnection {
   is_active: boolean;
   connected_at: string | null;
   token_expires_at: string | null;
+  webhooks_enabled: boolean | null;
 }
 
 export function useExactOnlineConnections() {
@@ -91,6 +92,40 @@ export function useExactApi() {
       if (data.error) throw new Error(data.error);
 
       return data;
+    },
+  });
+}
+
+export function useManageWebhooks() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+    }: {
+      action: "subscribe" | "unsubscribe" | "status";
+      divisionId: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-webhooks-manage", {
+        body: { action, divisionId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["exact-online-connections"] });
+      if (variables.action === "subscribe") {
+        toast.success("Webhooks ingeschakeld");
+      } else if (variables.action === "unsubscribe") {
+        toast.success("Webhooks uitgeschakeld");
+      }
+    },
+    onError: (error) => {
+      toast.error(`Webhook fout: ${error.message}`);
     },
   });
 }
