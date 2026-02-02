@@ -23,8 +23,7 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         .from("customers")
         .select(`
           *,
-          division:divisions(id, name),
-          salesperson:profiles!customers_salesperson_id_fkey(id, full_name)
+          division:divisions(id, name)
         `)
         .order("created_at", { ascending: false })
         .limit(limit);
@@ -60,7 +59,6 @@ export function useCustomer(id: string | undefined) {
         .select(`
           *,
           division:divisions(id, name),
-          salesperson:profiles!customers_salesperson_id_fkey(id, full_name),
           referred_by:customers!customers_referred_by_customer_id_fkey(id, first_name, last_name)
         `)
         .eq("id", id)
