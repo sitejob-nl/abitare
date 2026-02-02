@@ -26,8 +26,7 @@ export function useQuotes(options: UseQuotesOptions = {}) {
         .select(`
           *,
           customer:customers(id, first_name, last_name, company_name),
-          division:divisions(id, name),
-          salesperson:profiles!quotes_salesperson_id_fkey(id, full_name)
+          division:divisions(id, name)
         `)
         .order("created_at", { ascending: false })
         .limit(limit);
@@ -70,7 +69,6 @@ export function useQuote(id: string | undefined) {
           *,
           customer:customers(*),
           division:divisions(*),
-          salesperson:profiles!quotes_salesperson_id_fkey(id, full_name),
           quote_sections(*),
           quote_lines(*)
         `)

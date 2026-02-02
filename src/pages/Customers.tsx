@@ -143,7 +143,8 @@ const Customers = () => {
               {customers.map((customer) => {
                 const initials = getInitials(customer.first_name, customer.last_name, customer.company_name);
                 const displayName = getDisplayName(customer.first_name, customer.last_name, customer.company_name, customer.salutation);
-                const salesperson = (customer.salesperson as { full_name?: string } | null)?.full_name || "-";
+                // salesperson join removed - no FK exists
+                const salesperson = "-";
                 
                 return (
                   <tr
