@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import {
   Dialog,
@@ -26,9 +26,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useProducts } from "@/hooks/useProducts";
 import { useCreateQuoteLine } from "@/hooks/useQuoteLines";
+import { fetchProductPrice } from "@/hooks/useProductPrices";
 import { toast } from "@/hooks/use-toast";
 
 interface AddProductDialogProps {
@@ -36,6 +38,7 @@ interface AddProductDialogProps {
   onOpenChange: (open: boolean) => void;
   quoteId: string;
   sectionId: string;
+  sectionRangeId?: string | null; // Pass the section's range_id for price lookup
 }
 
 export function AddProductDialog({
@@ -43,6 +46,7 @@ export function AddProductDialog({
   onOpenChange,
   quoteId,
   sectionId,
+  sectionRangeId,
 }: AddProductDialogProps) {
   const createLine = useCreateQuoteLine();
   
@@ -58,6 +62,8 @@ export function AddProductDialog({
   const [heightMm, setHeightMm] = useState("");
   const [widthMm, setWidthMm] = useState("");
   const [extraDescription, setExtraDescription] = useState("");
+  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | null>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   
   // Free line fields
   const [freeDescription, setFreeDescription] = useState("");
@@ -83,19 +89,41 @@ export function AddProductDialog({
   }, [products, selectedProductId]);
 
   // When product is selected, prefill price and dimensions
-  const handleProductSelect = (productId: string) => {
+  const handleProductSelect = async (productId: string) => {
     setSelectedProductId(productId);
     setProductOpen(false);
     
     const product = products?.find(p => p.id === productId);
-    if (product?.base_price) {
-      setUnitPrice(product.base_price.toString());
-    }
-    if (product?.height_mm) {
+    if (!product) return;
+
+    // Prefill dimensions
+    if (product.height_mm) {
       setHeightMm(product.height_mm.toString());
     }
-    if (product?.width_mm) {
+    if (product.width_mm) {
       setWidthMm(product.width_mm.toString());
+    }
+
+    // Fetch price from product_prices based on section range
+    setIsLoadingPrice(true);
+    try {
+      const priceResult = await fetchProductPrice(productId, sectionRangeId || null);
+      if (priceResult.price != null) {
+        setUnitPrice(priceResult.price.toString());
+        setPriceSource(priceResult.source);
+      } else if (product.base_price) {
+        setUnitPrice(product.base_price.toString());
+        setPriceSource("base_price");
+      }
+    } catch (error) {
+      console.error("Error fetching price:", error);
+      // Fallback to base_price
+      if (product.base_price) {
+        setUnitPrice(product.base_price.toString());
+        setPriceSource("base_price");
+      }
+    } finally {
+      setIsLoadingPrice(false);
     }
   };
 
@@ -234,6 +262,7 @@ export function AddProductDialog({
     setHeightMm("");
     setWidthMm("");
     setExtraDescription("");
+    setPriceSource(null);
     setFreeDescription("");
     setFreeArticleCode("");
     setFreePrice("");
@@ -314,7 +343,7 @@ export function AddProductDialog({
                                   </span>
                                   {product.base_price && (
                                     <span className="text-xs text-muted-foreground">
-                                      € {product.base_price.toFixed(2)}
+                                      Basisprijs: € {product.base_price.toFixed(2)}
                                     </span>
                                   )}
                                 </div>
@@ -331,6 +360,16 @@ export function AddProductDialog({
 
             {selectedProduct && (
               <>
+                {/* Price indicator */}
+                {priceSource && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant={priceSource === "range_price" ? "default" : "secondary"}>
+                      {priceSource === "range_price" ? "Prijsgroep prijs" : "Basisprijs"}
+                    </Badge>
+                    {isLoadingPrice && <Loader2 className="h-3 w-3 animate-spin" />}
+                  </div>
+                )}
+
                 {/* Dimensions */}
                 <div className="grid grid-cols-4 gap-3">
                   <div className="space-y-2">
