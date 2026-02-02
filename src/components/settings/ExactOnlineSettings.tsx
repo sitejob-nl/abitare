@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff } from "lucide-react";
+import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download } from "lucide-react";
 import { useDivisions } from "@/hooks/useDivisions";
-import { useExactOnlineConnections, useStartExactAuth, useDisconnectExact, useManageWebhooks } from "@/hooks/useExactOnline";
+import { useExactOnlineConnections, useStartExactAuth, useDisconnectExact, useManageWebhooks, useSyncCustomers } from "@/hooks/useExactOnline";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ export function ExactOnlineSettings() {
   const startAuth = useStartExactAuth();
   const disconnectExact = useDisconnectExact();
   const manageWebhooks = useManageWebhooks();
+  const syncCustomers = useSyncCustomers();
 
   // Handle OAuth callback result
   useEffect(() => {
@@ -174,6 +175,58 @@ export function ExactOnlineSettings() {
                           Gekoppeld op: {new Date(connection.connected_at).toLocaleDateString("nl-NL")}
                         </span>
                       )}
+                    </div>
+
+                    {/* Customer Sync Controls */}
+                    <div className="rounded-lg border border-border p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Klanten synchroniseren</p>
+                          <p className="text-xs text-muted-foreground">
+                            Synchroniseer klanten tussen Abitare en Exact Online
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncCustomers.mutate({ action: "push", divisionId: division.id })}
+                          disabled={syncCustomers.isPending}
+                        >
+                          {syncCustomers.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          Push naar Exact
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncCustomers.mutate({ action: "pull", divisionId: division.id })}
+                          disabled={syncCustomers.isPending}
+                        >
+                          {syncCustomers.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          Haal uit Exact
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => syncCustomers.mutate({ action: "sync", divisionId: division.id })}
+                          disabled={syncCustomers.isPending}
+                        >
+                          {syncCustomers.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                          )}
+                          Volledige sync
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Webhook Toggle */}
