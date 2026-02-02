@@ -179,6 +179,7 @@ const QuoteDetail = () => {
         <QuoteTotals
           sections={sections}
           discountAmount={quote.discount_amount || 0}
+          paymentTerms={quote.payment_terms_description || undefined}
         />
       )}
 

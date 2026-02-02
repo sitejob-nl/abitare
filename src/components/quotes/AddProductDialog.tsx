@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -54,12 +55,22 @@ export function AddProductDialog({
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
   const [discount, setDiscount] = useState("0");
+  const [heightMm, setHeightMm] = useState("");
+  const [widthMm, setWidthMm] = useState("");
+  const [extraDescription, setExtraDescription] = useState("");
   
   // Free line fields
   const [freeDescription, setFreeDescription] = useState("");
   const [freeArticleCode, setFreeArticleCode] = useState("");
   const [freePrice, setFreePrice] = useState("");
   const [freeQuantity, setFreeQuantity] = useState("1");
+  const [freeHeightMm, setFreeHeightMm] = useState("");
+  const [freeWidthMm, setFreeWidthMm] = useState("");
+  const [freeExtraDescription, setFreeExtraDescription] = useState("");
+
+  // Group header toggle
+  const [isGroupHeader, setIsGroupHeader] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
 
   const { data: products, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
@@ -71,7 +82,7 @@ export function AddProductDialog({
     return products?.find((p) => p.id === selectedProductId);
   }, [products, selectedProductId]);
 
-  // When product is selected, prefill price
+  // When product is selected, prefill price and dimensions
   const handleProductSelect = (productId: string) => {
     setSelectedProductId(productId);
     setProductOpen(false);
@@ -79,6 +90,12 @@ export function AddProductDialog({
     const product = products?.find(p => p.id === productId);
     if (product?.base_price) {
       setUnitPrice(product.base_price.toString());
+    }
+    if (product?.height_mm) {
+      setHeightMm(product.height_mm.toString());
+    }
+    if (product?.width_mm) {
+      setWidthMm(product.width_mm.toString());
     }
   };
 
@@ -97,6 +114,9 @@ export function AddProductDialog({
         unit_price: parseFloat(unitPrice) || selectedProduct.base_price || 0,
         discount_percentage: parseFloat(discount) || 0,
         vat_rate: selectedProduct.vat_rate || 21,
+        height_mm: heightMm ? parseInt(heightMm) : null,
+        width_mm: widthMm ? parseInt(widthMm) : null,
+        extra_description: extraDescription.trim() || null,
       });
 
       toast({
@@ -117,6 +137,51 @@ export function AddProductDialog({
   };
 
   const handleSubmitFreeLine = async () => {
+    // If group header, only require title
+    if (isGroupHeader) {
+      if (!groupTitle.trim()) {
+        toast({
+          title: "Titel verplicht",
+          description: "Vul een titel in voor de groepkop.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        await createLine.mutateAsync({
+          quote_id: quoteId,
+          section_id: sectionId,
+          product_id: null,
+          article_code: null,
+          description: groupTitle.trim(),
+          group_title: groupTitle.trim(),
+          is_group_header: true,
+          quantity: 0,
+          unit: "stuk",
+          unit_price: 0,
+          discount_percentage: 0,
+          vat_rate: 0,
+        });
+
+        toast({
+          title: "Groepkop toegevoegd",
+          description: "De groepkop is toegevoegd aan de offerte.",
+        });
+
+        resetForm();
+        onOpenChange(false);
+      } catch (error) {
+        console.error("Error adding group header:", error);
+        toast({
+          title: "Fout bij toevoegen",
+          description: "Er is iets misgegaan. Probeer het opnieuw.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
     if (!freeDescription.trim()) {
       toast({
         title: "Omschrijving verplicht",
@@ -138,6 +203,9 @@ export function AddProductDialog({
         unit_price: parseFloat(freePrice) || 0,
         discount_percentage: 0,
         vat_rate: 21,
+        height_mm: freeHeightMm ? parseInt(freeHeightMm) : null,
+        width_mm: freeWidthMm ? parseInt(freeWidthMm) : null,
+        extra_description: freeExtraDescription.trim() || null,
       });
 
       toast({
@@ -163,10 +231,18 @@ export function AddProductDialog({
     setQuantity("1");
     setUnitPrice("");
     setDiscount("0");
+    setHeightMm("");
+    setWidthMm("");
+    setExtraDescription("");
     setFreeDescription("");
     setFreeArticleCode("");
     setFreePrice("");
     setFreeQuantity("1");
+    setFreeHeightMm("");
+    setFreeWidthMm("");
+    setFreeExtraDescription("");
+    setIsGroupHeader(false);
+    setGroupTitle("");
   };
 
   return (
@@ -174,7 +250,7 @@ export function AddProductDialog({
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>Product toevoegen</DialogTitle>
         </DialogHeader>
@@ -202,7 +278,7 @@ export function AddProductDialog({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[450px] p-0" align="start">
+                <PopoverContent className="w-[500px] p-0" align="start">
                   <Command shouldFilter={false}>
                     <CommandInput
                       placeholder="Zoek op artikelcode of naam..."
@@ -255,7 +331,28 @@ export function AddProductDialog({
 
             {selectedProduct && (
               <>
-                <div className="grid grid-cols-3 gap-3">
+                {/* Dimensions */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="space-y-2">
+                    <Label>Hoogte (mm)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="hg"
+                      value={heightMm}
+                      onChange={(e) => setHeightMm(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Breedte (mm)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="br"
+                      value={widthMm}
+                      onChange={(e) => setWidthMm(e.target.value)}
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label>Aantal</Label>
                     <Input
@@ -275,16 +372,16 @@ export function AddProductDialog({
                       onChange={(e) => setUnitPrice(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Korting %</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={discount}
-                      onChange={(e) => setDiscount(e.target.value)}
-                    />
-                  </div>
+                </div>
+
+                {/* Extra description */}
+                <div className="space-y-2">
+                  <Label>Extra omschrijving (optioneel)</Label>
+                  <Input
+                    placeholder="Bijv. Passtuk hoge kast 132 x 2340mm"
+                    value={extraDescription}
+                    onChange={(e) => setExtraDescription(e.target.value)}
+                  />
                 </div>
 
                 <DialogFooter>
@@ -310,46 +407,100 @@ export function AddProductDialog({
           </TabsContent>
 
           <TabsContent value="free" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Omschrijving *</Label>
-              <Textarea
-                placeholder="Omschrijving van het product of de dienst..."
-                value={freeDescription}
-                onChange={(e) => setFreeDescription(e.target.value)}
-                rows={2}
+            {/* Group header toggle */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="group-header"
+                checked={isGroupHeader}
+                onCheckedChange={(checked) => setIsGroupHeader(checked === true)}
               />
+              <Label htmlFor="group-header" className="text-sm">
+                Groepkop (bijv. "Eiland bestaande uit:")
+              </Label>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            {isGroupHeader ? (
               <div className="space-y-2">
-                <Label>Artikelcode</Label>
+                <Label>Groeptitel *</Label>
                 <Input
-                  placeholder="Optioneel"
-                  value={freeArticleCode}
-                  onChange={(e) => setFreeArticleCode(e.target.value)}
+                  placeholder="Eiland bestaande uit:"
+                  value={groupTitle}
+                  onChange={(e) => setGroupTitle(e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Aantal</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={freeQuantity}
-                  onChange={(e) => setFreeQuantity(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Prijs</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={freePrice}
-                  onChange={(e) => setFreePrice(e.target.value)}
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Omschrijving *</Label>
+                  <Textarea
+                    placeholder="Omschrijving van het product of de dienst..."
+                    value={freeDescription}
+                    onChange={(e) => setFreeDescription(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Extra omschrijving (optioneel)</Label>
+                  <Input
+                    placeholder="Tweede regel omschrijving"
+                    value={freeExtraDescription}
+                    onChange={(e) => setFreeExtraDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-5 gap-3">
+                  <div className="space-y-2">
+                    <Label>Artikelcode</Label>
+                    <Input
+                      placeholder="Optioneel"
+                      value={freeArticleCode}
+                      onChange={(e) => setFreeArticleCode(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>hg (mm)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder=""
+                      value={freeHeightMm}
+                      onChange={(e) => setFreeHeightMm(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>br (mm)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder=""
+                      value={freeWidthMm}
+                      onChange={(e) => setFreeWidthMm(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Aantal</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={freeQuantity}
+                      onChange={(e) => setFreeQuantity(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Prijs</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={freePrice}
+                      onChange={(e) => setFreePrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <DialogFooter>
               <Button
