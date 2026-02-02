@@ -129,3 +129,48 @@ export function useManageWebhooks() {
     },
   });
 }
+
+export function useSyncCustomers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+      customerId,
+    }: {
+      action: "push" | "pull" | "sync";
+      divisionId: string;
+      customerId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-customers", {
+        body: { action, divisionId, customerId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      
+      if (variables.action === "push") {
+        const msg = `Klanten gepusht: ${data.created} nieuw, ${data.updated} bijgewerkt`;
+        if (data.failed > 0) {
+          toast.warning(`${msg}, ${data.failed} mislukt`);
+        } else {
+          toast.success(msg);
+        }
+      } else if (variables.action === "pull") {
+        const msg = `Klanten opgehaald: ${data.imported} nieuw, ${data.updated} bijgewerkt`;
+        toast.success(msg);
+      } else {
+        toast.success("Synchronisatie voltooid");
+      }
+    },
+    onError: (error) => {
+      toast.error(`Sync fout: ${error.message}`);
+    },
+  });
+}
