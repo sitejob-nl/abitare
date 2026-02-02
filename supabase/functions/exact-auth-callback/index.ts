@@ -132,7 +132,7 @@ serve(async (req) => {
 });
 
 function redirectToApp(query: string): Response {
-  const appUrl = `https://abitare.lovable.app/settings${query}`;
+  const appUrl = `https://abitare-hub.netlify.app/settings${query}`;
   return new Response(null, {
     status: 302,
     headers: {
