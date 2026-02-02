@@ -1,5 +1,6 @@
 import { useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDivisions } from "@/hooks/useDivisions";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.svg";
 import {
@@ -69,6 +70,7 @@ const navSections: NavSection[] = [
 export function Sidebar() {
   const location = useLocation();
   const { profile, roles, signOut } = useAuth();
+  const { data: divisions } = useDivisions();
 
   const displayName = profile?.full_name || profile?.email || "Gebruiker";
   const initials = displayName
@@ -80,6 +82,12 @@ export function Sidebar() {
   const roleDisplay = roles.length > 0 
     ? roles[0].charAt(0).toUpperCase() + roles[0].slice(1) 
     : "Gebruiker";
+
+  // Get first division or user's division
+  const userDivision = profile?.division_id 
+    ? divisions?.find(d => d.id === profile.division_id) 
+    : divisions?.[0];
+  const divisionName = userDivision?.name || "Geen vestiging";
 
   return (
     <aside className="flex h-screen w-[260px] flex-shrink-0 flex-col bg-sidebar">
@@ -93,7 +101,7 @@ export function Sidebar() {
         <button className="flex w-full items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5 transition-colors hover:bg-white/[0.1]">
           <span className="h-2 w-2 rounded-full bg-success" />
           <span className="flex-1 text-left text-[13px] font-medium text-white">
-            Roermond
+            {divisionName}
           </span>
           <ChevronDown className="h-4 w-4 text-sidebar-muted" />
         </button>
