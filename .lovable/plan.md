@@ -1,201 +1,265 @@
 
-
-# Offerte Layout Aanpassen naar Abitare Format
-
-## Wat is het verschil?
-
-Na analyse van jullie huidige orderbevestiging (PDF) en de huidige implementatie zijn er belangrijke verschillen gevonden die moeten worden aangepast.
-
----
-
-## Huidige Situatie vs. Gewenste Situatie
-
-| Aspect | Huidige Implementatie | PDF Voorbeeld |
-|--------|----------------------|---------------|
-| **Header** | Simpele header met status dropdown | Volledige briefhoofd met bedrijfsinfo, klantadres, referentie |
-| **Configuratie sectie** | Niet aanwezig | Per sectie: frontnummer, kleur, plint, corpus, scharnier, etc. |
-| **Tabel kolommen** | Artikel, Omschrijving, Aantal, Eenheid, Prijs, %, Totaal | no, code, omschrijving, hg, br, aantal, bedrag |
-| **Subregels** | Niet ondersteund | Regels met "." prefix voor accessoires (bv `.1 PUSHPULL-C`) |
-| **Groepkoppen** | `is_group_header` veld bestaat | "Eiland bestaande uit:", "Diversen bestaande uit:" |
-| **Afmetingen** | Niet zichtbaar | Hoogte (hg) en Breedte (br) per product |
-| **Secties** | Generieke types | Specifiek: Meubelen, Apparatuur/Accessoires, Werkblad(en), Montage |
-| **Totalen** | Simpele card onderaan | "Totaal te betalen (inclusief montage): € 44.195,00" |
-| **Betalingsvoorwaarden** | Niet aanwezig | "25% aanbetaling, 75% voor levering" |
-
----
-
-## Wat wordt er aangepast?
-
-### 1. Nieuwe Sectie Configuratie Header
-Elke sectie (vooral "Meubelen") krijgt een configuratieblok:
-
-```text
-+----------------------------------------------------------+
-| MEUBELEN                                                  |
-|----------------------------------------------------------|
-| Stosa Evolution Metropolis greeploos front met kunststof  |
-| toplaag rondom afgewerkt met ABS                         |
-|                                                          |
-| Frontnummer: MPTS GL LB    | Kleur front: Rovere Nodato  |
-| Plintkleur: Bronze         | Corpuskleur: Rose          |
-| Kolomkast hoogte: 2400 mm  | Scharnier kleur: Peltro    |
-| Greepnummer: Greeploos     | Lade kleur: Titanium       |
-| Aanrecht hoogte: 970 mm    | Blad dikte: 60 mm          |
-+----------------------------------------------------------+
-```
-
-### 2. Aangepaste Tabel met Afmetingen
-
-```text
-| no | code       | omschrijving                    | hg  | br  | aantal | bedrag |
-|----|------------|--------------------------------|-----|-----|--------|--------|
-| 1  | CB00T00    | Hoog passtuk                   | 234 | 10  | 1.32   | € 150  |
-|    |            | Passtuk hoge kast 132 x 2340mm |     |     |        |        |
-| 2  | CD60T12 L  | Hoge voorraadkast              | 234 | 60  | 1      | € 890  |
-| 3  | CH60T00 L  | Hoge kast t.b.v. inbouwapp.    | 234 | 60  | 1      | € 750  |
-```
-
-### 3. Sub-regels Ondersteuning
-Regels die beginnen met een punt zijn accessoires bij het vorige product:
-
-```text
-| 6  | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
-|    |            | 1050mm                         |     |     |        |        |
-| .1 | PUSHPULL-C | Meerprijs systeem open/sluit   |     |     | 1      | € 45   |
-| .2 | PUSH50     | Ladegeleidingsrail             |     |     | 1      | € 35   |
-```
-
-### 4. Groepskoppen (Gele Headers)
-Voor logische groepering van producten:
-
-```text
-|    |            | Eiland bestaande uit:          |     |     |        |        |
-| 18 | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
-| 19 | BE10H00-81 | Onderkast met 2 uittrekladen   | 81  | 100 | 1      | € 420  |
-```
-
-### 5. Werkblad Sectie met Specificaties
-
-```text
-+----------------------------------------------------------+
-| WERKBLAD(EN)                                             |
-|----------------------------------------------------------|
-| Uitvoering: Keramiek 12 mm dikte met facet randafwerking |
-| Randafwerking: 1P                                        |
-| Kleur: QUARZO GOLD ARTON BM                              |
-+----------------------------------------------------------+
-| no | code | omschrijving                     | aantal    |
-| 2  | 9999 | Werkblad kastenwand 2000 x 616mm | 1.32 m²   |
-| 3  | 9999 | Opdikking korte zijde 50 x 60mm  | 0.03 m²   |
-```
-
----
-
-## Database Wijzigingen
-
-### Nieuwe kolommen voor `quote_sections`:
-
-| Kolom | Type | Doel |
-|-------|------|------|
-| `front_number` | VARCHAR(50) | "MPTS GL LB" |
-| `front_color` | VARCHAR(100) | "Rovere Nodato" |
-| `plinth_color` | VARCHAR(100) | "Bronze" |
-| `corpus_color` | VARCHAR(100) | "Rose" |
-| `hinge_color` | VARCHAR(100) | "Peltro" |
-| `drawer_color` | VARCHAR(100) | "Titanium" |
-| `column_height_mm` | INTEGER | 2400 |
-| `countertop_height_mm` | INTEGER | 970 |
-| `countertop_thickness_mm` | INTEGER | 60 |
-| `workbench_material` | VARCHAR(255) | "Keramiek 12 mm dikte" |
-| `workbench_edge` | VARCHAR(50) | "1P" |
-| `workbench_color` | VARCHAR(255) | "QUARZO GOLD ARTON" |
-| `configuration` | JSONB | Overige configuratie |
-
-### Nieuwe kolommen voor `quote_lines`:
-
-| Kolom | Type | Doel |
-|-------|------|------|
-| `height_mm` | INTEGER | Hoogte in mm (hg) |
-| `width_mm` | INTEGER | Breedte in mm (br) |
-| `parent_line_id` | UUID | Verwijzing naar hoofdregel voor subregels |
-| `sub_line_number` | VARCHAR(10) | ".1", ".2" voor subregels |
-| `extra_description` | TEXT | Tweede regel omschrijving |
-
----
-
-## Nieuwe/Aangepaste Bestanden
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/quotes/QuoteSectionCard.tsx` | Configuratieheader toevoegen |
-| `src/components/quotes/QuoteLineRow.tsx` | Afmetingskolommen, subregels styling |
-| `src/components/quotes/QuoteSectionConfig.tsx` | **NIEUW** - Configuratie formulier |
-| `src/components/quotes/AddProductDialog.tsx` | Afmetingen en subregels velden |
-| `src/components/quotes/QuoteTotals.tsx` | Aanpassen naar PDF format |
-| `src/pages/QuoteDetail.tsx` | Betalingsvoorwaarden sectie |
-| `src/hooks/useQuoteSections.ts` | Nieuwe velden ondersteunen |
-| `src/hooks/useQuoteLines.ts` | Nieuwe velden ondersteunen |
-| Database migratie | Nieuwe kolommen toevoegen |
-
----
-
-## Nieuwe Componenten
-
-### QuoteSectionConfig (Configuratie bewerken)
-
-Een modal/expandable sectie waar je de configuratie van een sectie kunt invullen:
-- Frontnummer en kleur
-- Plint en corpuskleur
-- Scharnier en lade kleur
-- Kastmaten
-- Werkblad specificaties (voor werkbladen sectie)
-
-### QuoteSubLineRow
-
-Specifieke styling voor subregels:
-- Inspringen met `.1`, `.2` nummering
-- Kleinere tekst
-- Geen afmetingskolommen tonen
-
----
-
-## Visuele Veranderingen
-
-### Sectie Header Voorbeeld
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ ≡ MEUBELEN - Keuken Kastenwand                    [⚙] [✎] [🗑] │
-├─────────────────────────────────────────────────────────────────┤
-│ Stosa Evolution Metropolis greeploos front met kunststof       │
-│ toplaag rondom afgewerkt met ABS                               │
-│                                                                 │
-│ Frontnummer: MPTS GL LB      │ Kleur front: Rovere Nodato      │
-│ Plintkleur: Bronze           │ Corpuskleur: Rose               │
-│ Kolomkast hoogte: 2400 mm    │ Scharnier kleur: Peltro         │
-│ Greepnummer: Greeploos       │ Lade kleur: Titanium            │
-├─────────────────────────────────────────────────────────────────┤
-│ no │ code       │ omschrijving           │ hg  │ br  │ # │ €   │
-│────│────────────│────────────────────────│─────│─────│───│─────│
-│ 1  │ CB00T00    │ Hoog passtuk           │ 234 │ 10  │1.3│€150 │
-│    │            │ Passtuk 132 x 2340mm   │     │     │   │     │
-├─────────────────────────────────────────────────────────────────┤
-│ [+ Product toevoegen]                    Sectie totaal: € 8.500 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
+# Prijsgroepen Systeem - Uitbreiding Offertesysteem
 
 ## Samenvatting
 
+Na analyse van de PDF orderbevestiging en de database structuur is duidelijk dat het huidige systeem wel de tabellen heeft voor prijsgroepen (`product_ranges`, `product_prices`, `product_colors`) maar deze nog niet actief gebruikt. In de Abitare werkwijze worden productprijzen bepaald door een **prijsgroep** (bijv. MPTS GL LB = Metropolis Greeploos Laminaat Bronze) die per sectie wordt gekozen.
+
+---
+
+## Wat is het Prijsgroepen Concept?
+
+In de PDF zie je bijvoorbeeld:
+- **Frontnummer: MPTS GL LB** - Dit is de prijsgroep/range code
+- **Kleur front: Rovere Nodato** - Dit is de kleur binnen die range
+
+De prijs van een kast (bijv. CD60T12) hangt af van welke prijsgroep is geselecteerd:
+- CD60T12 in prijsgroep 1 = € 400
+- CD60T12 in prijsgroep 5 = € 650
+- CD60T12 in prijsgroep 8 = € 890
+
+---
+
+## Database Structuur (Bestaand maar niet gebruikt)
+
+```text
++------------------+       +------------------+       +------------------+
+| suppliers        |       | product_ranges   |       | product_colors   |
+|------------------|       |------------------|       |------------------|
+| id               |<---+  | id               |<---+  | id               |
+| code: STOSA      |    |  | code: MPTS GL LB |    |  | code: RN         |
+| name: Stosa      |    +--| supplier_id      |    +--| range_id         |
++------------------+       | price_group: 5   |       | name: Rovere     |
+                           | name: Metropolis |       | hex_color: #A58  |
+                           +------------------+       +------------------+
+                                   |
+                                   v
++------------------+       +------------------+
+| products         |       | product_prices   |
+|------------------|       |------------------|
+| id               |<------| product_id       |
+| article_code     |       | range_id         |--------+
+| name             |       | price            |
+| base_price (std) |       | valid_from       |
++------------------+       +------------------+
+```
+
+---
+
+## Wat wordt er gebouwd?
+
+### 1. Prijsgroepen Beheer Pagina
+Een nieuwe pagina `/settings/price-groups` voor:
+- Bekijken en beheren van ranges per leverancier
+- Toevoegen van nieuwe prijsgroepen
+- Koppelen van kleuren aan prijsgroepen
+
+### 2. Prijslijst per Prijsgroep
+Uitbreiding van de product import om prijzen per prijsgroep te importeren:
+- Stosa heeft ~10 prijsgroepen (1-10)
+- Elk product krijgt meerdere prijzen (1 per prijsgroep)
+
+### 3. Sectie Range/Kleur Selectie
+In de sectie configuratie (nu al via `range_id` en `color_id`):
+- Dropdown om prijsgroep te kiezen
+- Dropdown om kleur te kiezen (gefilterd op range)
+- Prijs van producten wordt automatisch aangepast
+
+### 4. Automatische Prijsberekening
+Wanneer een product wordt toegevoegd aan een sectie:
+1. Check of de sectie een `range_id` heeft
+2. Zoek de prijs in `product_prices` voor die combinatie
+3. Gebruik die prijs in plaats van `base_price`
+
+---
+
+## Wijzigingen Overzicht
+
+### Database (Migraties)
+
+| Tabel | Wijziging |
+|-------|-----------|
+| `product_ranges` | Seed data toevoegen voor Stosa prijsgroepen |
+| `product_colors` | Seed data voor kleuren per range |
+| `product_prices` | Prijzen per product-range combinatie |
+
+**Seed Data Voorbeeld:**
+```sql
+-- Stosa prijsgroepen
+INSERT INTO product_ranges (code, name, price_group, supplier_id) VALUES
+('MPTS-1', 'Metropolis Prijsgroep 1', 1, 'stosa-id'),
+('MPTS-2', 'Metropolis Prijsgroep 2', 2, 'stosa-id'),
+...
+('MPTS-10', 'Metropolis Prijsgroep 10', 10, 'stosa-id');
+
+-- Kleuren voor Metropolis
+INSERT INTO product_colors (code, name, range_id) VALUES
+('RN', 'Rovere Nodato', 'mpts-range-id'),
+('BRONZE', 'Bronze', 'mpts-range-id');
+```
+
+### Nieuwe Bestanden
+
+| Bestand | Doel |
+|---------|------|
+| `src/pages/PriceGroups.tsx` | Beheer prijsgroepen |
+| `src/hooks/useProductRanges.ts` | Hook voor ranges ophalen |
+| `src/hooks/useProductColors.ts` | Hook voor kleuren ophalen |
+| `src/hooks/useProductPrices.ts` | Hook voor prijzen per range |
+| `src/components/quotes/RangeSelector.tsx` | Dropdown component |
+
+### Bestaande Bestanden Aanpassen
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/components/quotes/QuoteSectionConfig.tsx` | Range/kleur dropdowns toevoegen |
+| `src/components/quotes/AddProductDialog.tsx` | Prijs ophalen uit product_prices |
+| `src/hooks/useQuoteLines.ts` | Rekening houden met range prijs |
+| `src/pages/ProductImport.tsx` | Optie om prijzen per prijsgroep te importeren |
+| `src/App.tsx` | Route `/settings/price-groups` toevoegen |
+
+---
+
+## UI Flow
+
+### Sectie Configuratie (Uitgebreid)
+
+```text
++----------------------------------------------------------+
+| MEUBELEN                                         [Opslaan]|
+|----------------------------------------------------------|
+| Leverancier: [Stosa Cucine              v]               |
+|                                                          |
+| Prijsgroep:  [MPTS GL LB - Metropolis   v]               |
+| Kleur front: [Rovere Nodato             v]               |
+|                                                          |
+| Plintkleur:  [Bronze                    v]               |
+| Corpuskleur: [Rose                      v]               |
+|                                                          |
+| ... (rest van configuratie)                              |
++----------------------------------------------------------+
+```
+
+### Product Toevoegen met Prijsgroep
+
+Wanneer een product wordt toegevoegd:
+
+```text
+1. Gebruiker selecteert product: CD60T12 (Hoge voorraadkast)
+2. Systeem checkt sectie range_id
+3. Systeem zoekt in product_prices:
+   - product_id = CD60T12
+   - range_id = MPTS-prijsgroep-5
+4. Gevonden prijs: € 892,00
+5. Prijs wordt ingevuld in formulier
+```
+
+---
+
+## Product Import Uitbreiding
+
+Het import systeem krijgt een extra optie voor prijsgroep-import:
+
+```text
++----------------------------------------------------------+
+| Product Import                                            |
+|----------------------------------------------------------|
+| Import Type:                                              |
+| ( ) Standaard producten met basisprijs                   |
+| (o) Producten met prijsgroep-specifieke prijzen          |
+|                                                          |
+| Leverancier: [Stosa Cucine              v]               |
+| Prijsgroep:  [Prijsgroep 5              v]               |
+|                                                          |
+| Kolom Mapping:                                            |
+| Artikel     -> article_code                              |
+| Omschrijving-> name                                      |
+| Prijs       -> price (voor deze prijsgroep)              |
++----------------------------------------------------------+
+```
+
+---
+
+## Technische Implementatie
+
+### 1. Hook: useProductPrice
+
+```typescript
+// Ophalen van de juiste prijs voor een product in een bepaalde range
+function useProductPrice(productId: string, rangeId: string | null) {
+  return useQuery({
+    queryKey: ["product-price", productId, rangeId],
+    queryFn: async () => {
+      if (!rangeId) {
+        // Fallback naar base_price
+        const { data } = await supabase
+          .from("products")
+          .select("base_price")
+          .eq("id", productId)
+          .single();
+        return data?.base_price;
+      }
+      
+      // Zoek prijs in product_prices
+      const { data } = await supabase
+        .from("product_prices")
+        .select("price")
+        .eq("product_id", productId)
+        .eq("range_id", rangeId)
+        .single();
+        
+      return data?.price;
+    },
+  });
+}
+```
+
+### 2. Sectie met Range
+
+De `quote_sections` tabel heeft al `range_id` en `color_id`. Deze worden nu actief gebruikt:
+
+```typescript
+// In QuoteSectionConfig.tsx
+const handleRangeChange = async (rangeId: string) => {
+  await updateSection.mutateAsync({
+    id: section.id,
+    range_id: rangeId,
+    color_id: null, // Reset kleur bij range wijziging
+  });
+};
+```
+
+### 3. Automatische Prijs Update
+
+Bij wijziging van de range van een sectie, worden alle producten in die sectie herberekend.
+
+---
+
+## Samenvatting Taken
+
 | Onderdeel | Status |
 |-----------|--------|
-| Sectie configuratie velden (database) | Nieuw - migratie nodig |
-| Quote lines afmetingen (database) | Nieuw - migratie nodig |
-| Subregels ondersteuning | Nieuw |
-| Configuratie header per sectie | Nieuw component |
-| Tabel met hg/br kolommen | Aanpassing |
-| Groepkoppen styling | Aanpassing |
-| Tweede regel omschrijving | Nieuw |
-| Werkblad specificaties | Nieuw component |
+| Hooks voor ranges/colors/prices | Nieuw |
+| Prijsgroepen beheer pagina | Nieuw |
+| Range selector in sectie config | Uitbreiding |
+| Prijs lookup bij product toevoegen | Uitbreiding |
+| Import met prijsgroep ondersteuning | Uitbreiding |
+| Seed data voor Stosa ranges | Migratie |
+| Herberekening bij range wijziging | Nieuw |
 
+---
+
+## Fasering
+
+**Fase 1: Basis Infrastructuur**
+- Hooks voor product_ranges, product_colors, product_prices
+- Prijsgroepen beheer pagina (view only eerst)
+- Range/color selectie in sectie configuratie
+
+**Fase 2: Prijsberekening**
+- Prijs lookup bij product toevoegen
+- Automatische herberekening bij range wijziging
+
+**Fase 3: Import Uitbreiding**
+- Prijzen per prijsgroep importeren
+- Seed data voor Stosa prijsgroepen en kleuren
