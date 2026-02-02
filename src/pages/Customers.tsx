@@ -15,6 +15,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useDivisions } from "@/hooks/useDivisions";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 
 function getInitials(firstName?: string | null, lastName?: string | null, companyName?: string | null): string {
   if (companyName) {
@@ -46,6 +47,7 @@ const Customers = () => {
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showNewDialog, setShowNewDialog] = useState(false);
 
   // Debounce search
   const handleSearchChange = (value: string) => {
@@ -69,11 +71,13 @@ const Customers = () => {
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Klanten
         </h1>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowNewDialog(true)}>
           <Plus className="h-4 w-4" />
           Nieuwe klant
         </Button>
       </div>
+
+      <CustomerFormDialog open={showNewDialog} onOpenChange={setShowNewDialog} />
 
       {/* Filters Bar */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
