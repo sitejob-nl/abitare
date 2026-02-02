@@ -1,173 +1,178 @@
 
-# Performance Verbetering & CRUD Functionaliteit
 
-## Gevonden Problemen
+# Offerte Detailpagina met Secties en Producten
 
-### 1. Trage Laadtijden
-De RLS policies roepen bij elke query meerdere functies aan (`is_admin()`, `get_user_division_id()`) die elk een aparte database query uitvoeren. Dit veroorzaakt trage laadtijden.
+## Huidige Situatie
 
-**Voorbeeld van huidige RLS op `customers`:**
-```
-is_admin(auth.uid()) OR 
-division_id = get_user_division_id(auth.uid()) OR 
-salesperson_id = auth.uid()
-```
+Op dit moment kun je:
+- Een lijst met offertes bekijken
+- Een lege offerte aanmaken (klant + geldig-tot datum)
 
-Elke keer als je klanten ophaalt worden er 2+ extra queries uitgevoerd per rij.
+Maar je kunt **niet**:
+- Op een offerte klikken om de inhoud te zien
+- Secties toevoegen (Woonkamer, Keuken, etc.)
+- Producten/regels toevoegen aan secties
+- Totalen berekenen
 
-### 2. Gebruiker Niet Gekoppeld aan Vestiging
-De huidige admin gebruiker (`demo@sitejob.nl`) heeft **geen `division_id`** in het profiel, waardoor de `get_user_division_id()` functie `NULL` retourneert.
-
-### 3. Ontbrekende CRUD Functionaliteit
-De "Nieuwe offerte" en "Nieuwe klant" knoppen doen momenteel niets.
+De database structuur is wel correct opgezet met `quotes`, `quote_sections` en `quote_lines` tabellen.
 
 ---
 
-## Oplossingsplan
+## Wat wordt er gebouwd?
 
-### Stap 1: Database Optimalisaties
+### 1. Klikbare Offertes in Lijst
+Wanneer je op een offerte klikt in `/quotes`, navigeer je naar `/quotes/{id}`.
 
-**1.1 Koppel admin aan vestiging**
-```sql
-UPDATE profiles 
-SET division_id = '11111111-1111-1111-1111-111111111111' 
-WHERE id = '94f1ad4d-2cf1-4978-bb6b-f61c820b2fa9';
+### 2. Offerte Detailpagina (`/quotes/:id`)
+
+```text
++------------------------------------------------------------------+
+|  < Terug naar offertes                                            |
+|                                                                   |
+|  Offerte #3                                    Status: [Concept v]|
+|  Klant: Test Gebruiker                         Geldig tot: 4 mrt  |
++------------------------------------------------------------------+
+|                                                                   |
+|  [+ Nieuwe sectie]                                               |
+|                                                                   |
+|  +--------------------------------------------------------------+|
+|  | SECTIE: Woonkamer                              [Bewerken] [X] ||
+|  |--------------------------------------------------------------|
+|  | Artikel    | Omschrijving      | Aantal | Prijs   | Totaal   ||
+|  |--------------------------------------------------------------|
+|  | PRD-001    | Gordijnen linnen  | 2      | € 150   | € 300    ||
+|  | PRD-002    | Montage           | 1      | € 75    | € 75     ||
+|  |                                                    -----------||
+|  |                                        Sectie totaal: € 375   ||
+|  | [+ Product toevoegen]                                         ||
+|  +--------------------------------------------------------------+|
+|                                                                   |
+|  +--------------------------------------------------------------+|
+|  | Subtotaal excl. BTW:                              € 375,00   ||
+|  | BTW 21%:                                          € 78,75    ||
+|  | TOTAAL:                                           € 453,75   ||
+|  +--------------------------------------------------------------+|
+|                                                                   |
+|  [Opslaan]                              [Versturen naar klant]    |
++------------------------------------------------------------------+
 ```
 
-**1.2 Voeg indexes toe voor RLS performance**
-```sql
-CREATE INDEX IF NOT EXISTS idx_customers_division_id ON customers(division_id);
-CREATE INDEX IF NOT EXISTS idx_customers_salesperson_id ON customers(salesperson_id);
-CREATE INDEX IF NOT EXISTS idx_quotes_division_id ON quotes(division_id);
-CREATE INDEX IF NOT EXISTS idx_quotes_salesperson_id ON quotes(salesperson_id);
-CREATE INDEX IF NOT EXISTS idx_orders_division_id ON orders(division_id);
-```
+### 3. Sectie Management
+- Secties aanmaken met titel en type (meubelen, apparatuur, werkbladen, montage)
+- Secties bewerken en verwijderen
+- Secties slepen om volgorde te wijzigen
 
-**1.3 Optimaliseer RLS helper functies met SECURITY DEFINER en caching**
-De functies `is_admin()` en `get_user_division_id()` worden gemarkeerd als `STABLE` zodat PostgreSQL ze kan cachen binnen dezelfde query.
+### 4. Producten Toevoegen
+- Producten zoeken uit de `products` tabel
+- Aantal, prijs en korting aanpassen
+- Vrije regels toevoegen (zonder product)
+- Automatische berekening van regeltotaal
 
-### Stap 2: Klant Aanmaken Modal
+### 5. Totalen Berekening
+Automatisch berekend bij elke wijziging:
+- Sectie subtotalen
+- Subtotaal producten + montage
+- BTW berekening (21%)
+- Eindtotaal incl. BTW
 
-**Nieuwe bestanden:**
-- `src/components/customers/CustomerFormDialog.tsx`
+---
 
-**Functionaliteit:**
-- Modal/dialog voor nieuwe klant
-- Formulier met verplichte velden: achternaam
-- Optionele velden: voornaam, bedrijf, email, telefoon, stad
-- Automatisch division_id en salesperson_id van huidige gebruiker
-- Validatie met zod + react-hook-form
-- Toast feedback bij succes/fout
+## Nieuwe Bestanden
 
-**Aanpassing `Customers.tsx`:**
-- "Nieuwe klant" knop opent de modal
-- Na aanmaken wordt de lijst automatisch ververst
+| Bestand | Doel |
+|---------|------|
+| `src/pages/QuoteDetail.tsx` | Hoofdpagina voor offerte details |
+| `src/components/quotes/QuoteHeader.tsx` | Header met klant, status, datum |
+| `src/components/quotes/QuoteSectionCard.tsx` | Sectiekaart met regels |
+| `src/components/quotes/QuoteLineRow.tsx` | Enkele productregel |
+| `src/components/quotes/AddSectionDialog.tsx` | Modal om sectie toe te voegen |
+| `src/components/quotes/AddProductDialog.tsx` | Modal om product toe te voegen |
+| `src/components/quotes/QuoteTotals.tsx` | Totalen overzicht |
+| `src/hooks/useQuoteSections.ts` | CRUD voor quote_sections |
+| `src/hooks/useQuoteLines.ts` | CRUD voor quote_lines |
 
-### Stap 3: Offerte Aanmaken
+---
 
-**Nieuwe bestanden:**
-- `src/components/quotes/QuoteFormDialog.tsx`
+## Bestaande Bestanden Aanpassen
 
-**Functionaliteit:**
-- Modal voor nieuwe offerte
-- Klant selecteren uit bestaande klanten (combobox/search)
-- Offerte geldig tot datum (default +30 dagen)
-- Automatisch: division_id, salesperson_id, created_by, status = 'concept'
-- Quote_number wordt automatisch gegenereerd door database
-
-**Aanpassing `Quotes.tsx`:**
-- "Nieuwe offerte" knop opent de modal
-- Na aanmaken wordt de lijst ververst
-
-### Stap 4: Query Optimalisaties
-
-**Pagination toevoegen aan lijsten:**
-De hooks krijgen een `limit` parameter en er komt infinite scroll of pagination.
-
-```typescript
-// useCustomers update
-const { data: customers } = useCustomers({
-  divisionId: filter,
-  search: query,
-  limit: 50, // Beperk eerste load
-});
-```
-
-**staleTime en cacheTime configureren:**
-```typescript
-{
-  staleTime: 5 * 60 * 1000, // 5 minuten
-  cacheTime: 30 * 60 * 1000, // 30 minuten
-}
-```
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/App.tsx` | Route toevoegen: `/quotes/:id` |
+| `src/pages/Quotes.tsx` | Rijen klikbaar maken met `onClick` navigatie naar detail |
+| `src/hooks/useQuotes.ts` | Mutation toevoegen voor totalen update |
 
 ---
 
 ## Technische Details
 
-### CustomerFormDialog Component
+### useQuoteSections Hook
 
-```text
-┌─────────────────────────────────────┐
-│  Nieuwe klant                     X │
-├─────────────────────────────────────┤
-│  Type: ○ Particulier ○ Zakelijk     │
-│                                     │
-│  Aanhef:    [Dhr./Mevr. ▼]          │
-│  Voornaam:  [                ]      │
-│  Achternaam:[                ] *    │
-│  Bedrijf:   [                ]      │
-│                                     │
-│  Email:     [                ]      │
-│  Telefoon:  [                ]      │
-│  Mobiel:    [                ]      │
-│                                     │
-│  Straat:    [                ]      │
-│  Postcode:  [      ] Plaats: [    ] │
-│                                     │
-│  [ Annuleren ]        [ Opslaan ]   │
-└─────────────────────────────────────┘
+```typescript
+// Ophalen secties met regels
+useQuoteSections(quoteId: string)
+
+// Aanmaken
+useCreateQuoteSection()
+// Input: { quote_id, section_type, title, sort_order }
+
+// Updaten
+useUpdateQuoteSection()
+// Input: { id, title?, section_type?, sort_order? }
+
+// Verwijderen (cascade delete regels)
+useDeleteQuoteSection()
 ```
 
-### QuoteFormDialog Component
+### useQuoteLines Hook
 
-```text
-┌─────────────────────────────────────┐
-│  Nieuwe offerte                   X │
-├─────────────────────────────────────┤
-│  Klant: *                           │
-│  [Zoek klant...              ▼]     │
-│                                     │
-│  Geldig tot: [dd-mm-yyyy]           │
-│                                     │
-│  Notities:                          │
-│  [                              ]   │
-│  [                              ]   │
-│                                     │
-│  [ Annuleren ]        [ Aanmaken ]  │
-└─────────────────────────────────────┘
+```typescript
+// Ophalen regels voor een sectie
+useQuoteLines(sectionId: string)
+
+// Aanmaken
+useCreateQuoteLine()
+// Input: { quote_id, section_id, product_id?, description, quantity, unit_price, discount_percentage, vat_rate }
+
+// Updaten (bij wijzigen aantal/prijs)
+useUpdateQuoteLine()
+
+// Verwijderen
+useDeleteQuoteLine()
 ```
 
-### Bestandswijzigingen
+### Product Toevoegen Flow
 
-| Bestand | Actie |
-|---------|-------|
-| `supabase/migrations/xxx.sql` | Database fixes + indexes |
-| `src/components/customers/CustomerFormDialog.tsx` | Nieuw |
-| `src/components/quotes/QuoteFormDialog.tsx` | Nieuw |
-| `src/pages/Customers.tsx` | Integreer dialog |
-| `src/pages/Quotes.tsx` | Integreer dialog |
-| `src/hooks/useCustomers.ts` | Voeg limit + staleTime toe |
-| `src/hooks/useQuotes.ts` | Voeg limit + staleTime toe |
+1. Gebruiker klikt "Product toevoegen" in een sectie
+2. Modal opent met producten zoekfunctie (gebruikt bestaande `useProducts`)
+3. Gebruiker selecteert product, vult aantal in
+4. Prijs wordt automatisch ingevuld vanuit `product.base_price`
+5. `line_total = quantity * unit_price * (1 - discount_percentage/100)`
+6. Na opslaan worden totalen herberekend
+
+### Totalen Berekening
+
+Bij elke wijziging in regels:
+```
+section.subtotal = SUM(lines.line_total) per sectie
+quote.subtotal_products = SUM(sections.subtotal) waar type != 'montage'
+quote.subtotal_montage = SUM(sections.subtotal) waar type == 'montage'
+quote.total_excl_vat = subtotal_products + subtotal_montage - discount_amount
+quote.total_vat = total_excl_vat * 0.21
+quote.total_incl_vat = total_excl_vat + total_vat
+```
 
 ---
 
 ## Samenvatting
 
-| Probleem | Oplossing |
-|----------|-----------|
-| Trage queries | Database indexes + optimalisatie |
-| Gebruiker zonder vestiging | Admin koppelen aan Roermond |
-| Geen offerte aanmaken | QuoteFormDialog component |
-| Geen klant aanmaken | CustomerFormDialog component |
-| Geen limiet op data | Pagination/limits toevoegen |
+| Feature | Status |
+|---------|--------|
+| Route `/quotes/:id` | Nieuw |
+| Offerte header bekijken/bewerken | Nieuw |
+| Secties toevoegen/verwijderen | Nieuw |
+| Producten zoeken en toevoegen | Nieuw |
+| Regels bewerken (aantal, prijs, korting) | Nieuw |
+| Vrije regels zonder product | Nieuw |
+| Automatische totaalberekening | Nieuw |
+| Klikbare rijen in offertes lijst | Aanpassing |
+
