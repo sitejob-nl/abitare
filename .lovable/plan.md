@@ -1,79 +1,101 @@
 
 
-# Offerte Detailpagina met Secties en Producten
+# Product Import - Prijslijsten Laden
 
-## Huidige Situatie
+## Samenvatting
 
-Op dit moment kun je:
-- Een lijst met offertes bekijken
-- Een lege offerte aanmaken (klant + geldig-tot datum)
+Je hebt 3 prijslijsten geüpload die ik wil importeren in de database:
 
-Maar je kunt **niet**:
-- Op een offerte klikken om de inhoud te zien
-- Secties toevoegen (Woonkamer, Keuken, etc.)
-- Producten/regels toevoegen aan secties
-- Totalen berekenen
+| Bestand | Leverancier | Type | Formaat | Status |
+|---------|-------------|------|---------|--------|
+| Siemens_Prijslist.xlsx | Siemens | Apparatuur | Excel | Goed leesbaar - ~530 producten |
+| ARTIMAR_PRIJSLIJST.pdf | Artimar | Werkbladen | PDF | Complex formaat - handmatige mapping nodig |
+| LISTINO_VENDITA_STOSA.xlsx | Stosa | Keukens | Excel | Parsing mislukt - bestand mogelijk beschadigd |
 
-De database structuur is wel correct opgezet met `quotes`, `quote_sections` en `quote_lines` tabellen.
+De **Siemens prijslijst** is het makkelijkst te importeren omdat deze gestructureerd is in kolommen.
 
 ---
 
 ## Wat wordt er gebouwd?
 
-### 1. Klikbare Offertes in Lijst
-Wanneer je op een offerte klikt in `/quotes`, navigeer je naar `/quotes/{id}`.
+### 1. Product Import Pagina
+Een nieuwe pagina `/settings/import` waar je:
+- Een prijslijst-bestand kunt uploaden (CSV/Excel)
+- Een preview ziet van de data voor import
+- Kolommen kunt mappen naar database velden
+- De import kunt starten
 
-### 2. Offerte Detailpagina (`/quotes/:id`)
+### 2. Siemens Import (Directe Import)
+Voor de Siemens prijslijst maak ik een directe import met mapping:
+
+| Kolom Excel | Database Veld |
+|-------------|---------------|
+| Artikel | article_code |
+| Omschrijving | name |
+| Netto Factuur Prijs | cost_price (inkoopprijs) |
+| Adviesprijs exc. BTW | base_price (verkoopprijs) |
+| Artikelgroep | category (via lookup) |
+
+**Leverancier**: Siemens (bestaat al: `c5669d28-f277-4043-a3fb-c2c593b0be63`)
+**Categorie**: Apparatuur (`891805b7-58bc-4e4d-aa9f-4874954190ee`)
+
+### 3. Artimar Leverancier Toevoegen
+Artimar bestaat nog niet als leverancier. Ik voeg deze toe:
+
+```text
+Code: ARTIMAR
+Naam: Artimar
+Type: werkblad
+Levertijd: 2 weken
+```
+
+---
+
+## Technische Aanpak
+
+### Edge Function: `import-products`
+Een Supabase Edge Function die:
+1. CSV/Excel data ontvangt (als JSON)
+2. Kolom mapping toepast
+3. Producten upsert (insert of update bij bestaand article_code)
+4. Resultaat teruggeeft (aantal toegevoegd/bijgewerkt)
+
+### Frontend Import Flow
 
 ```text
 +------------------------------------------------------------------+
-|  < Terug naar offertes                                            |
-|                                                                   |
-|  Offerte #3                                    Status: [Concept v]|
-|  Klant: Test Gebruiker                         Geldig tot: 4 mrt  |
+|  Product Import                                                   |
 +------------------------------------------------------------------+
 |                                                                   |
-|  [+ Nieuwe sectie]                                               |
+|  Stap 1: Bestand selecteren                                      |
+|  +------------------------------------------------------------+  |
+|  | [Upload prijslijst (.xlsx, .csv)]                          |  |
+|  +------------------------------------------------------------+  |
 |                                                                   |
-|  +--------------------------------------------------------------+|
-|  | SECTIE: Woonkamer                              [Bewerken] [X] ||
-|  |--------------------------------------------------------------|
-|  | Artikel    | Omschrijving      | Aantal | Prijs   | Totaal   ||
-|  |--------------------------------------------------------------|
-|  | PRD-001    | Gordijnen linnen  | 2      | € 150   | € 300    ||
-|  | PRD-002    | Montage           | 1      | € 75    | € 75     ||
-|  |                                                    -----------||
-|  |                                        Sectie totaal: € 375   ||
-|  | [+ Product toevoegen]                                         ||
-|  +--------------------------------------------------------------+|
+|  Stap 2: Leverancier kiezen                                      |
+|  +------------------------------------------------------------+  |
+|  | [Siemens                                              v]    |  |
+|  +------------------------------------------------------------+  |
 |                                                                   |
-|  +--------------------------------------------------------------+|
-|  | Subtotaal excl. BTW:                              € 375,00   ||
-|  | BTW 21%:                                          € 78,75    ||
-|  | TOTAAL:                                           € 453,75   ||
-|  +--------------------------------------------------------------+|
+|  Stap 3: Kolommen mappen                                         |
+|  +------------------------------------------------------------+  |
+|  | Excel Kolom          ->  Database Veld                      |  |
+|  | Artikel             ->  [article_code           v]         |  |
+|  | Omschrijving        ->  [name                   v]         |  |
+|  | Netto Factuur Prijs ->  [cost_price             v]         |  |
+|  | Adviesprijs exc BTW ->  [base_price             v]         |  |
+|  +------------------------------------------------------------+  |
 |                                                                   |
-|  [Opslaan]                              [Versturen naar klant]    |
+|  Stap 4: Preview (eerste 10 rijen)                               |
+|  +------------------------------------------------------------+  |
+|  | Code     | Naam                  | Inkoop   | Verkoop      |  |
+|  | VB578D0S0| Bakoven 90 cm Pyrolyse| € 1,275  | € 2,247      |  |
+|  | HB978GUB1| Bakoven Pyrolyse      | € 1,454  | € 2,189      |  |
+|  +------------------------------------------------------------+  |
+|                                                                   |
+|  [Annuleren]                              [Importeer 530 items]  |
 +------------------------------------------------------------------+
 ```
-
-### 3. Sectie Management
-- Secties aanmaken met titel en type (meubelen, apparatuur, werkbladen, montage)
-- Secties bewerken en verwijderen
-- Secties slepen om volgorde te wijzigen
-
-### 4. Producten Toevoegen
-- Producten zoeken uit de `products` tabel
-- Aantal, prijs en korting aanpassen
-- Vrije regels toevoegen (zonder product)
-- Automatische berekening van regeltotaal
-
-### 5. Totalen Berekening
-Automatisch berekend bij elke wijziging:
-- Sectie subtotalen
-- Subtotaal producten + montage
-- BTW berekening (21%)
-- Eindtotaal incl. BTW
 
 ---
 
@@ -81,98 +103,62 @@ Automatisch berekend bij elke wijziging:
 
 | Bestand | Doel |
 |---------|------|
-| `src/pages/QuoteDetail.tsx` | Hoofdpagina voor offerte details |
-| `src/components/quotes/QuoteHeader.tsx` | Header met klant, status, datum |
-| `src/components/quotes/QuoteSectionCard.tsx` | Sectiekaart met regels |
-| `src/components/quotes/QuoteLineRow.tsx` | Enkele productregel |
-| `src/components/quotes/AddSectionDialog.tsx` | Modal om sectie toe te voegen |
-| `src/components/quotes/AddProductDialog.tsx` | Modal om product toe te voegen |
-| `src/components/quotes/QuoteTotals.tsx` | Totalen overzicht |
-| `src/hooks/useQuoteSections.ts` | CRUD voor quote_sections |
-| `src/hooks/useQuoteLines.ts` | CRUD voor quote_lines |
-
----
+| `src/pages/ProductImport.tsx` | Import wizard pagina |
+| `src/components/import/FileUploader.tsx` | Bestand upload component |
+| `src/components/import/ColumnMapper.tsx` | Kolom mapping interface |
+| `src/components/import/ImportPreview.tsx` | Preview tabel |
+| `src/hooks/useProductImport.ts` | Import logica en mutaties |
+| `supabase/functions/import-products/index.ts` | Edge function voor bulk insert |
 
 ## Bestaande Bestanden Aanpassen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/App.tsx` | Route toevoegen: `/quotes/:id` |
-| `src/pages/Quotes.tsx` | Rijen klikbaar maken met `onClick` navigatie naar detail |
-| `src/hooks/useQuotes.ts` | Mutation toevoegen voor totalen update |
+| `src/App.tsx` | Route toevoegen: `/settings/import` |
+| Database | Artimar leverancier toevoegen via migratie |
 
 ---
 
-## Technische Details
+## Database Migratie
 
-### useQuoteSections Hook
-
-```typescript
-// Ophalen secties met regels
-useQuoteSections(quoteId: string)
-
-// Aanmaken
-useCreateQuoteSection()
-// Input: { quote_id, section_type, title, sort_order }
-
-// Updaten
-useUpdateQuoteSection()
-// Input: { id, title?, section_type?, sort_order? }
-
-// Verwijderen (cascade delete regels)
-useDeleteQuoteSection()
+```sql
+-- Artimar leverancier toevoegen
+INSERT INTO suppliers (code, name, supplier_type, lead_time_weeks, is_active)
+VALUES ('ARTIMAR', 'Artimar', 'werkblad', 2, true);
 ```
 
-### useQuoteLines Hook
+---
 
-```typescript
-// Ophalen regels voor een sectie
-useQuoteLines(sectionId: string)
+## Import Stappen
 
-// Aanmaken
-useCreateQuoteLine()
-// Input: { quote_id, section_id, product_id?, description, quantity, unit_price, discount_percentage, vat_rate }
+### Fase 1: Siemens (Automatisch)
+1. Lees Excel data (al geparsed)
+2. Map naar product structuur
+3. Bulk insert ~530 producten
 
-// Updaten (bij wijzigen aantal/prijs)
-useUpdateQuoteLine()
+### Fase 2: Artimar (Later - Handmatig)
+De Artimar PDF bevat complexe tabellen met:
+- Materiaalsoorten (Graniet, Composiet, Keramiek)
+- Verschillende diktes (20mm, 30mm, 40mm)
+- Verschillende afwerkingen (Poli, Honed, Artiskin)
 
-// Verwijderen
-useDeleteQuoteLine()
-```
+Dit vereist handmatige data-extractie of een aparte import tool.
 
-### Product Toevoegen Flow
-
-1. Gebruiker klikt "Product toevoegen" in een sectie
-2. Modal opent met producten zoekfunctie (gebruikt bestaande `useProducts`)
-3. Gebruiker selecteert product, vult aantal in
-4. Prijs wordt automatisch ingevuld vanuit `product.base_price`
-5. `line_total = quantity * unit_price * (1 - discount_percentage/100)`
-6. Na opslaan worden totalen herberekend
-
-### Totalen Berekening
-
-Bij elke wijziging in regels:
-```
-section.subtotal = SUM(lines.line_total) per sectie
-quote.subtotal_products = SUM(sections.subtotal) waar type != 'montage'
-quote.subtotal_montage = SUM(sections.subtotal) waar type == 'montage'
-quote.total_excl_vat = subtotal_products + subtotal_montage - discount_amount
-quote.total_vat = total_excl_vat * 0.21
-quote.total_incl_vat = total_excl_vat + total_vat
-```
+### Fase 3: Stosa (Later)
+Het Stosa bestand kon niet geparsed worden. Kun je controleren of:
+- Het bestand niet beschadigd is?
+- Je een CSV-versie hebt?
 
 ---
 
 ## Samenvatting
 
-| Feature | Status |
-|---------|--------|
-| Route `/quotes/:id` | Nieuw |
-| Offerte header bekijken/bewerken | Nieuw |
-| Secties toevoegen/verwijderen | Nieuw |
-| Producten zoeken en toevoegen | Nieuw |
-| Regels bewerken (aantal, prijs, korting) | Nieuw |
-| Vrije regels zonder product | Nieuw |
-| Automatische totaalberekening | Nieuw |
-| Klikbare rijen in offertes lijst | Aanpassing |
+| Onderdeel | Status |
+|-----------|--------|
+| Import pagina UI | Nieuw |
+| Edge function voor bulk import | Nieuw |
+| Siemens import (~530 producten) | Eerste prioriteit |
+| Artimar leverancier | Nieuw (via migratie) |
+| Artimar producten | Later (complex formaat) |
+| Stosa producten | Later (bestand check nodig) |
 
