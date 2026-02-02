@@ -377,12 +377,12 @@ export default function PriceGroups() {
                 </div>
                 <div className="space-y-2">
                   <Label>Leverancier</Label>
-                  <Select value={rangeSupplierId} onValueChange={setRangeSupplierId}>
+                  <Select value={rangeSupplierId || '__none__'} onValueChange={(v) => setRangeSupplierId(v === '__none__' ? '' : v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecteer" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Geen</SelectItem>
+                      <SelectItem value="__none__">Geen</SelectItem>
                       {suppliers.map((supplier) => (
                         <SelectItem key={supplier.id} value={supplier.id}>
                           {supplier.name}

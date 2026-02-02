@@ -602,14 +602,14 @@ export default function ProductImport() {
                     <div key={key} className="space-y-2">
                       <Label>{label}</Label>
                       <Select 
-                        value={columnMapping[key as keyof ColumnMapping] || ''} 
-                        onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                        value={columnMapping[key as keyof ColumnMapping] || '__none__'} 
+                        onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecteer kolom" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">-- Niet mappen --</SelectItem>
+                          <SelectItem value="__none__">-- Niet mappen --</SelectItem>
                           {availableColumns.map((col) => (
                             <SelectItem key={col} value={col}>{col}</SelectItem>
                           ))}
@@ -635,14 +635,14 @@ export default function ProductImport() {
                         <div key={key} className="space-y-2">
                           <Label>{label}</Label>
                           <Select 
-                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
-                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                            value={columnMapping[key as keyof PriceGroupMapping] || '__none__'} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Selecteer kolom" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              <SelectItem value="__none__">-- Niet mappen --</SelectItem>
                               {availableColumns.map((col) => (
                                 <SelectItem key={col} value={col}>{col}</SelectItem>
                               ))}
@@ -664,14 +664,14 @@ export default function ProductImport() {
                         <div key={key} className="space-y-2">
                           <Label>{label}</Label>
                           <Select 
-                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
-                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                            value={columnMapping[key as keyof PriceGroupMapping] || '__none__'} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Selecteer kolom" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              <SelectItem value="__none__">-- Niet mappen --</SelectItem>
                               {availableColumns.map((col) => (
                                 <SelectItem key={col} value={col}>{col}</SelectItem>
                               ))}
@@ -694,14 +694,14 @@ export default function ProductImport() {
                         <div key={key} className="space-y-2">
                           <Label>{label}</Label>
                           <Select 
-                            value={columnMapping[key as keyof PriceGroupMapping] || ''} 
-                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value }))}
+                            value={columnMapping[key as keyof PriceGroupMapping] || '__none__'} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Selecteer kolom" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">-- Niet mappen --</SelectItem>
+                              <SelectItem value="__none__">-- Niet mappen --</SelectItem>
                               {availableColumns.map((col) => (
                                 <SelectItem key={col} value={col}>{col}</SelectItem>
                               ))}
