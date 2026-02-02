@@ -33,6 +33,9 @@
 | `RecentOrders.tsx` | ✅ Database | `orders` tabel + customer join |
 | `ServiceBudget.tsx` | ✅ Database | `service_budgets` tabel |
 | `Sidebar.tsx` | ✅ Database | `divisions` + `profiles` tabel |
+| `Dashboard Stats` | ✅ Database | orders, quotes aggregates |
+| `ActionList.tsx` | ⏳ Nog hardcoded | Moet nog gekoppeld |
+| `AgendaToday.tsx` | ⏳ Nog hardcoded | Vereist appointments tabel |
 | `ActionList.tsx` | ⏳ Nog hardcoded | Moet nog gekoppeld |
 | `AgendaToday.tsx` | ⏳ Nog hardcoded | Vereist appointments tabel |
 | `StatCard.tsx` | ⏳ Hardcoded props | Dashboard aggregate queries |
