@@ -76,24 +76,25 @@ const Quotes = () => {
   return (
     <AppLayout title="Offertes" breadcrumb="Offertes">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-[28px] font-semibold text-foreground">
+      <div className="mb-4 md:mb-6 flex items-center justify-between gap-4">
+        <h1 className="font-display text-xl md:text-[28px] font-semibold text-foreground">
           Offertes
         </h1>
         <Button className="gap-2" onClick={() => setShowNewDialog(true)}>
           <Plus className="h-4 w-4" />
-          Nieuwe offerte
+          <span className="hidden sm:inline">Nieuwe offerte</span>
+          <span className="sm:hidden">Nieuw</span>
         </Button>
       </div>
 
       <QuoteFormDialog open={showNewDialog} onOpenChange={setShowNewDialog} />
 
       {/* Filters Bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-4 md:mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Vestiging:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Vestiging:</span>
           <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alle vestigingen" />
             </SelectTrigger>
             <SelectContent>
@@ -108,9 +109,9 @@ const Quotes = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Status:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Status:</span>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-[140px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[140px] text-[13px]">
               <SelectValue placeholder="Alle statussen" />
             </SelectTrigger>
             <SelectContent>
@@ -124,7 +125,7 @@ const Quotes = () => {
           </Select>
         </div>
 
-        <div className="relative ml-auto max-w-[300px] flex-1">
+        <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Zoek op offertenummer of klant..."
@@ -135,82 +136,122 @@ const Quotes = () => {
         </div>
       </div>
 
-      {/* Quotes Table */}
-      <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+      {/* Quotes List */}
+      <div className="animate-fade-in">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
           </div>
         ) : quotes && quotes.length > 0 ? (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Offerte
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Klant
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Bedrag
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Status
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Datum
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Geldig tot
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Offerte
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Klant
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Bedrag
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Status
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Datum
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Geldig tot
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((quote) => {
+                    const customer = quote.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
+                    const status = quote.status as QuoteStatus;
+                    const config = statusConfig[status] || statusConfig.concept;
+
+                    return (
+                      <tr
+                        key={quote.id}
+                        className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                        onClick={() => navigate(`/quotes/${quote.id}`)}
+                      >
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-medium text-foreground">
+                            #{quote.quote_number}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-foreground">
+                            {getCustomerName(customer)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-medium text-foreground">
+                            {formatCurrency(quote.total_incl_vat)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <Badge variant={config.variant} className="text-xs">
+                            {config.label}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">
+                          {formatDate(quote.quote_date)}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">
+                          {formatDate(quote.valid_until)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
               {quotes.map((quote) => {
                 const customer = quote.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
                 const status = quote.status as QuoteStatus;
                 const config = statusConfig[status] || statusConfig.concept;
 
                 return (
-                  <tr
+                  <div
                     key={quote.id}
-                    className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                    className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
                     onClick={() => navigate(`/quotes/${quote.id}`)}
                   >
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        #{quote.quote_number}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-foreground">
-                        {getCustomerName(customer)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        {formatCurrency(quote.total_incl_vat)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <Badge variant={config.variant} className="text-xs">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="text-sm font-semibold text-foreground">
+                          #{quote.quote_number}
+                        </span>
+                        <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                          {getCustomerName(customer)}
+                        </p>
+                      </div>
+                      <Badge variant={config.variant} className="text-xs shrink-0">
                         {config.label}
                       </Badge>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {formatDate(quote.quote_date)}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {formatDate(quote.valid_until)}
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold">{formatCurrency(quote.total_incl_vat)}</span>
+                      <span className="text-muted-foreground">{formatDate(quote.quote_date)}</span>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
-          <div className="py-12 text-center">
+          <div className="py-12 text-center rounded-xl border border-border bg-card">
             <p className="text-sm text-muted-foreground">
               {debouncedSearch ? "Geen offertes gevonden voor deze zoekopdracht" : "Nog geen offertes aanwezig"}
             </p>

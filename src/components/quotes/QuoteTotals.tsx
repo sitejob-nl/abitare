@@ -50,8 +50,8 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
   }, [sections, discountAmount]);
 
   return (
-    <Card className="mt-6">
-      <CardContent className="p-6">
+    <Card className="mt-4 md:mt-6">
+      <CardContent className="p-4 md:p-6">
         <div className="space-y-3">
           {/* Subtotals */}
           <div className="flex justify-between text-sm">
@@ -89,11 +89,11 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
           <Separator />
 
           {/* Main total - styled like PDF */}
-          <div className="flex justify-between items-center py-2">
-            <span className="text-base font-semibold">
-              Totaal te betalen (inclusief montage)
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 py-2">
+            <span className="text-sm sm:text-base font-semibold">
+              Totaal te betalen (incl. montage)
             </span>
-            <span className="text-xl font-bold">{formatCurrency(totals.totalInclVat)}</span>
+            <span className="text-lg sm:text-xl font-bold">{formatCurrency(totals.totalInclVat)}</span>
           </div>
 
           {/* Payment terms */}

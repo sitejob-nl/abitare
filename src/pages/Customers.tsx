@@ -67,24 +67,25 @@ const Customers = () => {
   return (
     <AppLayout title="Klanten" breadcrumb="Klanten">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-[28px] font-semibold text-foreground">
+      <div className="mb-4 md:mb-6 flex items-center justify-between gap-4">
+        <h1 className="font-display text-xl md:text-[28px] font-semibold text-foreground">
           Klanten
         </h1>
         <Button className="gap-2" onClick={() => setShowNewDialog(true)}>
           <Plus className="h-4 w-4" />
-          Nieuwe klant
+          <span className="hidden sm:inline">Nieuwe klant</span>
+          <span className="sm:hidden">Nieuw</span>
         </Button>
       </div>
 
       <CustomerFormDialog open={showNewDialog} onOpenChange={setShowNewDialog} />
 
       {/* Filters Bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-4 md:mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Vestiging:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Vestiging:</span>
           <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Selecteer vestiging" />
             </SelectTrigger>
             <SelectContent>
@@ -97,7 +98,7 @@ const Customers = () => {
             </SelectContent>
           </Select>
         </div>
-        <div className="relative ml-auto max-w-[300px] flex-1">
+        <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Zoek op naam, email, telefoon..."
@@ -108,86 +109,127 @@ const Customers = () => {
         </div>
       </div>
 
-      {/* Customer Table */}
-      <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+      {/* Customer List */}
+      <div className="animate-fade-in">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
           </div>
         ) : customers && customers.length > 0 ? (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Klant
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Telefoon
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Plaats
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Verkoper
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Klantnr.
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Aangemaakt
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Klant
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Telefoon
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Plaats
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Verkoper
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Klantnr.
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Aangemaakt
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((customer) => {
+                    const initials = getInitials(customer.first_name, customer.last_name, customer.company_name);
+                    const displayName = getDisplayName(customer.first_name, customer.last_name, customer.company_name, customer.salutation);
+                    const salesperson = "-";
+                    
+                    return (
+                      <tr
+                        key={customer.id}
+                        className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-subtle text-sm font-semibold text-primary">
+                              {initials}
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-foreground">
+                                {displayName}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {customer.email || "-"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-foreground">
+                          {customer.phone || customer.mobile || "-"}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-foreground">
+                          {customer.city || "-"}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-foreground">
+                          {salesperson}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">
+                          #{customer.customer_number}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">
+                          {getRelativeTime(customer.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
               {customers.map((customer) => {
                 const initials = getInitials(customer.first_name, customer.last_name, customer.company_name);
                 const displayName = getDisplayName(customer.first_name, customer.last_name, customer.company_name, customer.salutation);
-                // salesperson join removed - no FK exists
-                const salesperson = "-";
-                
+
                 return (
-                  <tr
+                  <div
                     key={customer.id}
-                    className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                    className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
                   >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-subtle text-sm font-semibold text-primary">
-                          {initials}
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-subtle text-sm font-semibold text-primary">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {displayName}
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-foreground">
-                            {displayName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {customer.email || "-"}
-                          </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {customer.email || "-"}
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span>{customer.phone || customer.mobile || "-"}</span>
+                          <span>•</span>
+                          <span>{customer.city || "-"}</span>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-foreground">
-                      {customer.phone || customer.mobile || "-"}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-foreground">
-                      {customer.city || "-"}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-foreground">
-                      {salesperson}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      #{customer.customer_number}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {getRelativeTime(customer.created_at)}
-                    </td>
-                  </tr>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        #{customer.customer_number}
+                      </span>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
-          <div className="py-12 text-center">
+          <div className="py-12 text-center rounded-xl border border-border bg-card">
             <p className="text-sm text-muted-foreground">
               {debouncedSearch ? "Geen klanten gevonden voor deze zoekopdracht" : "Nog geen klanten aanwezig"}
             </p>
