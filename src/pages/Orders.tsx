@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -11,13 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, LayoutList, Kanban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrders, OrderStatus } from "@/hooks/useOrders";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { OrderKanbanBoard } from "@/components/orders/OrderKanbanBoard";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const statusConfig: Record<OrderStatus, { label: string; color: string }> = {
   nieuw: { label: "Nieuw", color: "bg-blue-100 text-blue-800" },
@@ -62,12 +63,15 @@ function getCustomerName(customer: { first_name?: string | null; last_name?: str
   return [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Onbekend";
 }
 
+type ViewMode = "list" | "kanban";
+
 const OrdersPage = () => {
   const navigate = useNavigate();
-  const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
+  const { activeDivisionId, setActiveDivisionId } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   // Local division filter synced with global state
   const divisionFilter = activeDivisionId || "all";
@@ -105,10 +109,25 @@ const OrdersPage = () => {
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Orders
         </h1>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nieuwe order
-        </Button>
+        <div className="flex items-center gap-3">
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && setViewMode(value as ViewMode)}
+            className="bg-muted p-1 rounded-lg"
+          >
+            <ToggleGroupItem value="list" aria-label="Lijstweergave" className="h-8 w-8 p-0">
+              <LayoutList className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="kanban" aria-label="Kanbanweergave" className="h-8 w-8 p-0">
+              <Kanban className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nieuwe order
+          </Button>
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -130,22 +149,24 @@ const OrdersPage = () => {
           </Select>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Status:</span>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
-              <SelectValue placeholder="Alle statussen" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle statussen</SelectItem>
-              {Object.entries(statusConfig).map(([key, config]) => (
-                <SelectItem key={key} value={key}>
-                  {config.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {viewMode === "list" && (
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-muted-foreground">Status:</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-[160px] text-[13px]">
+                <SelectValue placeholder="Alle statussen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle statussen</SelectItem>
+                {Object.entries(statusConfig).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    {config.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="relative ml-auto max-w-[300px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -158,10 +179,16 @@ const OrdersPage = () => {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+      {/* Kanban View */}
+      {viewMode === "kanban" && (
+        <OrderKanbanBoard orders={filteredOrders} isLoading={isLoading} />
+      )}
+
+      {/* List View */}
+      {viewMode === "list" && (
+        <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
           </div>
@@ -242,8 +269,9 @@ const OrdersPage = () => {
               {debouncedSearch ? "Geen orders gevonden voor deze zoekopdracht" : "Nog geen orders aanwezig"}
             </p>
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </AppLayout>
   );
 };
