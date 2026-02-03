@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.exact-sync-customers]
 verify_jwt = false
 
+[functions.exact-sync-invoices]
+verify_jwt = false
+
 [functions.tradeplace-config]
 verify_jwt = false
 
