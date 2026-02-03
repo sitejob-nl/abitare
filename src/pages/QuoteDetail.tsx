@@ -1,16 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Plus, Loader2, Send, Save, FileDown } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useQuote, useUpdateQuote, QuoteStatus } from "@/hooks/useQuotes";
-import { useQuoteSections } from "@/hooks/useQuoteSections";
+import { useQuoteSections, useUpdateQuoteSection } from "@/hooks/useQuoteSections";
 import { QuoteHeader } from "@/components/quotes/QuoteHeader";
-import { QuoteSectionCard } from "@/components/quotes/QuoteSectionCard";
+import { SortableSectionCard } from "@/components/quotes/SortableSectionCard";
 import { QuoteTotals } from "@/components/quotes/QuoteTotals";
+import { QuoteDiscountEditor } from "@/components/quotes/QuoteDiscountEditor";
+import { QuoteActions } from "@/components/quotes/QuoteActions";
 import { AddSectionDialog } from "@/components/quotes/AddSectionDialog";
 import { generateQuotePdf } from "@/lib/generateQuotePdf";
 import { toast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 function getCustomerName(customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null): string {
   if (!customer) return "Onbekend";
@@ -26,6 +42,18 @@ const QuoteDetail = () => {
   const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuote(id);
   const { data: sections, isLoading: sectionsLoading } = useQuoteSections(id);
   const updateQuote = useUpdateQuote();
+  const updateSection = useUpdateQuoteSection();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Redirect if quote not found
   useEffect(() => {
@@ -55,6 +83,23 @@ const QuoteDetail = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleSectionDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !sections) return;
+
+    const oldIndex = sections.findIndex((s) => s.id === active.id);
+    const newIndex = sections.findIndex((s) => s.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Update sort_order for the moved section
+    const newSortOrder = sections[newIndex].sort_order ?? newIndex;
+    updateSection.mutate({ 
+      id: active.id as string, 
+      sort_order: newSortOrder 
+    });
   };
 
   const handleSave = async () => {
@@ -137,12 +182,25 @@ const QuoteDetail = () => {
   };
 
   const handleSend = () => {
-    // Future: implement sending functionality
     toast({
       title: "Binnenkort beschikbaar",
       description: "De verzend functionaliteit wordt later toegevoegd.",
     });
   };
+
+  // Calculate subtotal for discount editor
+  const subtotalExclVat = useMemo(() => {
+    if (!sections) return 0;
+    return sections.reduce((total, section) => {
+      const sectionTotal = section.quote_lines?.reduce(
+        (sum, line) => sum + (line.line_total || 0),
+        0
+      ) || 0;
+      return total + sectionTotal;
+    }, 0);
+  }, [sections]);
+
+  const sectionIds = useMemo(() => sections?.map(s => s.id) || [], [sections]);
 
   if (quoteLoading || sectionsLoading) {
     return (
@@ -162,15 +220,18 @@ const QuoteDetail = () => {
 
   return (
     <AppLayout title={`Offerte #${quote.quote_number}`} breadcrumb={`Offertes / #${quote.quote_number}`}>
-      <QuoteHeader
-        quoteNumber={quote.quote_number}
-        customerName={getCustomerName(customer)}
-        status={quote.status as QuoteStatus}
-        validUntil={quote.valid_until}
-        quoteDate={quote.quote_date}
-        onStatusChange={handleStatusChange}
-        isUpdating={updateQuote.isPending}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+        <QuoteHeader
+          quoteNumber={quote.quote_number}
+          customerName={getCustomerName(customer)}
+          status={quote.status as QuoteStatus}
+          validUntil={quote.valid_until}
+          quoteDate={quote.quote_date}
+          onStatusChange={handleStatusChange}
+          isUpdating={updateQuote.isPending}
+        />
+        <QuoteActions quoteId={id!} quoteNumber={quote.quote_number} />
+      </div>
 
       {/* Add section button */}
       <div className="mb-4">
@@ -184,27 +245,48 @@ const QuoteDetail = () => {
         </Button>
       </div>
 
-      {/* Sections */}
-      <div className="space-y-4">
-        {sections && sections.length > 0 ? (
-          sections.map((section) => (
-            <QuoteSectionCard
-              key={section.id}
-              section={section}
-              quoteId={id!}
-            />
-          ))
-        ) : (
-          <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              Deze offerte heeft nog geen secties.
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Klik op "Nieuwe sectie" om te beginnen.
-            </p>
+      {/* Sections with drag & drop */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleSectionDragEnd}
+      >
+        <SortableContext items={sectionIds} strategy={verticalListSortingStrategy}>
+          <div className="space-y-4">
+            {sections && sections.length > 0 ? (
+              sections.map((section) => (
+                <SortableSectionCard
+                  key={section.id}
+                  section={section}
+                  quoteId={id!}
+                />
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Deze offerte heeft nog geen secties.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Klik op "Nieuwe sectie" om te beginnen.
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </SortableContext>
+      </DndContext>
+
+      {/* Discount & Payment terms editor */}
+      {sections && sections.length > 0 && (
+        <QuoteDiscountEditor
+          quoteId={id!}
+          discountAmount={quote.discount_amount || 0}
+          discountPercentage={quote.discount_percentage}
+          discountDescription={quote.discount_description}
+          paymentTermsDescription={quote.payment_terms_description}
+          paymentCondition={quote.payment_condition}
+          subtotalExclVat={subtotalExclVat}
+        />
+      )}
 
       {/* Totals */}
       {sections && sections.length > 0 && (
