@@ -236,6 +236,7 @@ const QuoteDetail = () => {
           customerName={getCustomerName(customer)}
           totalAmount={quote.total_incl_vat || 0}
           status={quote.status || "concept"}
+          hasOrder={Array.isArray(quote.orders) && quote.orders.length > 0}
         />
       </div>
 
