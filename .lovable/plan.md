@@ -1,309 +1,246 @@
 
 
-# Plan: Mobile Optimalisatie voor Alle Pagina's
+# Grondige Beveiligings- en Workflow Analyse - Abitare ERP
 
-## Overzicht
+## Overzicht Huidige Staat
 
-Dit plan optimaliseert alle pagina's in de applicatie voor mobiel gebruik. Uit de analyse blijkt dat sommige pagina's (Customers, Quotes) al goed geoptimaliseerd zijn met table-to-card transformaties, terwijl andere pagina's nog verbeteringen nodig hebben.
-
----
-
-## Huidige Status per Pagina
-
-| Pagina | Desktop | Mobile | Status |
-|--------|---------|--------|--------|
-| Dashboard | Goed | Goed | OK |
-| Customers | Tabel | Cards | OK |
-| CustomerDetail | Goed | Goed | OK |
-| Quotes | Tabel | Cards | OK |
-| QuoteDetail | Goed | Goed | OK |
-| Orders | Tabel | ONTBREEKT | Aanpassen |
-| OrderDetail | Goed | Goed | OK |
-| Products | Tabel | ONTBREEKT | Aanpassen |
-| Service | Filters horizontaal | ONTBREEKT | Aanpassen |
-| ServiceTicketDetail | 3-kolom grid | ONTBREEKT | Aanpassen |
-| Invoices | Tabel | ONTBREEKT | Aanpassen |
-| Settings | Tabel | ONTBREEKT | Aanpassen |
-| Calendar | 7-kolom grid | ONTBREEKT | Aanpassen |
-| Installation | Cards | Responsive tweaks | Kleine aanpassingen |
-| Reports | Grid | OK | Kleine aanpassingen |
-| PriceGroups | Tabel | ONTBREEKT | Aanpassen |
-| ProductImport | Multi-step form | OK | Kleine aanpassingen |
-| ServiceTicketPublicForm | Responsive | OK | OK |
-| Login | Centered card | OK | OK |
+Na een uitgebreide analyse van de codebase, database schema, RLS policies, edge functions en workflows volgt hieronder een samenvatting van bevindingen en aanbevelingen voor verdere ontwikkeling.
 
 ---
 
-## Te Wijzigen Bestanden
+## Deel 1: Beveiligingsanalyse
 
-### 1. Orders.tsx - Mobile Cards View
+### Kritieke Bevindingen
 
-**Probleem**: De Orders pagina toont alleen een tabel die op mobile slecht leesbaar is.
+| Prioriteit | Probleem | Impact | Status |
+|------------|----------|--------|--------|
+| HOOG | Service Ticket RLS policies te permissief | Elke geauthenticeerde gebruiker kan alle tickets bewerken | Actie vereist |
+| HOOG | Service Ticket Attachments openbaar | Anonieme gebruikers kunnen bestanden uploaden | Actie vereist |
+| MEDIUM | Leaked Password Protection uitgeschakeld | Gebruikers kunnen gecompromitteerde wachtwoorden gebruiken | Aanbevolen |
+| MEDIUM | Installer ziet financiele orderdata | Prijsinformatie zichtbaar voor monteurs | Aanbevolen |
+| LAAG | Storage bucket policies ontbreken | Documenten mogelijk onbeveiligd | Controleren |
+
+### Gedetailleerde RLS Analyse
+
+#### 1. Service Tickets Module - KRITIEK
+
+De volgende tabellen hebben te permissieve policies met `USING (true)`:
+
+```
+service_tickets          - UPDATE: true (iedereen kan elk ticket wijzigen)
+service_ticket_notes     - INSERT/UPDATE/DELETE: true
+service_ticket_assignees - INSERT/UPDATE/DELETE: true  
+service_ticket_attachments - INSERT: true (inclusief anon!)
+service_ticket_status_history - INSERT: true
+```
+
+**Risico**: Elke ingelogde gebruiker kan tickets van andere vestigingen wijzigen, notities verwijderen, en assignees aanpassen.
 
 **Oplossing**:
-- Header responsive maken met flex-wrap
-- Filters in mobiele layout stapelen
-- Mobile cards view toevoegen (vergelijkbaar met Customers/Quotes)
+- Vervang `true` door proper role-based checks
+- Koppel service tickets aan divisies voor vestigings-isolatie
+- Beperk wijzigingen tot toegewezen medewerkers of managers
+
+#### 2. Goed Beveiligde Tabellen
+
+De volgende tabellen hebben correcte RLS policies:
+- `customers` - Divisie-isolatie + salesperson/assistant check
+- `quotes` - Divisie + created_by + salesperson check
+- `orders` - Divisie + installer view-only toegang
+- `user_roles` - Alleen admin kan wijzigen
+- `profiles` - Admin of eigen profiel
+- `exact_online_connections` - Alleen admin
+
+#### 3. Storage Buckets
+
+De buckets `order-documents` en `service-attachments` zijn privaat, maar storage policies moeten worden geverifieerd.
+
+---
+
+## Deel 2: Workflow Analyse
+
+### Huidige Workflows
 
 ```text
-DESKTOP: Tabel met 6 kolommen
-MOBILE: Card per order met:
-  - Order nummer + Status badge
-  - Klantnaam
-  - Bedrag + Betaalstatus
-  - Leverdatum
+                    +---------------+
+                    |   KLANT       |
+                    +-------+-------+
+                            |
+                            v
++---------------------------+---------------------------+
+|                      OFFERTE                          |
+| Status: concept -> verzonden -> geaccepteerd/afgewezen|
+| - Klant selecteren/aanmaken                          |
+| - Secties met leverancier/prijsgroep/kleur           |
+| - Producten met automatische prijslookup             |
+| - Sectie- en offerte-niveau korting                  |
++---------------------------+---------------------------+
+                            |
+                            v (bij acceptatie)
++---------------------------+---------------------------+
+|                      ORDER                            |
+| Status: nieuw -> bestel_klaar -> besteld -> geleverd |
+|         -> gemonteerd -> afgerond                    |
+| - Sectie-configuratie gekopieerd                     |
+| - Leveranciersorders per sectie                      |
+| - Betaalstatus tracking                              |
+| - Documenten en notities                             |
++---------------------------+---------------------------+
+                            |
+                            v
++---------------------------+---------------------------+
+|                    FACTURATIE                         |
+| - Automatisch gegenereerd bij order                  |
+| - Push naar Exact Online                             |
++---------------------------+---------------------------+
 ```
 
-### 2. Products.tsx - Mobile Cards View
+### Workflow Sterke Punten
+- Quote-to-Order conversie behoudt alle sectie-configuratie
+- Order sections worden correct aangemaakt met kortingen
+- Vier-ogen principe voor bestelklaar status
+- Status historie wordt bijgehouden
 
-**Probleem**: De Products pagina toont alleen een tabel.
+### Workflow Verbeterpunten
 
-**Oplossing**:
-- Filters responsive stapelen
-- Mobile cards toevoegen
-
-```text
-DESKTOP: Tabel met 6 kolommen
-MOBILE: Card per product met:
-  - Artikelcode
-  - Naam
-  - Leverancier + Categorie
-  - Verkoop-/Inkoopprijs
-```
-
-### 3. Service.tsx - Filter Optimalisatie
-
-**Probleem**: Filters staan horizontaal en knijpen op mobile.
-
-**Oplossing**:
-- Filters in flex-wrap stapelen
-- Zoekbalk full width op mobile
-- View toggle compact maken
-
-### 4. ServiceTicketDetail.tsx - Mobile Layout
-
-**Probleem**: 3-kolom grid wordt te smal op mobile.
-
-**Oplossing**:
-- Grid naar 1 kolom op mobile
-- Sidebar cards onder main content
-- Accordion voor sommige cards om ruimte te besparen
-
-### 5. ServiceTicketTable.tsx - Mobile Cards
-
-**Probleem**: Tabel is onleesbaar op mobile.
-
-**Oplossing**:
-- Tabel hidden op mobile
-- Mobile cards view toevoegen
-
-### 6. Invoices.tsx - Mobile Optimalisatie
-
-**Probleem**: Stat cards en tabel zijn niet responsive.
-
-**Oplossing**:
-- Stat cards 2x2 grid op mobile
-- Filters stapelen
-- Tabel naar scrollable of cards
-
-### 7. Calendar.tsx - Mobile View
-
-**Probleem**: 7-kolom grid is te smal op mobile.
-
-**Oplossing**:
-- Weeknamen afkorten tot 1 letter
-- Kleinere cellen
-- Events compacter weergeven
-- Optioneel: agenda list view voor mobile
-
-### 8. Settings.tsx - Mobile Tabel
-
-**Probleem**: Gebruikerstabel is niet mobile-friendly.
-
-**Oplossing**:
-- Tabel hidden op mobile
-- Mobile cards view voor gebruikers
-
-### 9. PriceGroups.tsx - Mobile Cards
-
-**Probleem**: Tabel niet mobile-friendly.
-
-**Oplossing**:
-- Tabel hidden op mobile
-- Cards view voor prijsgroepen
-
-### 10. Installation.tsx - Kleine Tweaks
-
-**Probleem**: Header en filters kunnen beter.
-
-**Oplossing**:
-- Header flex-wrap
-- Filters stapelen op mobile
-
-### 11. Reports.tsx - Grid Tweaks
-
-**Probleem**: Charts kunnen overlopen.
-
-**Oplossing**:
-- Maandelijkse revenue chart responsive maken
+| Gebied | Huidige Situatie | Verbetering |
+|--------|------------------|-------------|
+| Bestel workflow | Handmatig status aanpassen | Automatische status-transitie na leveranciersorder |
+| Levering tracking | Geen koppeling met leverancier | Tradeplace webhook voor real-time updates |
+| Montage planning | Basis datumvelden | Integratie met kalender + monteur notificaties |
+| Servicetickets | Los van orders | Automatische koppeling bij klachtafhandeling |
 
 ---
 
-## Implementatie Details
+## Deel 3: Ontbrekende Functionaliteit
 
-### Algemene Patronen
+### Must-Have (Kritiek voor dagelijks gebruik)
 
-Alle mobile optimalisaties volgen dezelfde patronen:
+1. **Wachtwoord reset flow** - Gebruikers kunnen geen wachtwoord instellen/resetten
+2. **Service ticket divisie-isolatie** - RLS policies repareren
+3. **Monteur-specifieke view** - Beperkte orderdetails zonder financiele data
+4. **Email notificaties** - Voor statuswijzigingen en toewijzingen
 
-1. **Header**: `flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between`
-2. **Filters**: `flex flex-col sm:flex-row sm:flex-wrap gap-3`
-3. **Tabel-to-Cards**: 
-   - Desktop: `hidden md:block` voor tabel
-   - Mobile: `md:hidden space-y-3` voor cards
-4. **Grids**: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` progressieve breakpoints
+### Should-Have (Belangrijk voor effcientie)
 
-### Fase 1: Kritieke Pagina's (Meest Gebruikt)
+1. **PDF generatie voor orders** - Orderbevestiging document
+2. **Bulk acties** - Meerdere orders/quotes tegelijk verwerken
+3. **Zoekfunctionaliteit** - Globale zoek over alle modules
+4. **Audit logging** - Wie heeft wat wanneer gewijzigd
+5. **Dashboard per rol** - Aangepaste widgets per gebruikerstype
 
-1. **Orders.tsx**
-   - Header responsive maken
-   - Filters stapelen
-   - Mobile cards view toevoegen
+### Nice-to-Have (Toekomstige uitbreiding)
 
-2. **Service.tsx**
-   - Filters responsive maken
-
-3. **ServiceTicketDetail.tsx**
-   - Grid naar 1 kolom op mobile
-   - Cards order aanpassen
-
-4. **ServiceTicketTable.tsx**
-   - Mobile cards toevoegen
-
-### Fase 2: Secundaire Pagina's
-
-5. **Products.tsx**
-   - Filters responsive
-   - Mobile cards
-
-6. **Invoices.tsx**
-   - Stat cards responsive
-   - Filters en tabel
-
-7. **Settings.tsx**
-   - Tabs responsive
-   - Gebruikerstabel naar cards
-
-### Fase 3: Planning Pagina's
-
-8. **Calendar.tsx**
-   - Compactere mobile view
-   - Kleinere dag-cellen
-
-9. **Installation.tsx**
-   - Header en filters responsive
-
-### Fase 4: Overige
-
-10. **PriceGroups.tsx**
-    - Mobile cards
-
-11. **Reports.tsx**
-    - Charts responsive
+1. **Klant portal** - Klanten kunnen eigen orders/offertes inzien
+2. **Monteur app** - Dedicated mobile interface voor monteurs
+3. **Analytics dashboard** - Geavanceerde rapportages
+4. **Multi-taal ondersteuning** - Engels naast Nederlands
+5. **Integratie met planning tools** - Externe kalenderkoppelingen
 
 ---
 
-## Verwachte Wijzigingen per Bestand
+## Deel 4: Technische Schuld
 
-| Bestand | Wijziging Type |
-|---------|----------------|
-| `src/pages/Orders.tsx` | Header, filters, mobile cards |
-| `src/pages/Products.tsx` | Header, filters, mobile cards |
-| `src/pages/Service.tsx` | Filters, zoekbalk |
-| `src/pages/ServiceTicketDetail.tsx` | Grid, card volgorde |
-| `src/components/service/ServiceTicketTable.tsx` | Mobile cards |
-| `src/pages/Invoices.tsx` | Stats, filters, tabel |
-| `src/pages/Calendar.tsx` | Compactere view |
-| `src/pages/Installation.tsx` | Header, filters |
-| `src/pages/Settings.tsx` | Tabs, gebruikerstabel |
-| `src/pages/PriceGroups.tsx` | Header, mobile cards |
-| `src/pages/Reports.tsx` | Chart aanpassingen |
+### Te Refactoren
 
----
+1. **Duplicatie in RLS policies** - Helper functies voor herhalende patterns
+2. **Edge function error handling** - Consistente foutafhandeling
+3. **Type safety** - Sommige hooks gebruiken `any` types
+4. **Test coverage** - Minimale tests aanwezig
 
-## Technische Details
+### Database Optimalisaties
 
-### Mobile Card Component Patroon
-
-Alle mobile cards volgen dit patroon:
-
-```tsx
-{/* Desktop Table */}
-<div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card">
-  <table>...</table>
-</div>
-
-{/* Mobile Cards */}
-<div className="md:hidden space-y-3">
-  {items.map((item) => (
-    <div 
-      key={item.id}
-      onClick={() => navigate(`/path/${item.id}`)}
-      className="p-4 rounded-xl border border-border bg-card cursor-pointer 
-                 transition-colors hover:bg-muted/30 active:bg-muted/50"
-    >
-      {/* Card content */}
-    </div>
-  ))}
-</div>
-```
-
-### Responsive Filter Patroon
-
-```tsx
-<div className="mb-4 md:mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
-  {/* Division filter */}
-  <div className="flex items-center gap-2">
-    <span className="text-[13px] text-muted-foreground hidden sm:inline">Label:</span>
-    <Select>...</Select>
-  </div>
-  
-  {/* Search - full width on mobile */}
-  <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
-    <Input />
-  </div>
-</div>
-```
-
-### ServiceTicketDetail Grid Aanpassing
-
-```tsx
-// Van:
-<div className="grid gap-4 lg:grid-cols-3">
-  <div className="lg:col-span-2">...</div>
-  <div>...</div>
-</div>
-
-// Naar:
-<div className="grid gap-4 lg:grid-cols-3">
-  {/* Main content first on all screens */}
-  <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">...</div>
-  
-  {/* Sidebar - shows above on mobile for quick status changes */}
-  <div className="space-y-4 order-1 lg:order-2">...</div>
-</div>
-```
+1. **Indexes toevoegen** - Voor veelgebruikte query patterns
+2. **Materialized views** - Voor dashboard statistieken
+3. **Cascade deletes** - Sommige foreign keys missen cascades
 
 ---
 
-## Prioriteit
+## Deel 5: Implementatieplan
 
-De implementatie volgt deze volgorde op basis van gebruiksfrequentie:
+### Fase 1: Kritieke Beveiliging (Week 1-2)
 
-1. Orders (dagelijks gebruikt)
-2. Service module (nieuw, moet direct goed werken)
-3. Products (regelmatig gebruikt)
-4. Invoices (maandelijks)
-5. Calendar/Installation (planning)
-6. Settings (incidenteel)
-7. Reports/PriceGroups (incidenteel)
+```sql
+-- 1. Service Tickets RLS repareren
+DROP POLICY IF EXISTS "Authenticated users can update tickets" ON service_tickets;
+CREATE POLICY "Users can update assigned or division tickets" 
+ON service_tickets FOR UPDATE TO authenticated
+USING (
+  is_admin_or_manager(auth.uid()) 
+  OR division_id = get_user_division_id(auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM service_ticket_assignees 
+    WHERE ticket_id = service_tickets.id 
+    AND user_id = auth.uid()
+  )
+);
+
+-- 2. Service Ticket Notes restrictief maken
+DROP POLICY IF EXISTS "Authenticated users can delete notes" ON service_ticket_notes;
+CREATE POLICY "Users can delete own notes" 
+ON service_ticket_notes FOR DELETE TO authenticated
+USING (created_by = auth.uid() OR is_admin(auth.uid()));
+
+-- 3. Attachments beperken
+DROP POLICY IF EXISTS "Anyone can upload attachments" ON service_ticket_attachments;
+CREATE POLICY "Authenticated users can upload attachments" 
+ON service_ticket_attachments FOR INSERT TO authenticated
+WITH CHECK (true);
+```
+
+### Fase 2: Wachtwoord Management (Week 2)
+
+1. Wachtwoord reset pagina toevoegen (`/reset-password`)
+2. Magic link flow in `invite-user` edge function verbeteren
+3. Email template configureren in Supabase
+
+### Fase 3: Monteur View (Week 3)
+
+1. Database view aanmaken zonder financiele kolommen
+2. Aparte OrderDetailInstaller component
+3. Role-based routing in frontend
+
+### Fase 4: Notificaties (Week 4)
+
+1. Edge function voor email verzending
+2. Notification preferences in profiles
+3. Triggers voor status wijzigingen
+
+### Fase 5: Tradeplace Activatie (Week 5-6)
+
+1. API documentatie integreren
+2. Live order plaatsing implementeren
+3. Webhook handlers afmaken
+4. Prijslijst synchronisatie
+
+### Fase 6: Klant Portal (Optioneel - Week 7-8)
+
+1. Aparte auth context voor klanten
+2. Read-only views voor eigen data
+3. Service ticket indienen
+
+---
+
+## Prioriteiten Samenvatting
+
+| Prioriteit | Item | Geschatte Effort |
+|------------|------|------------------|
+| P0 | Service ticket RLS repareren | 2-4 uur |
+| P0 | Storage bucket policies controleren | 1 uur |
+| P1 | Wachtwoord reset flow | 4-6 uur |
+| P1 | Email notificaties basis | 6-8 uur |
+| P2 | Monteur-specifieke view | 8-12 uur |
+| P2 | PDF order bevestiging | 4-6 uur |
+| P3 | Audit logging | 8-12 uur |
+| P3 | Tradeplace live integratie | 16-24 uur |
+| P4 | Klant portal | 24-40 uur |
+
+---
+
+## Aanbevolen Eerste Stappen
+
+1. **Direct**: Schakel Leaked Password Protection in via Supabase Dashboard > Authentication > Settings
+2. **Deze week**: Service ticket RLS policies repareren
+3. **Volgende sprint**: Wachtwoord reset flow + email notificaties
+4. **Backlog**: Monteur view, Tradeplace activatie, klant portal
 
