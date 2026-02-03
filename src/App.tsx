@@ -27,6 +27,8 @@ import CustomerDetail from "./pages/CustomerDetail";
 import Service from "./pages/Service";
 import ServiceTicketDetail from "./pages/ServiceTicketDetail";
 import ServiceTicketPublicForm from "./pages/ServiceTicketPublicForm";
+import ResetPassword from "./pages/ResetPassword";
+import SetPassword from "./pages/SetPassword";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +43,8 @@ const App = () => (
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/set-password" element={<SetPassword />} />
             <Route path="/service/new" element={<ServiceTicketPublicForm />} />
             
             {/* Protected routes */}
