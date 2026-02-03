@@ -1,0 +1,472 @@
+import { useParams, Link } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Calendar,
+  Clock,
+  User,
+  MessageSquare,
+  Paperclip,
+  Plus,
+  X,
+  Send,
+  ExternalLink,
+} from "lucide-react";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { useServiceTicket } from "@/hooks/useServiceTicket";
+import {
+  useUpdateTicketStatus,
+  useUpdateTicket,
+  useAddTicketNote,
+  useAssignUser,
+  useUnassignUser,
+} from "@/hooks/useServiceTicketMutations";
+import { useProfiles } from "@/hooks/useUsers";
+
+const statusConfig: Record<string, { label: string; className: string }> = {
+  nieuw: { label: "Nieuw", className: "bg-blue-100 text-blue-700" },
+  in_behandeling: { label: "In behandeling", className: "bg-yellow-100 text-yellow-700" },
+  wacht_op_klant: { label: "Wacht op klant", className: "bg-orange-100 text-orange-700" },
+  wacht_op_onderdelen: { label: "Wacht op onderdelen", className: "bg-purple-100 text-purple-700" },
+  ingepland: { label: "Ingepland", className: "bg-cyan-100 text-cyan-700" },
+  afgerond: { label: "Afgerond", className: "bg-green-100 text-green-700" },
+  geannuleerd: { label: "Geannuleerd", className: "bg-gray-100 text-gray-700" },
+};
+
+const priorityConfig: Record<string, { label: string; className: string }> = {
+  laag: { label: "Laag", className: "bg-muted text-muted-foreground" },
+  normaal: { label: "Normaal", className: "bg-blue-100 text-blue-700" },
+  hoog: { label: "Hoog", className: "bg-warning/20 text-warning" },
+  urgent: { label: "Urgent", className: "bg-destructive/20 text-destructive" },
+};
+
+const categoryLabels: Record<string, string> = {
+  klacht: "Klacht",
+  garantie: "Garantie",
+  schade: "Schade",
+  overig: "Overig",
+};
+
+type TicketStatus = "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "ingepland" | "afgerond" | "geannuleerd";
+type TicketPriority = "laag" | "normaal" | "hoog" | "urgent";
+
+export default function ServiceTicketDetail() {
+  const { id } = useParams<{ id: string }>();
+  const { data: ticket, isLoading } = useServiceTicket(id);
+  const { data: users = [] } = useProfiles();
+  const updateStatus = useUpdateTicketStatus();
+  const updateTicket = useUpdateTicket();
+  const addNote = useAddTicketNote();
+  const assignUser = useAssignUser();
+  const unassignUser = useUnassignUser();
+
+  const [noteContent, setNoteContent] = useState("");
+  const [isAddingAssignee, setIsAddingAssignee] = useState(false);
+
+  if (isLoading) {
+    return (
+      <AppLayout title="Service Ticket">
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-4">
+              <Skeleton className="h-48" />
+              <Skeleton className="h-64" />
+            </div>
+            <Skeleton className="h-96" />
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <AppLayout title="Service Ticket">
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Ticket niet gevonden</p>
+          <Button asChild className="mt-4">
+            <Link to="/service">Terug naar overzicht</Link>
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const status = statusConfig[ticket.status] || statusConfig.nieuw;
+  const priority = priorityConfig[ticket.priority] || priorityConfig.normaal;
+  const assignees = ticket.assignees || [];
+  const notes = ticket.notes || [];
+  const attachments = ticket.attachments || [];
+  const statusHistory = ticket.status_history || [];
+
+  const availableUsers = users.filter(
+    (user) => !assignees.some((a) => a.user_id === user.id)
+  );
+
+  const handleStatusChange = (newStatus: string) => {
+    updateStatus.mutate({
+      ticketId: ticket.id,
+      fromStatus: ticket.status,
+      toStatus: newStatus as TicketStatus,
+    });
+  };
+
+  const handlePriorityChange = (newPriority: string) => {
+    updateTicket.mutate({
+      id: ticket.id,
+      priority: newPriority as TicketPriority,
+    });
+  };
+
+  const handleAddNote = () => {
+    if (!noteContent.trim()) return;
+    addNote.mutate(
+      { ticketId: ticket.id, content: noteContent },
+      { onSuccess: () => setNoteContent("") }
+    );
+  };
+
+  const handleAssignUser = (userId: string) => {
+    assignUser.mutate({ ticketId: ticket.id, userId });
+    setIsAddingAssignee(false);
+  };
+
+  const handleUnassignUser = (userId: string) => {
+    unassignUser.mutate({ ticketId: ticket.id, userId });
+  };
+
+  return (
+    <AppLayout title={`Ticket #${ticket.ticket_number}`}>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link to="/service">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">#{ticket.ticket_number}</h1>
+              <Badge className={cn("text-xs", status.className)}>{status.label}</Badge>
+              <Badge className={cn("text-xs", priority.className)}>{priority.label}</Badge>
+            </div>
+            <p className="text-muted-foreground">{ticket.subject}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Main content */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Description */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Beschrijving</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm whitespace-pre-wrap">
+                  {ticket.description || "Geen beschrijving"}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Attachments */}
+            {attachments.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    Bijlagen ({attachments.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {attachments.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="flex items-center justify-between rounded-lg border p-2"
+                      >
+                        <span className="text-sm truncate">{attachment.file_name}</span>
+                        <Button variant="ghost" size="sm">
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Notes */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Notities ({notes.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {notes.length > 0 && (
+                  <div className="space-y-3">
+                    {notes.map((note) => (
+                      <div key={note.id} className="rounded-lg bg-muted/50 p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Avatar className="h-5 w-5">
+                            <AvatarFallback className="text-[10px]">
+                              {note.profile?.full_name?.charAt(0) || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-medium">
+                            {note.profile?.full_name || "Onbekend"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(note.created_at), "d MMM yyyy HH:mm", { locale: nl })}
+                          </span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="Voeg een notitie toe..."
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    rows={2}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="icon"
+                    onClick={handleAddNote}
+                    disabled={!noteContent.trim() || addNote.isPending}
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Status History */}
+            {statusHistory.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Status geschiedenis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {statusHistory.map((entry) => {
+                      const toStatus = statusConfig[entry.to_status] || statusConfig.nieuw;
+                      return (
+                        <div
+                          key={entry.id}
+                          className="flex items-center gap-3 text-sm"
+                        >
+                          <span className="text-xs text-muted-foreground w-32">
+                            {format(new Date(entry.created_at), "d MMM HH:mm", { locale: nl })}
+                          </span>
+                          <Badge className={cn("text-xs", toStatus.className)}>
+                            {toStatus.label}
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            door {entry.profile?.full_name || "Systeem"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Ticket info */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Status</label>
+                  <Select value={ticket.status} onValueChange={handleStatusChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nieuw">Nieuw</SelectItem>
+                      <SelectItem value="in_behandeling">In behandeling</SelectItem>
+                      <SelectItem value="wacht_op_klant">Wacht op klant</SelectItem>
+                      <SelectItem value="wacht_op_onderdelen">Wacht op onderdelen</SelectItem>
+                      <SelectItem value="ingepland">Ingepland</SelectItem>
+                      <SelectItem value="afgerond">Afgerond</SelectItem>
+                      <SelectItem value="geannuleerd">Geannuleerd</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Prioriteit</label>
+                  <Select value={ticket.priority} onValueChange={handlePriorityChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="laag">Laag</SelectItem>
+                      <SelectItem value="normaal">Normaal</SelectItem>
+                      <SelectItem value="hoog">Hoog</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground">Categorie</label>
+                  <p className="text-sm">{categoryLabels[ticket.category] || ticket.category}</p>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground">Aangemaakt</label>
+                  <p className="text-sm flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(ticket.created_at), "d MMMM yyyy", { locale: nl })}
+                  </p>
+                </div>
+
+                {ticket.order && (
+                  <div>
+                    <label className="text-xs text-muted-foreground">Gekoppelde order</label>
+                    <Link
+                      to={`/orders/${ticket.order.id}`}
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      Order #{ticket.order.order_number}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Submitter info */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Indiener
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="font-medium">{ticket.submitter_name}</p>
+                <a
+                  href={`mailto:${ticket.submitter_email}`}
+                  className="text-sm text-primary hover:underline flex items-center gap-1"
+                >
+                  <Mail className="h-3 w-3" />
+                  {ticket.submitter_email}
+                </a>
+                {ticket.submitter_phone && (
+                  <a
+                    href={`tel:${ticket.submitter_phone}`}
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Phone className="h-3 w-3" />
+                    {ticket.submitter_phone}
+                  </a>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Assignees */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Toegewezen</CardTitle>
+                  {!isAddingAssignee && availableUsers.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsAddingAssignee(true)}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {isAddingAssignee && (
+                  <Select onValueChange={handleAssignUser}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecteer medewerker" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.full_name || user.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {assignees.length === 0 && !isAddingAssignee && (
+                  <p className="text-sm text-muted-foreground">Geen medewerkers toegewezen</p>
+                )}
+
+                {assignees.map((assignee) => (
+                  <div
+                    key={assignee.id}
+                    className="flex items-center justify-between rounded-lg bg-muted/50 p-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="text-[10px]">
+                          {assignee.profile?.full_name?.charAt(0) || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">
+                        {assignee.profile?.full_name || assignee.profile?.email || "Onbekend"}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleUnassignUser(assignee.user_id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}

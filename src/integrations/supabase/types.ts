@@ -1367,6 +1367,282 @@ export type Database = {
         }
         Relationships: []
       }
+      service_ticket_assignees: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_assignees_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_assignees_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_assignees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_ticket_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          ticket_id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          ticket_id: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          ticket_id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_attachments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_ticket_notes: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note_type: string
+          ticket_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_type?: string
+          ticket_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_type?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_notes_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_ticket_status_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_status:
+            | Database["public"]["Enums"]["service_ticket_status"]
+            | null
+          id: string
+          notes: string | null
+          ticket_id: string
+          to_status: Database["public"]["Enums"]["service_ticket_status"]
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["service_ticket_status"]
+            | null
+          id?: string
+          notes?: string | null
+          ticket_id: string
+          to_status: Database["public"]["Enums"]["service_ticket_status"]
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?:
+            | Database["public"]["Enums"]["service_ticket_status"]
+            | null
+          id?: string
+          notes?: string | null
+          ticket_id?: string
+          to_status?: Database["public"]["Enums"]["service_ticket_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_ticket_status_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_ticket_status_history_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_tickets: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          description: string | null
+          division_id: string | null
+          id: string
+          order_id: string | null
+          priority: Database["public"]["Enums"]["service_ticket_priority"]
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["service_ticket_status"]
+          subject: string
+          submitter_email: string
+          submitter_name: string
+          submitter_phone: string | null
+          ticket_number: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          description?: string | null
+          division_id?: string | null
+          id?: string
+          order_id?: string | null
+          priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["service_ticket_status"]
+          subject: string
+          submitter_email: string
+          submitter_name: string
+          submitter_phone?: string | null
+          ticket_number?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          description?: string | null
+          division_id?: string | null
+          id?: string
+          order_id?: string | null
+          priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["service_ticket_status"]
+          subject?: string
+          submitter_email?: string
+          submitter_name?: string
+          submitter_phone?: string | null
+          ticket_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_tickets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_transactions: {
         Row: {
           amount: number
@@ -1817,6 +2093,15 @@ export type Database = {
         | "vervallen"
         | "geaccepteerd"
         | "afgewezen"
+      service_ticket_priority: "laag" | "normaal" | "hoog" | "urgent"
+      service_ticket_status:
+        | "nieuw"
+        | "in_behandeling"
+        | "wacht_op_klant"
+        | "wacht_op_onderdelen"
+        | "ingepland"
+        | "afgerond"
+        | "geannuleerd"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1975,6 +2260,16 @@ export const Constants = {
         "vervallen",
         "geaccepteerd",
         "afgewezen",
+      ],
+      service_ticket_priority: ["laag", "normaal", "hoog", "urgent"],
+      service_ticket_status: [
+        "nieuw",
+        "in_behandeling",
+        "wacht_op_klant",
+        "wacht_op_onderdelen",
+        "ingepland",
+        "afgerond",
+        "geannuleerd",
       ],
     },
   },
