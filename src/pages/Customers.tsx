@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Plus, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useDivisions } from "@/hooks/useDivisions";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
@@ -44,10 +45,16 @@ function getRelativeTime(date: string | null): string {
 }
 
 const Customers = () => {
-  const [divisionFilter, setDivisionFilter] = useState<string>("all");
+  const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showNewDialog, setShowNewDialog] = useState(false);
+
+  // Local division filter synced with global state
+  const divisionFilter = activeDivisionId || "all";
+  const setDivisionFilter = (value: string) => {
+    setActiveDivisionId(value === "all" ? null : value);
+  };
 
   // Debounce search
   const handleSearchChange = (value: string) => {
