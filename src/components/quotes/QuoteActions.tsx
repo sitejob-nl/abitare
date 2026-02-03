@@ -25,6 +25,7 @@ interface QuoteActionsProps {
   customerName?: string;
   totalAmount?: number;
   status?: string;
+  hasOrder?: boolean;
 }
 
 export function QuoteActions({ 
@@ -32,7 +33,8 @@ export function QuoteActions({
   quoteNumber, 
   customerName = "Klant",
   totalAmount = 0,
-  status = "concept"
+  status = "concept",
+  hasOrder = false
 }: QuoteActionsProps) {
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -42,8 +44,11 @@ export function QuoteActions({
   const duplicateQuote = useDuplicateQuote();
   const convertToOrder = useConvertQuoteToOrder();
 
-  // Can convert if not already accepted or rejected
-  const canConvert = !["geaccepteerd", "afgewezen"].includes(status);
+  // Can convert if:
+  // 1. Not already converted to order (hasOrder = false)
+  // 2. Not rejected
+  // 3. Preferably accepted, but also allow from other statuses
+  const canConvert = !hasOrder && status !== "afgewezen";
 
   const handleDelete = async () => {
     try {

@@ -70,7 +70,8 @@ export function useQuote(id: string | undefined) {
           customer:customers(*),
           division:divisions(*),
           quote_sections(*),
-          quote_lines(*)
+          quote_lines(*),
+          orders(id, order_number)
         `)
         .eq("id", id)
         .single();
