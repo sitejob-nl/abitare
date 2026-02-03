@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,7 +72,15 @@ export default function Login() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Wachtwoord</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Wachtwoord</Label>
+                <Link 
+                  to="/reset-password" 
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Vergeten?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -83,7 +91,7 @@ export default function Login() {
                 autoComplete="current-password"
               />
             </div>
-            <Button 
+            <Button
               type="submit" 
               className="w-full" 
               disabled={isLoading}
