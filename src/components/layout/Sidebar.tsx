@@ -17,8 +17,15 @@ import {
   Settings,
   ChevronDown,
   X,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavItem {
   icon: React.ElementType;
@@ -79,7 +86,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarProps) {
   const location = useLocation();
-  const { profile, roles, signOut } = useAuth();
+  const { profile, roles, signOut, isAdmin, activeDivisionId, setActiveDivisionId } = useAuth();
   const { data: divisions } = useDivisions();
 
   const displayName = profile?.full_name || profile?.email || "Gebruiker";
@@ -93,16 +100,23 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
     ? roles[0].charAt(0).toUpperCase() + roles[0].slice(1) 
     : "Gebruiker";
 
-  // Get first division or user's division
-  const userDivision = profile?.division_id 
-    ? divisions?.find(d => d.id === profile.division_id) 
+  // Get active division name
+  const activeDivision = activeDivisionId 
+    ? divisions?.find(d => d.id === activeDivisionId)
     : divisions?.[0];
-  const divisionName = userDivision?.name || "Geen vestiging";
+  const divisionName = activeDivision?.name || "Alle vestigingen";
+
+  // Admins can switch divisions, others see only their own
+  const canSwitchDivision = isAdmin && divisions && divisions.length > 1;
 
   const handleNavClick = () => {
     if (isMobile && onClose) {
       onClose();
     }
+  };
+
+  const handleDivisionChange = (divisionId: string | null) => {
+    setActiveDivisionId(divisionId);
   };
 
   return (
@@ -134,13 +148,49 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
 
       {/* Division Selector */}
       <div className="mx-4 mt-4 mb-2">
-        <button className="flex w-full items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5 transition-colors hover:bg-white/[0.1]">
-          <span className="h-2 w-2 rounded-full bg-success" />
-          <span className="flex-1 text-left text-[13px] font-medium text-white">
-            {divisionName}
-          </span>
-          <ChevronDown className="h-4 w-4 text-sidebar-muted" />
-        </button>
+        {canSwitchDivision ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex w-full items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5 transition-colors hover:bg-white/[0.1]">
+                <span className="h-2 w-2 rounded-full bg-success" />
+                <span className="flex-1 text-left text-[13px] font-medium text-white">
+                  {divisionName}
+                </span>
+                <ChevronDown className="h-4 w-4 text-sidebar-muted" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              align="start" 
+              className="w-[228px] bg-sidebar border-white/[0.08]"
+              sideOffset={4}
+            >
+              <DropdownMenuItem
+                onClick={() => handleDivisionChange(null)}
+                className="text-white hover:bg-white/[0.1] focus:bg-white/[0.1] cursor-pointer"
+              >
+                <span className="flex-1">Alle vestigingen</span>
+                {!activeDivisionId && <Check className="h-4 w-4 text-success" />}
+              </DropdownMenuItem>
+              {divisions?.map((division) => (
+                <DropdownMenuItem
+                  key={division.id}
+                  onClick={() => handleDivisionChange(division.id)}
+                  className="text-white hover:bg-white/[0.1] focus:bg-white/[0.1] cursor-pointer"
+                >
+                  <span className="flex-1">{division.name}</span>
+                  {activeDivisionId === division.id && <Check className="h-4 w-4 text-success" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex w-full items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5">
+            <span className="h-2 w-2 rounded-full bg-success" />
+            <span className="flex-1 text-left text-[13px] font-medium text-white">
+              {divisionName}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
