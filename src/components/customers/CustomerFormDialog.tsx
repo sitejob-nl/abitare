@@ -44,11 +44,26 @@ type CustomerFormData = z.infer<typeof customerSchema>;
 interface CustomerFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  customer?: {
+    id: string;
+    customer_type: "particulier" | "zakelijk";
+    salutation?: string | null;
+    first_name?: string | null;
+    last_name: string;
+    company_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    mobile?: string | null;
+    street_address?: string | null;
+    postal_code?: string | null;
+    city?: string | null;
+  };
 }
 
-export function CustomerFormDialog({ open, onOpenChange }: CustomerFormDialogProps) {
+export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFormDialogProps) {
   const { user, profile } = useAuth();
   const createCustomer = useCreateCustomer();
+  const isEditMode = !!customer;
 
   const {
     register,
@@ -60,17 +75,17 @@ export function CustomerFormDialog({ open, onOpenChange }: CustomerFormDialogPro
   } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
-      customer_type: "particulier",
-      salutation: "",
-      first_name: "",
-      last_name: "",
-      company_name: "",
-      email: "",
-      phone: "",
-      mobile: "",
-      street_address: "",
-      postal_code: "",
-      city: "",
+      customer_type: customer?.customer_type || "particulier",
+      salutation: customer?.salutation || "",
+      first_name: customer?.first_name || "",
+      last_name: customer?.last_name || "",
+      company_name: customer?.company_name || "",
+      email: customer?.email || "",
+      phone: customer?.phone || "",
+      mobile: customer?.mobile || "",
+      street_address: customer?.street_address || "",
+      postal_code: customer?.postal_code || "",
+      city: customer?.city || "",
     },
   });
 
@@ -120,7 +135,7 @@ export function CustomerFormDialog({ open, onOpenChange }: CustomerFormDialogPro
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Nieuwe klant</DialogTitle>
+          <DialogTitle>{isEditMode ? "Klant bewerken" : "Nieuwe klant"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

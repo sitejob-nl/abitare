@@ -47,9 +47,10 @@ type QuoteFormData = z.infer<typeof quoteSchema>;
 interface QuoteFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  customerId?: string;
 }
 
-export function QuoteFormDialog({ open, onOpenChange }: QuoteFormDialogProps) {
+export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustomerId }: QuoteFormDialogProps) {
   const { user, profile } = useAuth();
   const createQuote = useCreateQuote();
   const [customerSearch, setCustomerSearch] = useState("");
@@ -70,11 +71,14 @@ export function QuoteFormDialog({ open, onOpenChange }: QuoteFormDialogProps) {
   } = useForm<QuoteFormData>({
     resolver: zodResolver(quoteSchema),
     defaultValues: {
-      customer_id: "",
+      customer_id: prefillCustomerId || "",
       valid_until: addDays(new Date(), 30),
       internal_notes: "",
     },
   });
+
+  // Pre-fill customer when dialog opens with customerId
+  const isCustomerPrefilled = !!prefillCustomerId;
 
   const selectedCustomerId = watch("customer_id");
   const validUntil = watch("valid_until");
@@ -144,11 +148,12 @@ export function QuoteFormDialog({ open, onOpenChange }: QuoteFormDialogProps) {
                   role="combobox"
                   aria-expanded={customerOpen}
                   className="w-full justify-between font-normal"
+                  disabled={isCustomerPrefilled}
                 >
                   {selectedCustomer
                     ? getCustomerDisplayName(selectedCustomer)
                     : "Zoek een klant..."}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  {!isCustomerPrefilled && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">

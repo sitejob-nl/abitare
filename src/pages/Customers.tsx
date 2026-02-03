@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ function getRelativeTime(date: string | null): string {
 }
 
 const Customers = () => {
+  const navigate = useNavigate();
   const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -156,9 +158,10 @@ const Customers = () => {
                     const displayName = getDisplayName(customer.first_name, customer.last_name, customer.company_name, customer.salutation);
                     const salesperson = "-";
                     
-                    return (
+                      return (
                       <tr
                         key={customer.id}
+                        onClick={() => navigate(`/customers/${customer.id}`)}
                         className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
                       >
                         <td className="px-5 py-4">
@@ -207,6 +210,7 @@ const Customers = () => {
                 return (
                   <div
                     key={customer.id}
+                    onClick={() => navigate(`/customers/${customer.id}`)}
                     className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
                   >
                     <div className="flex items-start gap-3">
