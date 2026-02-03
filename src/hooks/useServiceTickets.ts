@@ -52,7 +52,8 @@ export function useServiceTickets() {
         .order("created_at", { ascending: false });
 
       if (activeDivisionId) {
-        query = query.eq("division_id", activeDivisionId);
+        // Show tickets for selected division OR tickets without division (public submissions)
+        query = query.or(`division_id.eq.${activeDivisionId},division_id.is.null`);
       }
 
       const { data, error } = await query;
@@ -75,7 +76,7 @@ export function useOpenTicketCount() {
         .not("status", "in", '("afgerond","geannuleerd")');
 
       if (activeDivisionId) {
-        query = query.eq("division_id", activeDivisionId);
+        query = query.or(`division_id.eq.${activeDivisionId},division_id.is.null`);
       }
 
       const { count, error } = await query;
