@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
-import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -25,20 +24,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeDivisionId, setActiveDivisionIdState] = useState<string | null>(null);
-
-  // Wrap setActiveDivisionId to also clear cache when division changes
-  const setActiveDivisionId = useCallback((id: string | null) => {
-    setActiveDivisionIdState(id);
-    // Clear React Query cache so data is refetched with the new division filter
-    queryClient.clear();
-  }, [queryClient]);
+  const [activeDivisionId, setActiveDivisionId] = useState<string | null>(null);
 
   // Fetch profile and roles for a user
   const fetchUserData = async (userId: string) => {
@@ -56,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(profileData);
         // Set active division from profile if not already set
         if (!activeDivisionId && profileData?.division_id) {
-          setActiveDivisionIdState(profileData.division_id);
+          setActiveDivisionId(profileData.division_id);
         }
       }
 
@@ -89,9 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fetchUserData(currentSession.user.id);
           }, 0);
         } else {
-    setProfile(null);
-    setRoles([]);
-    setActiveDivisionIdState(null);
+          setProfile(null);
+          setRoles([]);
+          setActiveDivisionId(null);
         }
         setIsLoading(false);
       }
