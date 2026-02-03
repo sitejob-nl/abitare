@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -82,18 +81,18 @@ const Installation = () => {
   return (
     <AppLayout title="Montage" breadcrumb="Montage">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Montage Planning
         </h1>
       </div>
 
       {/* Filters Bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Status:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Status:</span>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alle statussen" />
             </SelectTrigger>
             <SelectContent>
@@ -104,7 +103,7 @@ const Installation = () => {
           </Select>
         </div>
 
-        <div className="relative ml-auto max-w-[300px] flex-1">
+        <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Zoek op klant, stad of ordernummer..."
@@ -132,22 +131,22 @@ const Installation = () => {
             return (
               <div
                 key={order.id}
-                className="animate-fade-in cursor-pointer rounded-xl border border-border bg-card p-5 transition-colors hover:bg-muted/30"
+                className="animate-fade-in cursor-pointer rounded-xl border border-border bg-card p-4 sm:p-5 transition-colors hover:bg-muted/30"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <div className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-lg",
+                      "flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg shrink-0",
                       order.status === "gemonteerd" ? "bg-green-100" : "bg-blue-100"
                     )}>
                       {order.status === "gemonteerd" ? (
-                        <CheckCircle2 className="h-6 w-6 text-green-600" />
+                        <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
                       ) : (
-                        <Wrench className="h-6 w-6 text-blue-600" />
+                        <Wrench className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-foreground">
                           Order #{order.order_number}
                         </span>
@@ -155,7 +154,7 @@ const Installation = () => {
                           {statusCfg.label}
                         </span>
                       </div>
-                      <div className="mt-1 text-sm text-foreground">
+                      <div className="mt-1 text-sm text-foreground truncate">
                         {getCustomerName(customer)}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
@@ -165,8 +164,8 @@ const Installation = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">
+                  <div className="text-left sm:text-right pl-13 sm:pl-0">
+                    <div className="text-xs sm:text-sm text-muted-foreground">
                       {order.status === "gemonteerd" ? "Uitgevoerd" : "Gepland"}
                     </div>
                     <div className="text-sm font-medium text-foreground">

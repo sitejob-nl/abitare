@@ -64,90 +64,155 @@ export function ServiceTicketTable({ tickets, isLoading }: ServiceTicketTablePro
   }
 
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[80px]">#</TableHead>
-            <TableHead>Onderwerp</TableHead>
-            <TableHead>Indiener</TableHead>
-            <TableHead>Categorie</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Prioriteit</TableHead>
-            <TableHead>Toegewezen</TableHead>
-            <TableHead className="text-right">Datum</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tickets.map((ticket) => {
-            const status = statusConfig[ticket.status] || statusConfig.nieuw;
-            const priority = priorityConfig[ticket.priority] || priorityConfig.normaal;
-            const assignees = ticket.assignees || [];
+    <>
+      {/* Desktop Table */}
+      <div className="hidden md:block rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[80px]">#</TableHead>
+              <TableHead>Onderwerp</TableHead>
+              <TableHead>Indiener</TableHead>
+              <TableHead>Categorie</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Prioriteit</TableHead>
+              <TableHead>Toegewezen</TableHead>
+              <TableHead className="text-right">Datum</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tickets.map((ticket) => {
+              const status = statusConfig[ticket.status] || statusConfig.nieuw;
+              const priority = priorityConfig[ticket.priority] || priorityConfig.normaal;
+              const assignees = ticket.assignees || [];
 
-            return (
-              <TableRow key={ticket.id}>
-                <TableCell className="font-mono text-sm">
-                  {ticket.ticket_number}
-                </TableCell>
-                <TableCell>
-                  <Link
-                    to={`/service/${ticket.id}`}
-                    className="font-medium hover:text-primary hover:underline"
-                  >
-                    {ticket.subject}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <div>
-                    <div className="text-sm">{ticket.submitter_name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {ticket.submitter_email}
+              return (
+                <TableRow key={ticket.id}>
+                  <TableCell className="font-mono text-sm">
+                    {ticket.ticket_number}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      to={`/service/${ticket.id}`}
+                      className="font-medium hover:text-primary hover:underline"
+                    >
+                      {ticket.subject}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <div className="text-sm">{ticket.submitter_name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {ticket.submitter_email}
+                      </div>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {categoryLabels[ticket.category] || ticket.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={cn("text-xs", status.className)}>
+                      {status.label}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={cn("text-xs", priority.className)}>
+                      {priority.label}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {assignees.length > 0 ? (
+                      <div className="flex -space-x-1">
+                        {assignees.slice(0, 3).map((a) => (
+                          <Avatar key={a.id} className="h-6 w-6 border-2 border-background">
+                            <AvatarFallback className="text-[10px]">
+                              {a.profile?.full_name?.charAt(0) || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                        {assignees.length > 3 && (
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px]">
+                            +{assignees.length - 3}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-muted-foreground">
+                    {format(new Date(ticket.created_at), "d MMM yyyy", { locale: nl })}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {tickets.map((ticket) => {
+          const status = statusConfig[ticket.status] || statusConfig.nieuw;
+          const priority = priorityConfig[ticket.priority] || priorityConfig.normaal;
+          const assignees = ticket.assignees || [];
+
+          return (
+            <Link
+              key={ticket.id}
+              to={`/service/${ticket.id}`}
+              className="block p-4 rounded-xl border border-border bg-card transition-colors hover:bg-muted/30 active:bg-muted/50"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      #{ticket.ticket_number}
+                    </span>
+                    <Badge className={cn("text-xs", priority.className)}>
+                      {priority.label}
+                    </Badge>
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">
-                    {categoryLabels[ticket.category] || ticket.category}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className={cn("text-xs", status.className)}>
-                    {status.label}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className={cn("text-xs", priority.className)}>
-                    {priority.label}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {assignees.length > 0 ? (
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {ticket.subject}
+                  </div>
+                </div>
+                <Badge className={cn("text-xs ml-2 shrink-0", status.className)}>
+                  {status.label}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-light">
+                <div className="text-xs text-muted-foreground truncate">
+                  {ticket.submitter_name}
+                </div>
+                <div className="flex items-center gap-2">
+                  {assignees.length > 0 && (
                     <div className="flex -space-x-1">
-                      {assignees.slice(0, 3).map((a) => (
-                        <Avatar key={a.id} className="h-6 w-6 border-2 border-background">
-                          <AvatarFallback className="text-[10px]">
+                      {assignees.slice(0, 2).map((a) => (
+                        <Avatar key={a.id} className="h-5 w-5 border-2 border-background">
+                          <AvatarFallback className="text-[8px]">
                             {a.profile?.full_name?.charAt(0) || "?"}
                           </AvatarFallback>
                         </Avatar>
                       ))}
-                      {assignees.length > 3 && (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px]">
-                          +{assignees.length - 3}
+                      {assignees.length > 2 && (
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-background bg-muted text-[8px]">
+                          +{assignees.length - 2}
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">-</span>
                   )}
-                </TableCell>
-                <TableCell className="text-right text-sm text-muted-foreground">
-                  {format(new Date(ticket.created_at), "d MMM yyyy", { locale: nl })}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(ticket.created_at), "d MMM", { locale: nl })}
+                  </span>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </>
   );
 }

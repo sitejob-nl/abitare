@@ -81,18 +81,21 @@ const Settings = () => {
         </div>
       ) : (
         <Tabs defaultValue="divisions" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="divisions" className="gap-2">
+          <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1 p-1">
+            <TabsTrigger value="divisions" className="gap-2 text-xs sm:text-sm">
               <Building2 className="h-4 w-4" />
-              Vestigingen
+              <span className="hidden sm:inline">Vestigingen</span>
+              <span className="sm:hidden">Vest.</span>
             </TabsTrigger>
-            <TabsTrigger value="users" className="gap-2">
+            <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm">
               <Users className="h-4 w-4" />
-              Gebruikers
+              <span className="hidden sm:inline">Gebruikers</span>
+              <span className="sm:hidden">Gebr.</span>
             </TabsTrigger>
-            <TabsTrigger value="integrations" className="gap-2">
+            <TabsTrigger value="integrations" className="gap-2 text-xs sm:text-sm">
               <Link2 className="h-4 w-4" />
-              Koppelingen
+              <span className="hidden sm:inline">Koppelingen</span>
+              <span className="sm:hidden">Kopp.</span>
             </TabsTrigger>
           </TabsList>
 
@@ -100,10 +103,13 @@ const Settings = () => {
           <TabsContent value="divisions" className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Vestigingen</h2>
-              <Button size="sm" onClick={handleNewDivision}>Nieuwe vestiging</Button>
+              <Button size="sm" onClick={handleNewDivision}>
+                <span className="hidden sm:inline">Nieuwe vestiging</span>
+                <span className="sm:hidden">Nieuw</span>
+              </Button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               {divisions?.map((division) => (
                 <Card key={division.id} className="relative">
                   <Button
@@ -115,7 +121,7 @@ const Settings = () => {
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <CardHeader className="pb-3 pr-12">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <CardTitle className="text-base">{division.name}</CardTitle>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         division.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
@@ -140,7 +146,7 @@ const Settings = () => {
                       <div className="text-muted-foreground">📞 {division.phone}</div>
                     )}
                     {division.email && (
-                      <div className="text-muted-foreground">✉️ {division.email}</div>
+                      <div className="text-muted-foreground truncate">✉️ {division.email}</div>
                     )}
                   </CardContent>
                 </Card>
@@ -152,10 +158,14 @@ const Settings = () => {
           <TabsContent value="users" className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Gebruikers</h2>
-              <Button size="sm" onClick={handleNewUser}>Nieuwe gebruiker</Button>
+              <Button size="sm" onClick={handleNewUser}>
+                <span className="hidden sm:inline">Nieuwe gebruiker</span>
+                <span className="sm:hidden">Nieuw</span>
+              </Button>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-hidden rounded-xl border border-border bg-card">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
@@ -222,6 +232,50 @@ const Settings = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="lg:hidden space-y-3">
+              {profiles?.map((profile) => {
+                const roleNames = profile.roles?.map(r => r.role).join(", ") || "";
+
+                return (
+                  <div
+                    key={profile.id}
+                    className="p-4 rounded-xl border border-border bg-card"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-foreground">
+                          {profile.full_name || "-"}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {profile.email}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          profile.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                        }`}>
+                          {profile.is_active ? "Actief" : "Inactief"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleEditUser(profile)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border-light text-xs text-muted-foreground">
+                      <span>{profile.division?.name || "-"}</span>
+                      {roleNames && <span>• {roleNames}</span>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </TabsContent>
 

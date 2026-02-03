@@ -241,25 +241,25 @@ export default function ServiceTicketDetail() {
     <AppLayout title={`Ticket #${ticket.ticket_number}`}>
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/service">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">#{ticket.ticket_number}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-semibold">#{ticket.ticket_number}</h1>
               <Badge className={cn("text-xs", status.className)}>{status.label}</Badge>
               <Badge className={cn("text-xs", priority.className)}>{priority.label}</Badge>
             </div>
-            <p className="text-muted-foreground">{ticket.subject}</p>
+            <p className="text-sm text-muted-foreground truncate">{ticket.subject}</p>
           </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Main content */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
             {/* Description */}
             <Card>
               <CardHeader className="pb-2">

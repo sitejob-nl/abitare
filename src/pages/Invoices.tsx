@@ -69,7 +69,6 @@ const Invoices = () => {
 
   // Get active connection's division
   const activeConnection = connections?.find(c => c.is_active);
-  const connectedDivision = divisions?.find(d => d.id === activeConnection?.division_id);
   const hasExactConnection = !!activeConnection;
 
   const handlePushInvoices = () => {
@@ -111,16 +110,16 @@ const Invoices = () => {
   return (
     <AppLayout title="Facturen" breadcrumb="Facturen">
       {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Openstaand
             </CardTitle>
             <AlertCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
+            <div className="text-lg sm:text-2xl font-bold text-destructive">
               {formatCurrency(stats?.totalOutstanding || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -131,13 +130,13 @@ const Invoices = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Open
             </CardTitle>
             <Euro className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg sm:text-2xl font-bold">
               {formatCurrency(stats?.totalOpen || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -148,13 +147,13 @@ const Invoices = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Deels betaald
             </CardTitle>
             <Clock className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg sm:text-2xl font-bold">
               {formatCurrency(stats?.totalPartial || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -165,13 +164,13 @@ const Invoices = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Betaald
             </CardTitle>
             <CheckCircle2 className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">
+            <div className="text-lg sm:text-2xl font-bold text-success">
               {formatCurrency(stats?.totalPaid || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -183,11 +182,11 @@ const Invoices = () => {
 
       {/* Filters */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Zoek op klant, ordernummer of factuurnummer..."
+              placeholder="Zoek op klant, ordernummer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -196,7 +195,7 @@ const Invoices = () => {
           
           {isAdmin && (
             <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Alle vestigingen" />
               </SelectTrigger>
               <SelectContent>
@@ -213,7 +212,7 @@ const Invoices = () => {
         
         <div className="flex gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Alle statussen" />
             </SelectTrigger>
             <SelectContent>
@@ -227,14 +226,14 @@ const Invoices = () => {
           {hasExactConnection && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={syncInvoices.isPending}>
+                <Button variant="outline" disabled={syncInvoices.isPending} className="shrink-0">
                   {syncInvoices.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
                   ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <RefreshCw className="h-4 w-4 sm:mr-2" />
                   )}
-                  Exact Online
-                  <ChevronDown className="ml-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Exact Online</span>
+                  <ChevronDown className="ml-1 sm:ml-2 h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -256,7 +255,7 @@ const Invoices = () => {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Content */}
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -269,21 +268,86 @@ const Invoices = () => {
               <p>Geen facturen gevonden</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Klant</TableHead>
-                  <TableHead>Vestiging</TableHead>
-                  <TableHead className="text-right">Bedrag</TableHead>
-                  <TableHead className="text-right">Betaald</TableHead>
-                  <TableHead className="text-right">Openstaand</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Exact ID</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Desktop Table */}
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Datum</TableHead>
+                      <TableHead>Klant</TableHead>
+                      <TableHead>Vestiging</TableHead>
+                      <TableHead className="text-right">Bedrag</TableHead>
+                      <TableHead className="text-right">Betaald</TableHead>
+                      <TableHead className="text-right">Openstaand</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Exact ID</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredInvoices?.map((invoice) => {
+                      const status = invoice.payment_status || "open";
+                      const config = paymentStatusConfig[status];
+                      const StatusIcon = config.icon;
+                      const outstanding = (invoice.total_incl_vat || 0) - (invoice.amount_paid || 0);
+
+                      return (
+                        <TableRow key={invoice.id}>
+                          <TableCell>
+                            <Link
+                              to={`/orders`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              #{invoice.order_number}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            {invoice.order_date
+                              ? format(new Date(invoice.order_date), "d MMM yyyy", {
+                                  locale: nl,
+                                })
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {invoice.customer_name}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {invoice.division_name || "-"}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatCurrency(invoice.total_incl_vat)}
+                          </TableCell>
+                          <TableCell className="text-right text-success">
+                            {formatCurrency(invoice.amount_paid)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={
+                                outstanding > 0 ? "font-medium text-destructive" : ""
+                              }
+                            >
+                              {formatCurrency(outstanding)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={config.variant} className="gap-1">
+                              <StatusIcon className="h-3 w-3" />
+                              {config.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {invoice.exact_invoice_id || "-"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="lg:hidden divide-y divide-border">
                 {filteredInvoices?.map((invoice) => {
                   const status = invoice.payment_status || "open";
                   const config = paymentStatusConfig[status];
@@ -291,57 +355,51 @@ const Invoices = () => {
                   const outstanding = (invoice.total_incl_vat || 0) - (invoice.amount_paid || 0);
 
                   return (
-                    <TableRow key={invoice.id}>
-                      <TableCell>
-                        <Link
-                          to={`/orders`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          #{invoice.order_number}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {invoice.order_date
-                          ? format(new Date(invoice.order_date), "d MMM yyyy", {
-                              locale: nl,
-                            })
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {invoice.customer_name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {invoice.division_name || "-"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(invoice.total_incl_vat)}
-                      </TableCell>
-                      <TableCell className="text-right text-success">
-                        {formatCurrency(invoice.amount_paid)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
-                            outstanding > 0 ? "font-medium text-destructive" : ""
-                          }
-                        >
-                          {formatCurrency(outstanding)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={config.variant} className="gap-1">
+                    <div key={invoice.id} className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <Link
+                            to={`/orders`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            Order #{invoice.order_number}
+                          </Link>
+                          <div className="text-sm font-medium text-foreground mt-0.5">
+                            {invoice.customer_name}
+                          </div>
+                        </div>
+                        <Badge variant={config.variant} className="gap-1 shrink-0">
                           <StatusIcon className="h-3 w-3" />
                           {config.label}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {invoice.exact_invoice_id || "-"}
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border-light text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Bedrag</span>
+                          <div className="font-medium">{formatCurrency(invoice.total_incl_vat)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Betaald</span>
+                          <div className="font-medium text-success">{formatCurrency(invoice.amount_paid)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Open</span>
+                          <div className={outstanding > 0 ? "font-medium text-destructive" : "font-medium"}>
+                            {formatCurrency(outstanding)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {invoice.order_date
+                          ? format(new Date(invoice.order_date), "d MMM yyyy", { locale: nl })
+                          : "-"}
+                        {invoice.division_name && ` • ${invoice.division_name}`}
+                      </div>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

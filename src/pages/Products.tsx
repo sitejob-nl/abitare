@@ -44,22 +44,23 @@ const Products = () => {
   return (
     <AppLayout title="Producten" breadcrumb="Producten">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Producten
         </h1>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
-          Nieuw product
+          <span className="hidden sm:inline">Nieuw product</span>
+          <span className="sm:hidden">Nieuw</span>
         </Button>
       </div>
 
       {/* Filters Bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Leverancier:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Leverancier:</span>
           <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alle leveranciers" />
             </SelectTrigger>
             <SelectContent>
@@ -74,9 +75,9 @@ const Products = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Categorie:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Categorie:</span>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alle categorieën" />
             </SelectTrigger>
             <SelectContent>
@@ -90,7 +91,7 @@ const Products = () => {
           </Select>
         </div>
 
-        <div className="relative ml-auto max-w-[300px] flex-1">
+        <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Zoek op artikelcode of naam..."
@@ -101,82 +102,122 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Products Table */}
-      <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
-          </div>
-        ) : products && products.length > 0 ? (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Artikelcode
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Naam
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Leverancier
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Categorie
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Verkoopprijs
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Inkoopprijs
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => {
-                const supplier = product.supplier as { name?: string } | null;
-                const category = product.category as { name?: string } | null;
+      {/* Products Content */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
+        </div>
+      ) : products && products.length > 0 ? (
+        <>
+          {/* Desktop Table */}
+          <div className="hidden md:block animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Artikelcode
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Naam
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Leverancier
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Categorie
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Verkoopprijs
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Inkoopprijs
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product) => {
+                  const supplier = product.supplier as { name?: string } | null;
+                  const category = product.category as { name?: string } | null;
 
-                return (
-                  <tr
-                    key={product.id}
-                    className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
-                  >
-                    <td className="px-5 py-4">
-                      <span className="font-mono text-sm text-foreground">
+                  return (
+                    <tr
+                      key={product.id}
+                      className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                    >
+                      <td className="px-5 py-4">
+                        <span className="font-mono text-sm text-foreground">
+                          {product.article_code}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-medium text-foreground">
+                          {product.name}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">
+                        {supplier?.name || "-"}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">
+                        {category?.name || "-"}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-medium text-foreground">
+                        {formatCurrency(product.base_price)}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-muted-foreground">
+                        {formatCurrency(product.cost_price)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3">
+            {products.map((product) => {
+              const supplier = product.supplier as { name?: string } | null;
+              const category = product.category as { name?: string } | null;
+
+              return (
+                <div
+                  key={product.id}
+                  className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <span className="font-mono text-xs text-muted-foreground">
                         {product.article_code}
                       </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-foreground">
+                      <div className="text-sm font-medium text-foreground mt-0.5">
                         {product.name}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {supplier?.name || "-"}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {category?.name || "-"}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium text-foreground">
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold text-foreground">
                       {formatCurrency(product.base_price)}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {formatCurrency(product.cost_price)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <div className="py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              {debouncedSearch ? "Geen producten gevonden voor deze zoekopdracht" : "Nog geen producten aanwezig"}
-            </p>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-light">
+                    <div className="text-xs text-muted-foreground">
+                      {[supplier?.name, category?.name].filter(Boolean).join(" • ") || "-"}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Inkoop: {formatCurrency(product.cost_price)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <div className="rounded-xl border border-border bg-card py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {debouncedSearch ? "Geen producten gevonden voor deze zoekopdracht" : "Nog geen producten aanwezig"}
+          </p>
+        </div>
+      )}
     </AppLayout>
   );
 };
