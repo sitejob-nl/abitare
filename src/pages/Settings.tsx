@@ -1,54 +1,50 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Shield, Link2 } from "lucide-react";
+import { Loader2, Building2, Users, Shield, Link2, Pencil } from "lucide-react";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
-import { useDivisions } from "@/hooks/useDivisions";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { DivisionFormDialog } from "@/components/settings/DivisionFormDialog";
+import { UserFormDialog } from "@/components/settings/UserFormDialog";
+import { useAllDivisions, type Division } from "@/hooks/useDivisions";
+import { useProfiles, type ProfileWithRoles } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
-
-function useProfiles() {
-  return useQuery({
-    queryKey: ["profiles"],
-    queryFn: async () => {
-      // Get profiles with division
-      const { data: profiles, error } = await supabase
-        .from("profiles")
-        .select(`
-          *,
-          division:divisions(id, name)
-        `)
-        .order("full_name", { ascending: true });
-
-      if (error) throw error;
-
-      // Get roles separately for each profile
-      const profilesWithRoles = await Promise.all(
-        (profiles || []).map(async (profile) => {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", profile.id);
-          return { ...profile, roles: roles || [] };
-        })
-      );
-
-      return profilesWithRoles;
-    },
-  });
-}
 
 const Settings = () => {
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
 
-  const { data: divisions, isLoading: divisionsLoading } = useDivisions();
+  const [divisionDialogOpen, setDivisionDialogOpen] = useState(false);
+  const [editingDivision, setEditingDivision] = useState<Division | null>(null);
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<ProfileWithRoles | null>(null);
+
+  const { data: divisions, isLoading: divisionsLoading } = useAllDivisions();
   const { data: profiles, isLoading: profilesLoading } = useProfiles();
 
   const isLoading = divisionsLoading || profilesLoading;
+
+  const handleNewDivision = () => {
+    setEditingDivision(null);
+    setDivisionDialogOpen(true);
+  };
+
+  const handleEditDivision = (division: Division) => {
+    setEditingDivision(division);
+    setDivisionDialogOpen(true);
+  };
+
+  const handleNewUser = () => {
+    setEditingUser(null);
+    setUserDialogOpen(true);
+  };
+
+  const handleEditUser = (user: ProfileWithRoles) => {
+    setEditingUser(user);
+    setUserDialogOpen(true);
+  };
 
   if (!isAdmin) {
     return (
@@ -104,14 +100,22 @@ const Settings = () => {
           <TabsContent value="divisions" className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Vestigingen</h2>
-              <Button size="sm">Nieuwe vestiging</Button>
+              <Button size="sm" onClick={handleNewDivision}>Nieuwe vestiging</Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               {divisions?.map((division) => (
-                <Card key={division.id}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
+                <Card key={division.id} className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-2 h-8 w-8"
+                    onClick={() => handleEditDivision(division)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <CardHeader className="pb-3 pr-12">
+                    <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{division.name}</CardTitle>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         division.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
@@ -148,7 +152,7 @@ const Settings = () => {
           <TabsContent value="users" className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Gebruikers</h2>
-              <Button size="sm">Nieuwe gebruiker</Button>
+              <Button size="sm" onClick={handleNewUser}>Nieuwe gebruiker</Button>
             </div>
 
             <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -170,13 +174,14 @@ const Settings = () => {
                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Status
                     </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Acties
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {profiles?.map((profile) => {
-                    const division = profile.division as { name?: string } | null;
-                    const roles = (profile.roles as { role: string }[] | null) || [];
-                    const roleNames = roles.map(r => r.role).join(", ");
+                    const roleNames = profile.roles?.map(r => r.role).join(", ") || "";
 
                     return (
                       <tr
@@ -190,7 +195,7 @@ const Settings = () => {
                           {profile.email}
                         </td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">
-                          {division?.name || "-"}
+                          {profile.division?.name || "-"}
                         </td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">
                           {roleNames || "-"}
@@ -201,6 +206,16 @@ const Settings = () => {
                           }`}>
                             {profile.is_active ? "Actief" : "Inactief"}
                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleEditUser(profile)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -217,6 +232,18 @@ const Settings = () => {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Dialogs */}
+      <DivisionFormDialog
+        open={divisionDialogOpen}
+        onOpenChange={setDivisionDialogOpen}
+        division={editingDivision}
+      />
+      <UserFormDialog
+        open={userDialogOpen}
+        onOpenChange={setUserDialogOpen}
+        user={editingUser}
+      />
     </AppLayout>
   );
 };
