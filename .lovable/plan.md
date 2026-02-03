@@ -1,459 +1,196 @@
 
+# Plan: Gebruikers, Vestigingen en Facturen Beheer
 
-# Tradeplace Direct Connection Integratie
+## Probleemanalyse
 
-## Overzicht
+Na onderzoek van de codebase en database heb ik de volgende ontbrekende functionaliteit geïdentificeerd:
 
-Dit plan implementeert de volledige Tradeplace integratie waarbij alles gebouwd wordt zodat het direct bruikbaar is, maar **werkt in "demo modus"** totdat de secrets via Instellingen worden geconfigureerd. De UI toont duidelijke feedback wanneer de koppeling nog niet actief is.
+### 1. Vestigingen (Divisions)
+- **Huidige situatie**: Er bestaan al 2 vestigingen in de database (Roermond en Maastricht)
+- **Probleem**: De knop "Nieuwe vestiging" op de Settings pagina doet niets - er is geen dialog of mutation om vestigingen toe te voegen/bewerken
 
----
+### 2. Gebruikers (Users/Profiles)
+- **Huidige situatie**: Er is 1 admin gebruiker aanwezig
+- **Probleem**: De knop "Nieuwe gebruiker" doet niets - er is geen functionaliteit om:
+  - Nieuwe gebruikers uit te nodigen
+  - Gebruikers aan vestigingen te koppelen
+  - Rollen toe te wijzen
 
-## Aanpak: Graceful Degradation
-
-De integratie wordt zo gebouwd dat:
-- Alle UI-componenten direct beschikbaar zijn
-- Edge functions geven duidelijke foutmeldingen als secrets ontbreken
-- Settings pagina toont configuratiestatus met instructies
-- Gebruikers kunnen de hele flow testen met mock-responses (optioneel)
-
----
-
-## Fase 1: Database Migraties
-
-### 1.1 Uitbreiding `suppliers` tabel
-
-Nieuwe velden voor Tradeplace-koppeling:
-
-| Veld | Type | Doel |
-|------|------|------|
-| `tradeplace_enabled` | BOOLEAN DEFAULT false | Is fabrikant gekoppeld? |
-| `tradeplace_gln` | TEXT | GLN-nummer fabrikant |
-| `tradeplace_endpoint` | TEXT | API endpoint URL |
-
-### 1.2 Uitbreiding `products` tabel
-
-Nieuwe velden voor productidentificatie:
-
-| Veld | Type | Doel |
-|------|------|------|
-| `ean_code` | TEXT | EAN/barcode |
-| `manufacturer_product_id` | TEXT | Fabrikant product ID |
-
-### 1.3 Nieuwe tabel: `tradeplace_settings`
-
-Centrale configuratie voor Tradeplace:
-
-| Veld | Type | Doel |
-|------|------|------|
-| `id` | UUID | Primary key |
-| `retailer_gln` | TEXT | GLN-nummer retailer |
-| `is_configured` | BOOLEAN | Zijn secrets ingesteld? |
-| `last_sync_at` | TIMESTAMP | Laatste succesvolle sync |
-| `created_at` | TIMESTAMP | Aangemaakt op |
-
-### 1.4 Nieuwe tabel: `supplier_orders`
-
-Inkooporders naar leveranciers:
-
-| Veld | Type | Doel |
-|------|------|------|
-| `id` | UUID | Primary key |
-| `order_id` | UUID | Link naar klantorder |
-| `supplier_id` | UUID | Link naar leverancier |
-| `external_order_id` | TEXT | Tradeplace referentie |
-| `status` | TEXT | pending/sent/confirmed/shipped/delivered |
-| `total_amount` | NUMERIC | Inkoopbedrag |
-| `sent_at` | TIMESTAMP | Verzonden op |
-| `confirmed_at` | TIMESTAMP | Bevestigd op |
-| `expected_delivery_date` | DATE | Verwachte levering |
-| `xml_request` | TEXT | Verzonden XML |
-| `xml_response` | TEXT | Ontvangen XML |
-| `created_at` | TIMESTAMP | Aangemaakt op |
-
-### 1.5 Nieuwe tabel: `supplier_order_lines`
-
-Regels per leveranciersbestelling:
-
-| Veld | Type | Doel |
-|------|------|------|
-| `id` | UUID | Primary key |
-| `supplier_order_id` | UUID | Link naar supplier_order |
-| `order_line_id` | UUID | Link naar klant orderregel |
-| `product_id` | UUID | Link naar product |
-| `ean_code` | TEXT | EAN code |
-| `quantity` | INTEGER | Besteld aantal |
-| `unit_price` | NUMERIC | Inkoopprijs |
-| `status` | TEXT | pending/confirmed/shipped |
-| `availability_status` | TEXT | in_stock/limited/out_of_stock |
-| `availability_qty` | INTEGER | Beschikbaar aantal |
-| `availability_checked_at` | TIMESTAMP | Laatste check |
-| `created_at` | TIMESTAMP | Aangemaakt op |
+### 3. Facturen (Invoices)
+- **Huidige situatie**: Facturen worden afgeleid van orders (`useInvoices` query)
+- **Probleem**: Er is geen "facturen aanmaken" functie omdat facturen automatisch ontstaan wanneer een offerte wordt omgezet naar een order - maar die "Offerte → Order" conversie ontbreekt
 
 ---
 
-## Fase 2: Edge Functions
+## Oplossingsplan
 
-### 2.1 `tradeplace-config` - Configuratie Check
+### Fase 1: Vestigingen Beheer
 
-Controleert of secrets aanwezig zijn:
+**Nieuwe componenten:**
+- `DivisionFormDialog.tsx` - Dialog voor toevoegen/bewerken van vestigingen
 
-```text
-Endpoint: POST /tradeplace-config
-Body: { action: "check" | "test" }
+**Uitbreiding bestaande code:**
+- `useDivisions.ts` - Toevoegen van `useCreateDivision` en `useUpdateDivision` mutations
+- `Settings.tsx` - Koppelen van dialogs aan de bestaande knoppen
 
-Response (niet geconfigureerd):
-{
-  "configured": false,
-  "missing_secrets": ["TRADEPLACE_API_KEY", "TRADEPLACE_RETAILER_GLN"],
-  "message": "Configureer de Tradeplace secrets in Supabase"
-}
-
-Response (geconfigureerd):
-{
-  "configured": true,
-  "retailer_gln": "8712345678901"
-}
-```
-
-### 2.2 `tradeplace-availability` - Beschikbaarheid Check
-
-Controleert voorraad bij fabrikant:
-
-```text
-Endpoint: POST /tradeplace-availability
-Body: {
-  "supplier_id": "uuid",
-  "products": [
-    { "ean_code": "4242003826638", "quantity": 1 }
-  ]
-}
-
-Response (niet geconfigureerd):
-{
-  "error": "not_configured",
-  "message": "Tradeplace is nog niet geconfigureerd. Ga naar Instellingen > Koppelingen."
-}
-
-Response (succes):
-{
-  "results": [
-    {
-      "ean_code": "4242003826638",
-      "available": true,
-      "quantity_available": 5,
-      "lead_time_days": 3
-    }
-  ]
-}
-```
-
-### 2.3 `tradeplace-order` - Bestelling Plaatsen
-
-Plaatst order bij fabrikant:
-
-```text
-Endpoint: POST /tradeplace-order
-Body: {
-  "supplier_order_id": "uuid"
-}
-
-Response (niet geconfigureerd):
-{
-  "error": "not_configured",
-  "message": "Tradeplace is nog niet geconfigureerd."
-}
-
-Response (succes):
-{
-  "success": true,
-  "external_order_id": "TP-2024-12345",
-  "confirmation_date": "2024-02-01"
-}
-```
-
-### 2.4 `tradeplace-webhook` - Ontvang Updates
-
-Ontvangt orderbevestigingen en verzendmeldingen:
-
-```text
-Endpoint: POST /tradeplace-webhook
-Headers: X-Webhook-Secret: xxx
-
-Verwerkt:
-- OrderConfirmation → update supplier_order status
-- ShippingNotification → update expected_delivery_date
-```
+**Functionaliteit:**
+- Vestiging naam, code, adres, telefoon, email
+- Actief/Inactief toggle
+- RLS policies staan al correct ingesteld (alleen admin kan invoegen/wijzigen)
 
 ---
 
-## Fase 3: Frontend Hooks
+### Fase 2: Gebruikersbeheer
 
-### 3.1 `useTradeplace.ts`
+**Nieuwe componenten:**
+- `UserFormDialog.tsx` - Dialog voor uitnodigen/bewerken van gebruikers
+- `UserRoleSelect.tsx` - Component voor rol-selectie
 
-```text
-Exports:
-- useTradeplaceConfig() - Check configuratiestatus
-- useCheckAvailability() - Mutation voor beschikbaarheidscheck
-- usePlaceSupplierOrder() - Mutation voor bestelling
-```
+**Uitbreiding bestaande code:**
+- Nieuw hook `useUsers.ts` met:
+  - `useInviteUser()` - Invite via Supabase Admin API (edge function)
+  - `useUpdateUser()` - Update profiel en rollen
+  - `useDeactivateUser()` - Deactiveer gebruiker
 
-### 3.2 `useSupplierOrders.ts`
+**Edge Function:**
+- `invite-user/index.ts` - Server-side gebruiker uitnodiging (vereist service role key)
 
-```text
-Exports:
-- useSupplierOrders(orderId) - Query leveranciersorders voor een order
-- useCreateSupplierOrder() - Mutation nieuwe leveranciersorder
-- useUpdateSupplierOrderStatus() - Mutation status update
-```
-
----
-
-## Fase 4: UI Componenten
-
-### 4.1 Settings: TradeplaceSettings.tsx
-
-Toegevoegd aan Settings pagina onder "Koppelingen" tab:
-
-```text
-+----------------------------------------------------------+
-| Tradeplace Direct Connection                              |
-|----------------------------------------------------------|
-| Status: [!] Niet geconfigureerd                          |
-|                                                           |
-| Om Tradeplace te activeren:                              |
-| 1. Vraag een account aan via connect@tradeplace.com      |
-| 2. Voeg de volgende secrets toe in Supabase:             |
-|    - TRADEPLACE_API_KEY                                  |
-|    - TRADEPLACE_RETAILER_GLN                             |
-|    - TRADEPLACE_WEBHOOK_SECRET (optioneel)               |
-|                                                           |
-| [Open Supabase Secrets →]                                |
-|                                                           |
-| Gekoppelde fabrikanten:                                   |
-| ○ BSH Hausgeräte (Siemens/Bosch) - GLN: niet ingesteld   |
-| ○ Miele - GLN: niet ingesteld                            |
-| ○ Electrolux - GLN: niet ingesteld                       |
-+----------------------------------------------------------+
-```
-
-Na configuratie:
-
-```text
-+----------------------------------------------------------+
-| Tradeplace Direct Connection                              |
-|----------------------------------------------------------|
-| Status: [✓] Actief                                       |
-| Retailer GLN: 8712345678901                              |
-| Laatste sync: vandaag 14:32                              |
-|                                                           |
-| [Test verbinding]                                         |
-|                                                           |
-| Gekoppelde fabrikanten:                                   |
-| [✓] BSH Hausgeräte - GLN: 4012345678901 [Configureer]    |
-| [✓] Miele - GLN: 4099999999999 [Configureer]             |
-| ○ Electrolux - GLN: niet ingesteld [Configureer]         |
-+----------------------------------------------------------+
-```
-
-### 4.2 Order Detail: SupplierOrdersCard.tsx
-
-Nieuwe sectie op Order Detail pagina:
-
-```text
-+----------------------------------------------------------+
-| Leveranciersbestellingen                                  |
-|----------------------------------------------------------|
-| [!] Tradeplace niet geconfigureerd                       |
-| Configureer Tradeplace in Instellingen om te bestellen   |
-| [Ga naar Instellingen]                                   |
-+----------------------------------------------------------+
-```
-
-Of indien geconfigureerd:
-
-```text
-+----------------------------------------------------------+
-| Leveranciersbestellingen                                  |
-|----------------------------------------------------------|
-| BSH Hausgeräte                                           |
-| Status: Bevestigd | Order: TP-2024-12345                  |
-| Verwacht: 15 feb 2024                                     |
-| 3 artikelen | € 2.340,00                                  |
-| [Bekijk details]                                          |
-|----------------------------------------------------------|
-| [ + Nieuwe leveranciersbestelling ]                      |
-+----------------------------------------------------------+
-```
-
-### 4.3 Order Lines: Beschikbaarheid Indicator
-
-Per orderregel een kolom voor voorraadstatus:
-
-```text
-| Artikel      | Omschrijving     | Leverancier | Voorraad       |
-|--------------|------------------|-------------|----------------|
-| iQ700-12345  | Siemens Oven     | BSH         | [?] Check      |
-| iQ500-67890  | Siemens Koelkast | BSH         | [✓] Op voorraad|
-```
-
-Klik op "Check" roept beschikbaarheid API aan.
-Toont "Niet beschikbaar" als Tradeplace niet geconfigureerd.
-
-### 4.4 PlaceSupplierOrderModal.tsx
-
-Modal voor het plaatsen van bestellingen:
-
-```text
-+----------------------------------------------------------+
-| Bestellen bij BSH Hausgeräte                              |
-|----------------------------------------------------------|
-| [!] Tradeplace niet actief - kan niet bestellen          |
-| [Configureer in Instellingen]                            |
-|----------------------------------------------------------|
-| OF                                                        |
-|----------------------------------------------------------|
-| Selecteer producten:                                      |
-| [x] Siemens iQ700 Oven (1x)           € 890,00           |
-| [x] Siemens iQ500 Koelkast (1x)       € 1.240,00         |
-|                                                           |
-| Totaal inkoop: € 2.130,00                                |
-|                                                           |
-| [ Annuleren ]              [ Bestelling plaatsen ]       |
-+----------------------------------------------------------+
-```
+**Functionaliteit:**
+- Gebruiker uitnodigen via email
+- Vestiging toewijzen
+- Rol(len) toewijzen (admin, manager, verkoper, monteur)
+- Actief/Inactief toggle
 
 ---
 
-## Fase 5: Supplier Configuratie
+### Fase 3: Offerte naar Order Conversie
 
-### 5.1 SupplierTradeplaceDialog.tsx
+**Nieuwe componenten:**
+- `ConvertToOrderDialog.tsx` - Bevestigingsdialog voor conversie
 
-Dialog om leveranciers te koppelen aan Tradeplace:
+**Uitbreiding bestaande code:**
+- Nieuw hook `useConvertQuoteToOrder.ts` met logica:
+  1. Maak nieuwe order aan met data van offerte
+  2. Kopieer alle offerte-regels naar order-regels
+  3. Update offerte status naar "geaccepteerd"
+  4. Navigeer naar nieuwe order
 
-```text
-+----------------------------------------------------------+
-| BSH Hausgeräte - Tradeplace Configuratie                  |
-|----------------------------------------------------------|
-| [x] Tradeplace koppeling inschakelen                      |
-|                                                           |
-| GLN-nummer fabrikant:                                     |
-| [4012345678901_____________]                              |
-|                                                           |
-| API Endpoint (optioneel):                                 |
-| [https://api.tradeplace.com/bsh]                         |
-|                                                           |
-| [ Annuleren ]              [ Opslaan ]                   |
-+----------------------------------------------------------+
+- `QuoteActions.tsx` - Voeg "Omzetten naar order" knop toe
+
+**Workflow:**
 ```
-
----
-
-## Benodigde Secrets
-
-Via Supabase Dashboard toe te voegen (later door gebruiker):
-
-| Secret | Doel |
-|--------|------|
-| `TRADEPLACE_API_KEY` | API authenticatie |
-| `TRADEPLACE_RETAILER_GLN` | GLN-nummer retailer |
-| `TRADEPLACE_WEBHOOK_SECRET` | Webhook verificatie (optioneel) |
-
----
-
-## Bestandsoverzicht
-
-### Database Migratie
-- `supabase/migrations/xxx_tradeplace_integration.sql` - Alle tabelwijzigingen
-
-### Edge Functions
-- `supabase/functions/tradeplace-config/index.ts`
-- `supabase/functions/tradeplace-availability/index.ts`
-- `supabase/functions/tradeplace-order/index.ts`
-- `supabase/functions/tradeplace-webhook/index.ts`
-
-### Hooks
-- `src/hooks/useTradeplace.ts`
-- `src/hooks/useSupplierOrders.ts`
-
-### Components
-- `src/components/settings/TradeplaceSettings.tsx`
-- `src/components/orders/SupplierOrdersCard.tsx`
-- `src/components/orders/AvailabilityIndicator.tsx`
-- `src/components/orders/PlaceSupplierOrderModal.tsx`
-- `src/components/suppliers/SupplierTradeplaceDialog.tsx`
-
-### Pagina Wijzigingen
-- `src/pages/Settings.tsx` - TradeplaceSettings toevoegen
-- `src/pages/OrderDetail.tsx` - SupplierOrdersCard toevoegen
-- `src/components/orders/OrderLinesTable.tsx` - Beschikbaarheid kolom
+Offerte (status: geaccepteerd)
+       ↓
+[Omzetten naar order]
+       ↓
+Order wordt aangemaakt
+       ↓
+Order verschijnt in Facturen overzicht
+```
 
 ---
 
 ## Technische Details
 
-### Edge Function Pattern (Secret Check)
+### Database - Geen wijzigingen nodig
+Alle benodigde tabellen en RLS policies bestaan al:
+- `divisions` - Vestigingen met INSERT/UPDATE voor admin
+- `profiles` - Gebruikersprofielen met INSERT/UPDATE policies
+- `user_roles` - Rollen met admin-only policies
+- `orders` - Orders met correcte division-based policies
 
-Elke edge function controleert eerst of secrets aanwezig zijn:
+### Nieuwe Edge Function: `invite-user`
 
-```typescript
-// Pattern voor alle tradeplace-* functions
-const apiKey = Deno.env.get("TRADEPLACE_API_KEY");
-const retailerGln = Deno.env.get("TRADEPLACE_RETAILER_GLN");
+Nodig voor het aanmaken van gebruikers via Supabase Auth Admin API:
 
-if (!apiKey || !retailerGln) {
-  return new Response(JSON.stringify({
-    error: "not_configured",
-    message: "Tradeplace is nog niet geconfigureerd. Ga naar Instellingen > Koppelingen.",
-    missing: [
-      !apiKey && "TRADEPLACE_API_KEY",
-      !retailerGln && "TRADEPLACE_RETAILER_GLN"
-    ].filter(Boolean)
-  }), {
-    status: 503,
-    headers: { ...corsHeaders, "Content-Type": "application/json" }
-  });
+```text
+POST /invite-user
+Body: {
+  email: string,
+  full_name: string,
+  division_id: string,
+  roles: ["verkoper" | "manager" | "monteur"]
+}
+
+Response: {
+  success: boolean,
+  user_id: string
 }
 ```
 
-### Frontend Hook Pattern (Config Check)
+De functie:
+1. Roept `supabase.auth.admin.createUser()` aan
+2. Update het profiel met division_id
+3. Voegt de gewenste rollen toe aan user_roles
+4. Stuurt uitnodigingsmail (optioneel)
 
-```typescript
-// useTradeplaceConfig hook
-export function useTradeplaceConfig() {
-  return useQuery({
-    queryKey: ["tradeplace-config"],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("tradeplace-config", {
-        body: { action: "check" }
-      });
-      
-      if (error) throw error;
-      return data as { configured: boolean; retailer_gln?: string };
-    },
-    staleTime: 5 * 60 * 1000 // Cache 5 minuten
-  });
-}
+### Quote naar Order Conversie Logica
+
+```text
+Input: quote_id
+
+1. Haal offerte op met alle secties en regels
+2. Maak order aan:
+   - customer_id: van offerte
+   - division_id: van offerte
+   - quote_id: link naar originele offerte
+   - order_date: vandaag
+   - status: "nieuw"
+   - payment_status: "open"
+   - Kopieer bedragen (subtotal, totals, etc.)
+
+3. Kopieer quote_lines naar order_lines:
+   - Behoud section_type, group_title
+   - Kopieer alle prijzen en configuraties
+
+4. Update offerte status naar "geaccepteerd"
+
+5. Return nieuwe order_id
 ```
+
+---
+
+## Bestandsoverzicht
+
+### Nieuwe bestanden:
+
+| Bestand | Type | Doel |
+|---------|------|------|
+| `src/components/settings/DivisionFormDialog.tsx` | Component | Vestiging aanmaken/bewerken |
+| `src/components/settings/UserFormDialog.tsx` | Component | Gebruiker uitnodigen/bewerken |
+| `src/components/settings/UserRoleSelect.tsx` | Component | Rol-selectie component |
+| `src/components/quotes/ConvertToOrderDialog.tsx` | Component | Bevestiging voor conversie |
+| `src/hooks/useUsers.ts` | Hook | User management mutations |
+| `src/hooks/useConvertQuoteToOrder.ts` | Hook | Quote → Order conversie |
+| `supabase/functions/invite-user/index.ts` | Edge Function | User invitation via admin API |
+
+### Bestaande bestanden te wijzigen:
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/useDivisions.ts` | Toevoegen create/update mutations |
+| `src/pages/Settings.tsx` | Integreren dialogs en acties |
+| `src/components/quotes/QuoteActions.tsx` | Toevoegen "Omzetten naar order" knop |
+| `supabase/config.toml` | Registreren invite-user function |
 
 ---
 
 ## Verwacht Resultaat
 
-Na implementatie:
+Na implementatie kan de admin:
 
-1. **Zonder secrets**: Alle UI zichtbaar met duidelijke "niet geconfigureerd" berichten en links naar configuratie
-2. **Met secrets**: Volledig werkende Tradeplace integratie met:
-   - Real-time beschikbaarheidscontrole
-   - Automatisch bestellen bij fabrikanten
-   - Status updates via webhooks
-   - Leveranciers gekoppeld aan GLN-nummers
+1. **Vestigingen beheren**
+   - Nieuwe vestiging toevoegen via dialog
+   - Bestaande vestigingen bewerken
+   - Vestigingen (de)activeren
 
----
+2. **Gebruikers beheren**
+   - Nieuwe gebruiker uitnodigen via email
+   - Gebruiker aan vestiging koppelen
+   - Rollen toewijzen/wijzigen
+   - Gebruikers deactiveren
 
-## RLS Policies
-
-Alle nieuwe tabellen krijgen RLS met:
-- `tradeplace_settings`: Alleen admin kan lezen/schrijven
-- `supplier_orders`: Lezen voor ingelogde users, schrijven voor admin/manager
-- `supplier_order_lines`: Zelfde als supplier_orders
-
+3. **Orders/Facturen aanmaken**
+   - Geaccepteerde offerte omzetten naar order
+   - Order verschijnt automatisch in Facturen overzicht
+   - Synchronisatie naar Exact Online werkt op basis van orders
