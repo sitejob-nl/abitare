@@ -17,6 +17,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isAdminOrManager: boolean;
+  activeDivisionId: string | null;
+  setActiveDivisionId: (id: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeDivisionId, setActiveDivisionId] = useState<string | null>(null);
 
   // Fetch profile and roles for a user
   const fetchUserData = async (userId: string) => {
@@ -42,6 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Error fetching profile:", profileError);
       } else {
         setProfile(profileData);
+        // Set active division from profile if not already set
+        if (!activeDivisionId && profileData?.division_id) {
+          setActiveDivisionId(profileData.division_id);
+        }
       }
 
       // Fetch roles
@@ -75,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
           setRoles([]);
+          setActiveDivisionId(null);
         }
         setIsLoading(false);
       }
@@ -122,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setProfile(null);
     setRoles([]);
+    setActiveDivisionId(null);
   };
 
   const isAdmin = roles.includes("admin");
@@ -140,6 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         isAdmin,
         isAdminOrManager,
+        activeDivisionId,
+        setActiveDivisionId,
       }}
     >
       {children}
