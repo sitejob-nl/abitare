@@ -13,20 +13,28 @@ export interface Invoice {
   payment_status: "open" | "deels_betaald" | "betaald" | null;
   amount_paid: number | null;
   exact_invoice_id: string | null;
+  division_id: string | null;
   division_name: string | null;
 }
 
-export function useInvoices() {
+interface UseInvoicesOptions {
+  divisionId?: string | null;
+}
+
+export function useInvoices(options: UseInvoicesOptions = {}) {
+  const { divisionId } = options;
+
   return useQuery({
-    queryKey: ["invoices"],
+    queryKey: ["invoices", { divisionId }],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("orders")
         .select(`
           id,
           order_number,
           order_date,
           customer_id,
+          division_id,
           total_incl_vat,
           total_excl_vat,
           total_vat,
@@ -37,6 +45,12 @@ export function useInvoices() {
           divisions(name)
         `)
         .order("order_date", { ascending: false });
+
+      if (divisionId && divisionId !== "all") {
+        query = query.eq("division_id", divisionId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -59,6 +73,7 @@ export function useInvoices() {
           payment_status: order.payment_status,
           amount_paid: order.amount_paid,
           exact_invoice_id: order.exact_invoice_id,
+          division_id: order.division_id,
           division_name: division?.name || null,
         };
       });
@@ -66,13 +81,25 @@ export function useInvoices() {
   });
 }
 
-export function useInvoiceStats() {
+interface UseInvoiceStatsOptions {
+  divisionId?: string | null;
+}
+
+export function useInvoiceStats(options: UseInvoiceStatsOptions = {}) {
+  const { divisionId } = options;
+
   return useQuery({
-    queryKey: ["invoice-stats"],
+    queryKey: ["invoice-stats", { divisionId }],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("orders")
-        .select("total_incl_vat, amount_paid, payment_status");
+        .select("total_incl_vat, amount_paid, payment_status, division_id");
+
+      if (divisionId && divisionId !== "all") {
+        query = query.eq("division_id", divisionId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 

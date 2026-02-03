@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { Plus, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrders, OrderStatus } from "@/hooks/useOrders";
 import { useDivisions } from "@/hooks/useDivisions";
+import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -63,10 +64,16 @@ function getCustomerName(customer: { first_name?: string | null; last_name?: str
 
 const OrdersPage = () => {
   const navigate = useNavigate();
-  const [divisionFilter, setDivisionFilter] = useState<string>("all");
+  const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Local division filter synced with global state
+  const divisionFilter = activeDivisionId || "all";
+  const setDivisionFilter = (value: string) => {
+    setActiveDivisionId(value === "all" ? null : value);
+  };
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);

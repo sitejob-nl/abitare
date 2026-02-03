@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useInvoices, useInvoiceStats } from "@/hooks/useInvoices";
 import { useSyncInvoices, useExactOnlineConnections } from "@/hooks/useExactOnline";
 import { useDivisions } from "@/hooks/useDivisions";
+import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,8 +50,16 @@ const paymentStatusConfig = {
 };
 
 const Invoices = () => {
-  const { data: invoices, isLoading } = useInvoices();
-  const { data: stats } = useInvoiceStats();
+  const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
+  
+  // Local division filter synced with global state
+  const divisionFilter = activeDivisionId || "all";
+  const setDivisionFilter = (value: string) => {
+    setActiveDivisionId(value === "all" ? null : value);
+  };
+
+  const { data: invoices, isLoading } = useInvoices({ divisionId: divisionFilter === "all" ? null : divisionFilter });
+  const { data: stats } = useInvoiceStats({ divisionId: divisionFilter === "all" ? null : divisionFilter });
   const { data: connections } = useExactOnlineConnections();
   const { data: divisions } = useDivisions();
   const syncInvoices = useSyncInvoices();
@@ -174,15 +183,34 @@ const Invoices = () => {
 
       {/* Filters */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Zoek op klant, ordernummer of factuurnummer..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Zoek op klant, ordernummer of factuurnummer..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          
+          {isAdmin && (
+            <Select value={divisionFilter} onValueChange={setDivisionFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Alle vestigingen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle vestigingen</SelectItem>
+                {divisions?.map((division) => (
+                  <SelectItem key={division.id} value={division.id}>
+                    {division.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
+        
         <div className="flex gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">
