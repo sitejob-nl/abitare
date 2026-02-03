@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ function getCustomerName(customer: { first_name?: string | null; last_name?: str
 }
 
 const OrdersPage = () => {
+  const navigate = useNavigate();
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -188,11 +190,12 @@ const OrdersPage = () => {
                 const statusCfg = statusConfig[status] || statusConfig.nieuw;
                 const paymentCfg = paymentStatusConfig[paymentStatus] || paymentStatusConfig.open;
 
-                return (
-                  <tr
-                    key={order.id}
-                    className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
-                  >
+                  return (
+                    <tr
+                      key={order.id}
+                      onClick={() => navigate(`/orders/${order.id}`)}
+                      className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                    >
                     <td className="px-5 py-4">
                       <span className="text-sm font-medium text-foreground">
                         #{order.order_number}
