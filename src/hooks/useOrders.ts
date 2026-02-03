@@ -67,7 +67,16 @@ export function useOrder(id: string | undefined) {
           quote:quotes(id, quote_number),
           order_lines(*),
           order_documents(*),
-          order_notes(*)
+          order_notes(*),
+          order_status_history(
+            id,
+            from_status,
+            to_status,
+            created_at,
+            notes,
+            changed_by,
+            profile:profiles!order_status_history_changed_by_fkey(full_name, email)
+          )
         `)
         .eq("id", id)
         .single();
