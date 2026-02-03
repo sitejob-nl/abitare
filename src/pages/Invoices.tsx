@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useInvoices, useInvoiceStats } from "@/hooks/useInvoices";
+import { useSyncInvoices, useExactOnlineConnections } from "@/hooks/useExactOnline";
+import { useDivisions } from "@/hooks/useDivisions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upload, Download, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -43,8 +51,41 @@ const paymentStatusConfig = {
 const Invoices = () => {
   const { data: invoices, isLoading } = useInvoices();
   const { data: stats } = useInvoiceStats();
+  const { data: connections } = useExactOnlineConnections();
+  const { data: divisions } = useDivisions();
+  const syncInvoices = useSyncInvoices();
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Get active connection's division
+  const activeConnection = connections?.find(c => c.is_active);
+  const connectedDivision = divisions?.find(d => d.id === activeConnection?.division_id);
+  const hasExactConnection = !!activeConnection;
+
+  const handlePushInvoices = () => {
+    if (!activeConnection?.division_id) return;
+    syncInvoices.mutate({
+      action: "push",
+      divisionId: activeConnection.division_id,
+    });
+  };
+
+  const handlePullStatus = () => {
+    if (!activeConnection?.division_id) return;
+    syncInvoices.mutate({
+      action: "pull_status",
+      divisionId: activeConnection.division_id,
+    });
+  };
+
+  const handleFullSync = () => {
+    if (!activeConnection?.division_id) return;
+    syncInvoices.mutate({
+      action: "sync",
+      divisionId: activeConnection.division_id,
+    });
+  };
 
   const filteredInvoices = invoices?.filter((invoice) => {
     const matchesSearch =
@@ -154,6 +195,36 @@ const Invoices = () => {
               <SelectItem value="betaald">Betaald</SelectItem>
             </SelectContent>
           </Select>
+
+          {hasExactConnection && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={syncInvoices.isPending}>
+                  {syncInvoices.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Exact Online
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleFullSync}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Volledige synchronisatie
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handlePushInvoices}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Facturen naar Exact
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handlePullStatus}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Betalingen ophalen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 

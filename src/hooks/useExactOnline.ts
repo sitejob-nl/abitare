@@ -174,3 +174,51 @@ export function useSyncCustomers() {
     },
   });
 }
+
+export function useSyncInvoices() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+      orderId,
+    }: {
+      action: "push" | "pull_status" | "sync";
+      divisionId: string;
+      orderId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-invoices", {
+        body: { action, divisionId, orderId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      
+      if (variables.action === "push") {
+        const msg = `Facturen gepusht: ${data.created} aangemaakt`;
+        if (data.failed > 0) {
+          toast.warning(`${msg}, ${data.failed} mislukt`);
+        } else {
+          toast.success(msg);
+        }
+      } else if (variables.action === "pull_status") {
+        toast.success(`Betalingsstatussen bijgewerkt: ${data.updated} gewijzigd`);
+      } else {
+        const pushMsg = data.pushed ? `${data.pushed.created} facturen gepusht` : "";
+        const pullMsg = data.pulled ? `${data.pulled.updated} statussen bijgewerkt` : "";
+        toast.success(`Synchronisatie voltooid: ${[pushMsg, pullMsg].filter(Boolean).join(", ")}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Factuur sync fout: ${error.message}`);
+    },
+  });
+}
