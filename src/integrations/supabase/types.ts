@@ -356,6 +356,7 @@ export type Database = {
           product_id: string | null
           quantity: number | null
           quote_line_id: string | null
+          section_id: string | null
           section_type: string | null
           sort_order: number | null
           supplier_id: string | null
@@ -383,6 +384,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           quote_line_id?: string | null
+          section_id?: string | null
           section_type?: string | null
           sort_order?: number | null
           supplier_id?: string | null
@@ -410,6 +412,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           quote_line_id?: string | null
+          section_id?: string | null
           section_type?: string | null
           sort_order?: number | null
           supplier_id?: string | null
@@ -437,6 +440,13 @@ export type Database = {
             columns: ["quote_line_id"]
             isOneToOne: false
             referencedRelation: "quote_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "order_sections"
             referencedColumns: ["id"]
           },
           {
@@ -479,6 +489,128 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_sections: {
+        Row: {
+          color_id: string | null
+          column_height_mm: number | null
+          configuration: Json | null
+          corpus_color: string | null
+          countertop_height_mm: number | null
+          countertop_thickness_mm: number | null
+          created_at: string | null
+          description: string | null
+          discount_amount: number | null
+          discount_description: string | null
+          discount_percentage: number | null
+          drawer_color: string | null
+          front_color: string | null
+          front_number: string | null
+          handle_number: string | null
+          hinge_color: string | null
+          id: string
+          order_id: string
+          plinth_color: string | null
+          quote_section_id: string | null
+          range_id: string | null
+          section_type: string
+          sort_order: number | null
+          subtotal: number | null
+          title: string | null
+          workbench_color: string | null
+          workbench_edge: string | null
+          workbench_material: string | null
+        }
+        Insert: {
+          color_id?: string | null
+          column_height_mm?: number | null
+          configuration?: Json | null
+          corpus_color?: string | null
+          countertop_height_mm?: number | null
+          countertop_thickness_mm?: number | null
+          created_at?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_description?: string | null
+          discount_percentage?: number | null
+          drawer_color?: string | null
+          front_color?: string | null
+          front_number?: string | null
+          handle_number?: string | null
+          hinge_color?: string | null
+          id?: string
+          order_id: string
+          plinth_color?: string | null
+          quote_section_id?: string | null
+          range_id?: string | null
+          section_type: string
+          sort_order?: number | null
+          subtotal?: number | null
+          title?: string | null
+          workbench_color?: string | null
+          workbench_edge?: string | null
+          workbench_material?: string | null
+        }
+        Update: {
+          color_id?: string | null
+          column_height_mm?: number | null
+          configuration?: Json | null
+          corpus_color?: string | null
+          countertop_height_mm?: number | null
+          countertop_thickness_mm?: number | null
+          created_at?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_description?: string | null
+          discount_percentage?: number | null
+          drawer_color?: string | null
+          front_color?: string | null
+          front_number?: string | null
+          handle_number?: string | null
+          hinge_color?: string | null
+          id?: string
+          order_id?: string
+          plinth_color?: string | null
+          quote_section_id?: string | null
+          range_id?: string | null
+          section_type?: string
+          sort_order?: number | null
+          subtotal?: number | null
+          title?: string | null
+          workbench_color?: string | null
+          workbench_edge?: string | null
+          workbench_material?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_sections_color_id_fkey"
+            columns: ["color_id"]
+            isOneToOne: false
+            referencedRelation: "product_colors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_quote_section_id_fkey"
+            columns: ["quote_section_id"]
+            isOneToOne: false
+            referencedRelation: "quote_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_range_id_fkey"
+            columns: ["range_id"]
+            isOneToOne: false
+            referencedRelation: "product_ranges"
             referencedColumns: ["id"]
           },
         ]
@@ -1055,6 +1187,9 @@ export type Database = {
           countertop_thickness_mm: number | null
           created_at: string | null
           description: string | null
+          discount_amount: number | null
+          discount_description: string | null
+          discount_percentage: number | null
           drawer_color: string | null
           front_color: string | null
           front_number: string | null
@@ -1081,6 +1216,9 @@ export type Database = {
           countertop_thickness_mm?: number | null
           created_at?: string | null
           description?: string | null
+          discount_amount?: number | null
+          discount_description?: string | null
+          discount_percentage?: number | null
           drawer_color?: string | null
           front_color?: string | null
           front_number?: string | null
@@ -1107,6 +1245,9 @@ export type Database = {
           countertop_thickness_mm?: number | null
           created_at?: string | null
           description?: string | null
+          discount_amount?: number | null
+          discount_description?: string | null
+          discount_percentage?: number | null
           drawer_color?: string | null
           front_color?: string | null
           front_number?: string | null

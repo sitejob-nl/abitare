@@ -21,27 +21,39 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
   const totals = useMemo(() => {
     let subtotalProducts = 0;
     let subtotalMontage = 0;
+    let totalSectionDiscounts = 0;
 
     sections.forEach((section) => {
-      const sectionTotal = section.quote_lines?.reduce(
+      const sectionBruto = section.quote_lines?.reduce(
         (sum, line) => sum + (line.line_total || 0),
         0
       ) || 0;
 
+      // Calculate section discount
+      const sectionDiscountAmount = section.discount_percentage 
+        ? (sectionBruto * (section.discount_percentage || 0)) / 100
+        : (section.discount_amount || 0);
+      
+      totalSectionDiscounts += sectionDiscountAmount;
+      const sectionNetto = sectionBruto - sectionDiscountAmount;
+
       if (section.section_type === "montage") {
-        subtotalMontage += sectionTotal;
+        subtotalMontage += sectionNetto;
       } else {
-        subtotalProducts += sectionTotal;
+        subtotalProducts += sectionNetto;
       }
     });
 
-    const subtotalExclVat = subtotalProducts + subtotalMontage - discountAmount;
+    // After section discounts, apply quote-level discount
+    const subtotalAfterSections = subtotalProducts + subtotalMontage;
+    const subtotalExclVat = subtotalAfterSections - discountAmount;
     const totalVat = subtotalExclVat * 0.21;
     const totalInclVat = subtotalExclVat + totalVat;
 
     return {
       subtotalProducts,
       subtotalMontage,
+      totalSectionDiscounts,
       discountAmount,
       subtotalExclVat,
       totalVat,
@@ -66,9 +78,16 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
             </div>
           )}
 
+          {totals.totalSectionDiscounts > 0 && (
+            <div className="flex justify-between text-sm text-green-600">
+              <span>Sectiekortingen</span>
+              <span>(verwerkt in subtotalen)</span>
+            </div>
+          )}
+
           {totals.discountAmount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>Korting</span>
+              <span>Korting (offerte)</span>
               <span>- {formatCurrency(totals.discountAmount)}</span>
             </div>
           )}

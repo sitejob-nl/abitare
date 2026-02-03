@@ -298,7 +298,10 @@ const OrderDetail = () => {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main content - Order lines and Supplier orders */}
         <div className="lg:col-span-2 space-y-6">
-          <OrderLinesTable lines={orderLines} />
+          <OrderLinesTable 
+            lines={orderLines} 
+            sections={(order as any).order_sections || []}
+          />
           <SupplierOrdersCard 
             orderId={order.id} 
             orderLines={orderLines.map(line => ({

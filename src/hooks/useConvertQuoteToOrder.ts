@@ -21,29 +21,19 @@ export function useConvertQuoteToOrder() {
       if (quoteError) throw quoteError;
       if (!quote) throw new Error("Offerte niet gevonden");
 
-      // 2. Fetch all quote lines
-      const { data: quoteLines, error: linesError } = await supabase
-        .from("quote_lines")
-        .select("*")
+      // 2. Fetch all quote sections with their lines
+      const { data: quoteSections, error: sectionsError } = await supabase
+        .from("quote_sections")
+        .select(`
+          *,
+          quote_lines(*)
+        `)
         .eq("quote_id", quoteId)
         .order("sort_order");
 
-      if (linesError) throw linesError;
-
-      // 3. Fetch all quote sections for section_type mapping
-      const { data: quoteSections, error: sectionsError } = await supabase
-        .from("quote_sections")
-        .select("id, section_type, title")
-        .eq("quote_id", quoteId);
-
       if (sectionsError) throw sectionsError;
 
-      // Create section lookup map
-      const sectionMap = new Map(
-        quoteSections?.map((s) => [s.id, { section_type: s.section_type, title: s.title }])
-      );
-
-      // 4. Create the order
+      // 3. Create the order
       const { data: newOrder, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -69,10 +59,74 @@ export function useConvertQuoteToOrder() {
       if (orderError) throw orderError;
       if (!newOrder) throw new Error("Kon order niet aanmaken");
 
-      // 5. Create order lines from quote lines
-      if (quoteLines && quoteLines.length > 0) {
-        const orderLines = quoteLines.map((line) => {
-          const section = line.section_id ? sectionMap.get(line.section_id) : null;
+      // 4. Create order sections from quote sections
+      const orderSectionMap = new Map<string, string>(); // quote_section_id -> order_section_id
+
+      if (quoteSections && quoteSections.length > 0) {
+        for (const quoteSection of quoteSections) {
+          const lines = (quoteSection as any).quote_lines || [];
+          const sectionSubtotal = lines.reduce(
+            (sum: number, line: any) => sum + (line.line_total || 0),
+            0
+          );
+
+          const { data: orderSection, error: orderSectionError } = await supabase
+            .from("order_sections")
+            .insert({
+              order_id: newOrder.id,
+              quote_section_id: quoteSection.id,
+              section_type: quoteSection.section_type,
+              title: quoteSection.title,
+              sort_order: quoteSection.sort_order,
+              subtotal: sectionSubtotal,
+              discount_percentage: quoteSection.discount_percentage,
+              discount_amount: quoteSection.discount_amount,
+              discount_description: quoteSection.discount_description,
+              range_id: quoteSection.range_id,
+              color_id: quoteSection.color_id,
+              front_number: quoteSection.front_number,
+              front_color: quoteSection.front_color,
+              corpus_color: quoteSection.corpus_color,
+              plinth_color: quoteSection.plinth_color,
+              hinge_color: quoteSection.hinge_color,
+              drawer_color: quoteSection.drawer_color,
+              handle_number: quoteSection.handle_number,
+              column_height_mm: quoteSection.column_height_mm,
+              countertop_height_mm: quoteSection.countertop_height_mm,
+              countertop_thickness_mm: quoteSection.countertop_thickness_mm,
+              workbench_material: quoteSection.workbench_material,
+              workbench_edge: quoteSection.workbench_edge,
+              workbench_color: quoteSection.workbench_color,
+              configuration: quoteSection.configuration,
+              description: quoteSection.description,
+            })
+            .select()
+            .single();
+
+          if (orderSectionError) throw orderSectionError;
+          if (orderSection) {
+            orderSectionMap.set(quoteSection.id, orderSection.id);
+          }
+        }
+      }
+
+      // 5. Create order lines from quote lines with section references
+      const allQuoteLines: any[] = [];
+      quoteSections?.forEach((section) => {
+        const lines = (section as any).quote_lines || [];
+        lines.forEach((line: any) => {
+          allQuoteLines.push({
+            ...line,
+            _section: section,
+          });
+        });
+      });
+
+      if (allQuoteLines.length > 0) {
+        const orderLines = allQuoteLines.map((line) => {
+          const orderSectionId = line.section_id 
+            ? orderSectionMap.get(line.section_id) 
+            : null;
 
           return {
             order_id: newOrder.id,
@@ -87,8 +141,9 @@ export function useConvertQuoteToOrder() {
             vat_rate: line.vat_rate,
             line_total: line.line_total,
             configuration: line.configuration,
-            section_type: section?.section_type || null,
-            group_title: line.group_title || section?.title || null,
+            section_type: line._section?.section_type || null,
+            section_id: orderSectionId,
+            group_title: line.group_title || line._section?.title || null,
             is_group_header: line.is_group_header,
             sort_order: line.sort_order,
           };
