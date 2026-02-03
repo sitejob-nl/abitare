@@ -1,290 +1,336 @@
 
-
-# Plan: Service Ticket Systeem
+# Plan: Optimalisatie Offerte Workflow met Sectie-Korting
 
 ## Overzicht
 
-Dit plan beschrijft de implementatie van een volledig ticketsysteem voor klacht- en serviceaanvragen. Het systeem bestaat uit twee delen:
+Dit plan optimaliseert de offerte-workflow op basis van het referentiesysteem uit de screenshots. Het doel is om de workflow logisch en efficient te maken voor het hele traject: van offerte-aanmaak, via bestelling, tot facturatie.
 
-1. **Publieke indienformulier** - Een open link waar klanten (zonder login) een klacht/service-aanvraag kunnen indienen
-2. **Interne Service module** - Een nieuw "Service" tabblad in de applicatie voor medewerkers om tickets te beheren
+## Analyse van Screenshots
+
+Op basis van de aangeleverde screenshots herken ik de volgende workflow-stappen:
+
+### 1. Leverancier & Prijsgroep Selectie (image002)
+Het dialoogvenster toont een drietraps-selectie:
+- Leverancier selecteren (bijv. STOS1IT = Stosa)
+- Range/Model kiezen (MPPT, MPPT GL met beschrijving en prijsgroep)
+- Kleur kiezen uit de beschikbare codes (AS, BAL, CHO, etc.)
+
+### 2. Meubelen Configuratie (image003, image004)
+Uitgebreide eigenschappen per uitvoering:
+- Front: uitvoering, kleur
+- Korpus: kleur binnenzijde
+- Plint: hoogte en kleur
+- Greep: uitvoering en kleur
+- Scharnieren, lades, etc.
+- Kolomkast hoogte, aanrecht hoogte, blad dikte
+
+### 3. Apparatuur met Groepering (image005)
+Apparaten gegroepeerd per locatie:
+- "Apparatuur kastenwand bestaande uit:" (Miele koelkast, oven, etc.)
+- "Apparatuur eiland bestaande uit:" (kookplaat, afzuig, vaatwasser)
+
+### 4. Werkbladen (image006)
+Configuratie met:
+- Materiaal (Keramiek 12mm)
+- Kleur
+- Randafwerking
+- Groepering: "Werkblad voor eiland:", "Werkblad voor dressoir:"
+
+### 5. Montage Artikelen (image007)
+Serviceregels zoals:
+- Keukenmontage per m1
+- Aansluitkosten
+- Transportkosten per zone
 
 ---
 
-## Functionaliteiten
+## Huidige Situatie vs. Gewenste Situatie
 
-### Publieke Kant (zonder login)
-- Eenvoudig formulier met klantgegevens en klachtomschrijving
-- Mogelijkheid om foto's/documenten bij te voegen
-- Automatische bevestigingsmail (optioneel, latere fase)
-- Unieke ticketnummer voor referentie
-
-### Interne Kant (voor medewerkers)
-- Overzicht van alle tickets in lijst- en kanbanweergave
-- Status workflow: Nieuw → In behandeling → Wacht op klant → Wacht op onderdelen → Ingepland → Afgerond
-- Medewerker(s) toewijzen aan ticket
-- Interne notities en communicatiegeschiedenis
-- Koppeling aan bestaande order (optioneel)
-- Prioriteit en categorie instellen
-- Filter op vestiging, status, toegewezen medewerker
+| Functie | Huidige Status | Nodig |
+|---------|----------------|-------|
+| Klant selecteren bij offerte | Ja | - |
+| Secties aanmaken (meubelen, apparatuur, etc.) | Ja | - |
+| Leverancier/Prijsgroep per sectie | Ja | - |
+| Kleur selectie per sectie | Ja | - |
+| Configuratie-eigenschappen (front, corpus, etc.) | Ja | - |
+| Producten toevoegen met prijs-lookup | Ja | - |
+| Groepkoppen (bijv. "Eiland bestaande uit:") | Ja | - |
+| Korting op offerte-niveau | Ja | - |
+| **Korting per sectie** | **Nee** | **Ja** |
+| Sectie-configuratie doorkopiëren naar order | Gedeeltelijk | Verbeteren |
+| Sectie-subtotalen met korting | Nee | Ja |
 
 ---
 
-## Database Structuur
+## Te Implementeren Functionaliteiten
 
-### Nieuwe Tabellen
+### 1. Korting per Sectie
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ service_tickets                                                  │
-├─────────────────────────────────────────────────────────────────┤
-│ id                  UUID PRIMARY KEY                            │
-│ ticket_number       SERIAL (auto-increment, uniek nummer)       │
-│ division_id         UUID → divisions (nullable)                 │
-│ order_id            UUID → orders (optioneel, koppeling)        │
-│ customer_id         UUID → customers (optioneel, bestaande)     │
-│ status              ENUM service_ticket_status                  │
-│ priority            ENUM (laag, normaal, hoog, urgent)          │
-│ category            TEXT (klacht, garantie, schade, overig)     │
-│ subject             TEXT (korte omschrijving)                   │
-│ description         TEXT (volledige beschrijving)               │
-│ submitter_name      TEXT (naam indiener)                        │
-│ submitter_email     TEXT (email indiener)                       │
-│ submitter_phone     TEXT (telefoon indiener)                    │
-│ created_at          TIMESTAMP                                   │
-│ updated_at          TIMESTAMP                                   │
-│ resolved_at         TIMESTAMP (wanneer afgerond)                │
-│ created_by          UUID → profiles (nullable, intern aangemaakt)│
-└─────────────────────────────────────────────────────────────────┘
+Voeg de mogelijkheid toe om per sectie een korting (percentage of bedrag) in te stellen.
 
-┌─────────────────────────────────────────────────────────────────┐
-│ service_ticket_assignees                                         │
-├─────────────────────────────────────────────────────────────────┤
-│ id                  UUID PRIMARY KEY                            │
-│ ticket_id           UUID → service_tickets                      │
-│ user_id             UUID → profiles                             │
-│ assigned_at         TIMESTAMP                                   │
-│ assigned_by         UUID → profiles                             │
-│ UNIQUE(ticket_id, user_id)                                      │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ service_ticket_notes                                             │
-├─────────────────────────────────────────────────────────────────┤
-│ id                  UUID PRIMARY KEY                            │
-│ ticket_id           UUID → service_tickets                      │
-│ content             TEXT                                        │
-│ note_type           TEXT (intern, klantcommunicatie)           │
-│ created_by          UUID → profiles                             │
-│ created_at          TIMESTAMP                                   │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ service_ticket_attachments                                       │
-├─────────────────────────────────────────────────────────────────┤
-│ id                  UUID PRIMARY KEY                            │
-│ ticket_id           UUID → service_tickets                      │
-│ file_path           TEXT                                        │
-│ file_name           TEXT                                        │
-│ file_size           INTEGER                                     │
-│ mime_type           TEXT                                        │
-│ uploaded_by         UUID (nullable, null = klant)               │
-│ created_at          TIMESTAMP                                   │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ service_ticket_status_history                                    │
-├─────────────────────────────────────────────────────────────────┤
-│ id                  UUID PRIMARY KEY                            │
-│ ticket_id           UUID → service_tickets                      │
-│ from_status         ENUM service_ticket_status (nullable)       │
-│ to_status           ENUM service_ticket_status                  │
-│ changed_by          UUID → profiles                             │
-│ notes               TEXT (optioneel)                            │
-│ created_at          TIMESTAMP                                   │
-└─────────────────────────────────────────────────────────────────┘
+**Database wijziging - quote_sections tabel:**
+```sql
+ALTER TABLE quote_sections ADD COLUMN discount_percentage numeric;
+ALTER TABLE quote_sections ADD COLUMN discount_amount numeric DEFAULT 0;
+ALTER TABLE quote_sections ADD COLUMN discount_description text;
 ```
 
-### Nieuwe Enum
-
+**Database wijziging - order_sections tabel (nieuw):**
+Om secties ook op orders te behouden (voor facturatie en leveranciersorders):
 ```sql
-CREATE TYPE service_ticket_status AS ENUM (
-  'nieuw',
-  'in_behandeling',
-  'wacht_op_klant',
-  'wacht_op_onderdelen',
-  'ingepland',
-  'afgerond',
-  'geannuleerd'
+CREATE TABLE order_sections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
+  quote_section_id uuid REFERENCES quote_sections(id),
+  section_type text NOT NULL,
+  title text,
+  sort_order int,
+  subtotal numeric DEFAULT 0,
+  discount_percentage numeric,
+  discount_amount numeric DEFAULT 0,
+  discount_description text,
+  -- Configuratie velden (gekopieerd van quote_section)
+  range_id uuid REFERENCES product_ranges(id),
+  color_id uuid REFERENCES product_colors(id),
+  front_number text,
+  front_color text,
+  corpus_color text,
+  plinth_color text,
+  hinge_color text,
+  drawer_color text,
+  handle_number text,
+  column_height_mm int,
+  countertop_height_mm int,
+  countertop_thickness_mm int,
+  workbench_material text,
+  workbench_edge text,
+  workbench_color text,
+  description text,
+  created_at timestamp DEFAULT now()
 );
 ```
 
-### Storage Bucket
+**Database wijziging - order_lines uitbreiden:**
+```sql
+ALTER TABLE order_lines ADD COLUMN section_id uuid REFERENCES order_sections(id);
+```
 
-- Nieuwe bucket `service-attachments` voor uploads van klanten en medewerkers
+### 2. UI Aanpassingen
+
+#### Sectie Korting Editor (QuoteSectionCard)
+Voeg een korting-editor toe aan elke sectie:
+- Percentage/bedrag toggle
+- Automatische berekening van kortingsbedrag
+- Optionele omschrijving (bijv. "Showroommodel", "Actie")
+
+#### Sectie Totalen Update
+Pas `QuoteSectionCard` aan om:
+- Bruto subtotaal te tonen (som van alle regels)
+- Korting regel te tonen (als korting > 0)
+- Netto sectietotaal te tonen
+
+#### QuoteTotals Component
+Pas aan voor:
+- Toon totalen per sectie met korting
+- Totaal alle secties
+- Quote-niveau korting
+- Eindtotalen
+
+### 3. Quote naar Order Conversie Verbeteren
+
+Update `useConvertQuoteToOrder` om:
+1. Order secties aan te maken (nieuw)
+2. Sectie-configuratie volledig te kopiëren
+3. Sectie-korting mee te nemen
+4. Order lines te koppelen aan order sections
+
+### 4. Order Secties Weergave
+
+Update `OrderLinesTable` om:
+- Regels per sectie te groeperen
+- Sectie-korting te tonen
+- Sectie-totalen te berekenen
 
 ---
 
-## Frontend Componenten
+## Technische Implementatie
 
-### Nieuwe Pagina's
+### Fase 1: Database Migratie
 
-| Route | Component | Beschrijving |
-|-------|-----------|--------------|
-| `/service` | `Service.tsx` | Overzicht alle tickets (lijst/kanban) |
-| `/service/:id` | `ServiceTicketDetail.tsx` | Ticket detailpagina |
-| `/service/new` | `ServiceTicketForm.tsx` | Publieke indienformulier (GEEN login vereist) |
+```sql
+-- 1. Korting velden toevoegen aan quote_sections
+ALTER TABLE quote_sections 
+ADD COLUMN IF NOT EXISTS discount_percentage numeric,
+ADD COLUMN IF NOT EXISTS discount_amount numeric DEFAULT 0,
+ADD COLUMN IF NOT EXISTS discount_description text;
 
-### Nieuwe Componenten
+-- 2. Order sections tabel aanmaken
+CREATE TABLE order_sections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  quote_section_id uuid REFERENCES quote_sections(id),
+  section_type text NOT NULL,
+  title text,
+  sort_order int DEFAULT 0,
+  subtotal numeric DEFAULT 0,
+  discount_percentage numeric,
+  discount_amount numeric DEFAULT 0,
+  discount_description text,
+  range_id uuid REFERENCES product_ranges(id),
+  color_id uuid REFERENCES product_colors(id),
+  front_number text,
+  front_color text,
+  corpus_color text,
+  plinth_color text,
+  hinge_color text,
+  drawer_color text,
+  handle_number text,
+  column_height_mm int,
+  countertop_height_mm int,
+  countertop_thickness_mm int,
+  workbench_material text,
+  workbench_edge text,
+  workbench_color text,
+  description text,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 3. Section_id toevoegen aan order_lines
+ALTER TABLE order_lines 
+ADD COLUMN IF NOT EXISTS section_id uuid REFERENCES order_sections(id);
+
+-- 4. RLS policies
+ALTER TABLE order_sections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view order sections"
+ON order_sections FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Authenticated users can insert order sections"
+ON order_sections FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Authenticated users can update order sections"
+ON order_sections FOR UPDATE TO authenticated USING (true);
+
+-- 5. Index voor performance
+CREATE INDEX idx_order_sections_order_id ON order_sections(order_id);
+CREATE INDEX idx_order_lines_section_id ON order_lines(section_id);
+```
+
+### Fase 2: Frontend - Sectie Korting
+
+**Bestanden te wijzigen:**
+
+1. `src/hooks/useQuoteSections.ts` - Update types voor discount velden
+2. `src/components/quotes/QuoteSectionCard.tsx` - Korting UI toevoegen
+3. `src/components/quotes/QuoteSectionConfig.tsx` - Korting tab toevoegen in config dialog
+4. `src/components/quotes/QuoteTotals.tsx` - Sectie-korting meenemen in berekening
+
+**Nieuwe component: SectionDiscountEditor**
+```
+src/components/quotes/SectionDiscountEditor.tsx
+```
+- Percentage/bedrag toggle
+- Input velden
+- Live preview van korting
+
+### Fase 3: Quote naar Order Conversie
+
+**Bestanden te wijzigen:**
+
+1. `src/hooks/useConvertQuoteToOrder.ts` - Volledig herschrijven om order_sections te creëren
+2. `src/integrations/supabase/types.ts` - Wordt automatisch geüpdatet na migratie
+
+**Nieuwe hooks:**
+```
+src/hooks/useOrderSections.ts - CRUD voor order sections
+```
+
+### Fase 4: Order Weergave Update
+
+**Bestanden te wijzigen:**
+
+1. `src/hooks/useOrders.ts` - Order sections ophalen
+2. `src/components/orders/OrderLinesTable.tsx` - Groeperen per sectie
+3. `src/pages/OrderDetail.tsx` - Secties tonen met configuratie
+
+---
+
+## Workflow Diagram
 
 ```text
-src/components/service/
-├── ServiceTicketCard.tsx        # Kaart voor kanban view
-├── ServiceTicketColumn.tsx      # Kolom voor kanban
-├── ServiceKanbanBoard.tsx       # Kanban board container
-├── ServiceTicketTable.tsx       # Lijstweergave tabel
-├── ServiceTicketForm.tsx        # Formulier (publiek/intern)
-├── TicketInfoCard.tsx           # Ticket details sidebar
-├── TicketAssigneesCard.tsx      # Toegewezen medewerkers
-├── TicketNotesCard.tsx          # Notities en communicatie
-├── TicketAttachmentsCard.tsx    # Bijlagen
-├── TicketStatusHistory.tsx      # Status geschiedenis
-└── TicketStatusSelect.tsx       # Status dropdown
-```
-
-### Nieuwe Hooks
-
-```text
-src/hooks/
-├── useServiceTickets.ts         # Fetch alle tickets
-├── useServiceTicket.ts          # Fetch enkel ticket
-└── useServiceTicketMutations.ts # Create, update, status, notes, etc.
-```
-
----
-
-## Sidebar Navigatie Update
-
-Een nieuw "Service" item toevoegen aan de sidebar onder de sectie "Planning":
-
-```typescript
-{
-  title: "Planning",
-  items: [
-    { icon: Calendar, label: "Agenda", href: "/calendar" },
-    { icon: Wrench, label: "Montage", href: "/installation" },
-    { icon: Ticket, label: "Service", href: "/service", badge: 5 }, // NIEUW
-  ],
-}
-```
-
----
-
-## Publieke Formulier Route
-
-De route `/service/new` moet **publiek toegankelijk** zijn (buiten ProtectedRoute). Dit vereist een aanpassing in `App.tsx`:
-
-```typescript
-// Publieke route voor service aanvraag
-<Route path="/service/new" element={<ServiceTicketPublicForm />} />
-
-// Beschermde route voor interne service module
-<Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
-<Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
+OFFERTE AANMAKEN
+┌────────────────────────────────────────────────────────────────┐
+│ 1. Klant selecteren/aanmaken                                   │
+│ 2. Nieuwe sectie toevoegen (bijv. "Meubelen - Eiland")        │
+│    ├─ Leverancier kiezen                                       │
+│    ├─ Prijsgroep (Range) selecteren                           │
+│    ├─ Kleur kiezen                                            │
+│    └─ Configuratie invullen (front, corpus, etc.)             │
+│ 3. Producten toevoegen aan sectie                              │
+│    ├─ Prijs automatisch op basis van prijsgroep               │
+│    ├─ Groepkoppen toevoegen ("Bestaande uit:")                │
+│    └─ Sub-regels/accessoires                                  │
+│ 4. Sectie korting toepassen (optioneel)                        │
+│ 5. Herhaal voor andere secties (apparatuur, werkblad, etc.)   │
+│ 6. Offerte-niveau korting toepassen (optioneel)               │
+│ 7. Betalingsvoorwaarden instellen                              │
+│ 8. PDF exporteren en versturen                                 │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+OFFERTE GEACCEPTEERD → OMZETTEN NAAR ORDER
+┌────────────────────────────────────────────────────────────────┐
+│ • Alle secties met configuratie gekopieerd                     │
+│ • Alle regels met prijzen gekopieerd                          │
+│ • Sectie-kortingen behouden                                    │
+│ • Status: "Nieuw"                                              │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+ORDER VERWERKING
+┌────────────────────────────────────────────────────────────────┐
+│ • Bestelklaar maken (vier-ogen principe)                       │
+│ • Per sectie/leverancier inkooporders plaatsen                │
+│ • Levering en montage plannen                                  │
+│ • Betalingen registreren                                       │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+FACTURATIE
+┌────────────────────────────────────────────────────────────────┐
+│ • Factuur genereren op basis van order + secties               │
+│ • Sectie-structuur behouden in factuurregels                  │
+│ • Push naar Exact Online                                       │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## RLS Policies
+## Bestanden Overzicht
 
-### service_tickets
-- **SELECT**: Authenticated users kunnen alle tickets zien
-- **INSERT**: Iedereen (anon + authenticated) - voor publiek formulier
-- **UPDATE**: Alleen authenticated users
-- **DELETE**: Alleen admins
+### Nieuwe bestanden
+- `src/components/quotes/SectionDiscountEditor.tsx`
+- `src/hooks/useOrderSections.ts`
 
-### service_ticket_attachments
-- **SELECT**: Authenticated users
-- **INSERT**: Iedereen (anon + authenticated) - klanten kunnen bijlagen uploaden
-- **UPDATE/DELETE**: Alleen authenticated users
+### Te wijzigen bestanden
+- `src/hooks/useQuoteSections.ts` - Discount types
+- `src/components/quotes/QuoteSectionCard.tsx` - Korting UI
+- `src/components/quotes/QuoteSectionConfig.tsx` - Korting tab
+- `src/components/quotes/QuoteTotals.tsx` - Berekeningen update
+- `src/hooks/useConvertQuoteToOrder.ts` - Sectie-conversie
+- `src/hooks/useOrders.ts` - Sections ophalen
+- `src/components/orders/OrderLinesTable.tsx` - Sectie-groepering
+- `src/pages/OrderDetail.tsx` - Secties weergave
 
----
-
-## Implementatie Stappen
-
-### Fase 1: Database & Backend
-1. Maak enum `service_ticket_status`
-2. Maak tabel `service_tickets`
-3. Maak tabel `service_ticket_assignees`
-4. Maak tabel `service_ticket_notes`
-5. Maak tabel `service_ticket_attachments`
-6. Maak tabel `service_ticket_status_history`
-7. Configureer RLS policies
-8. Maak storage bucket `service-attachments`
-
-### Fase 2: Publiek Formulier
-1. Maak `ServiceTicketPublicForm.tsx` component
-2. Voeg publieke route toe in `App.tsx`
-3. Implementeer formulier validatie en submit
-4. Toon bevestiging met ticketnummer
-
-### Fase 3: Interne Module
-1. Maak hooks: `useServiceTickets`, `useServiceTicket`, `useServiceTicketMutations`
-2. Maak `Service.tsx` overzichtspagina met lijst/kanban toggle
-3. Maak kanban componenten (hergebruik patronen van Orders)
-4. Maak `ServiceTicketDetail.tsx` detailpagina
-5. Implementeer toewijzing medewerkers
-6. Implementeer notities en bijlagen
-7. Voeg sidebar navigatie item toe
-
-### Fase 4: Polish
-1. Filter op vestiging, status, toegewezen
-2. Zoekfunctionaliteit
-3. Badge counter in sidebar voor open tickets
+### Database migratie
+- 1 migratie met alle schema-wijzigingen
 
 ---
 
-## Technische Details
+## Voordelen van deze Aanpak
 
-### Publiek Formulier Velden
-
-| Veld | Type | Verplicht | Beschrijving |
-|------|------|-----------|--------------|
-| submitter_name | text | Ja | Naam van indiener |
-| submitter_email | text | Ja | E-mailadres |
-| submitter_phone | text | Nee | Telefoonnummer |
-| category | select | Ja | Klacht / Garantie / Schade / Overig |
-| subject | text | Ja | Korte omschrijving |
-| description | textarea | Ja | Volledige beschrijving |
-| order_number | text | Nee | Ordernummer indien bekend |
-| attachments | file[] | Nee | Max 5 bestanden, elk max 10MB |
-
-### Status Workflow
-
-```text
-┌─────────┐     ┌───────────────┐     ┌─────────────────┐
-│  Nieuw  │ ──► │ In behandeling│ ──► │ Wacht op klant  │
-└─────────┘     └───────────────┘     └─────────────────┘
-                       │                      │
-                       ▼                      ▼
-              ┌────────────────────┐   ┌───────────┐
-              │Wacht op onderdelen │   │ Ingepland │
-              └────────────────────┘   └───────────┘
-                       │                      │
-                       └──────────┬───────────┘
-                                  ▼
-                           ┌───────────┐
-                           │ Afgerond  │
-                           └───────────┘
-```
-
----
-
-## Geschatte Omvang
-
-- **Database migraties**: 6 tabellen + 1 enum + RLS
-- **Frontend componenten**: ~15 nieuwe componenten
-- **Pagina's**: 3 nieuwe pagina's
-- **Hooks**: 3 nieuwe hooks
-- **Routes**: 3 nieuwe routes (1 publiek, 2 beschermd)
-
+1. **Consistentie**: Sectie-structuur blijft behouden door hele workflow
+2. **Flexibiliteit**: Korting op zowel sectie- als offerte-niveau
+3. **Traceerbaarheid**: Van offerte-sectie naar order-sectie naar factuur
+4. **Leveranciersorders**: Per sectie (= per leverancier) bestellingen plaatsen
+5. **Rapportage**: Marge-analyse per sectie/leverancier mogelijk
