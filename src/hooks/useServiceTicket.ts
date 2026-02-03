@@ -7,6 +7,7 @@ export interface ServiceTicketDetail {
   division_id: string | null;
   order_id: string | null;
   customer_id: string | null;
+  quote_id: string | null;
   status: "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "ingepland" | "afgerond" | "geannuleerd";
   priority: "laag" | "normaal" | "hoog" | "urgent";
   category: string;
@@ -22,6 +23,7 @@ export interface ServiceTicketDetail {
   division?: { id: string; name: string } | null;
   order?: { id: string; order_number: number } | null;
   customer?: { id: string; first_name: string | null; last_name: string } | null;
+  quote?: { id: string; quote_number: number } | null;
   assignees?: Array<{
     id: string;
     user_id: string;
@@ -68,6 +70,7 @@ export function useServiceTicket(id: string | undefined) {
           division:divisions(id, name),
           order:orders(id, order_number),
           customer:customers(id, first_name, last_name),
+          quote:quotes(id, quote_number),
           assignees:service_ticket_assignees(
             id,
             user_id,

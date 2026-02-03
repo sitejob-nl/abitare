@@ -1565,6 +1565,7 @@ export type Database = {
           id: string
           order_id: string | null
           priority: Database["public"]["Enums"]["service_ticket_priority"]
+          quote_id: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["service_ticket_status"]
           subject: string
@@ -1584,6 +1585,7 @@ export type Database = {
           id?: string
           order_id?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          quote_id?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["service_ticket_status"]
           subject: string
@@ -1603,6 +1605,7 @@ export type Database = {
           id?: string
           order_id?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          quote_id?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["service_ticket_status"]
           subject?: string
@@ -1639,6 +1642,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
             referencedColumns: ["id"]
           },
         ]
