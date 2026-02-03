@@ -1,336 +1,309 @@
 
-# Plan: Optimalisatie Offerte Workflow met Sectie-Korting
+
+# Plan: Mobile Optimalisatie voor Alle Pagina's
 
 ## Overzicht
 
-Dit plan optimaliseert de offerte-workflow op basis van het referentiesysteem uit de screenshots. Het doel is om de workflow logisch en efficient te maken voor het hele traject: van offerte-aanmaak, via bestelling, tot facturatie.
-
-## Analyse van Screenshots
-
-Op basis van de aangeleverde screenshots herken ik de volgende workflow-stappen:
-
-### 1. Leverancier & Prijsgroep Selectie (image002)
-Het dialoogvenster toont een drietraps-selectie:
-- Leverancier selecteren (bijv. STOS1IT = Stosa)
-- Range/Model kiezen (MPPT, MPPT GL met beschrijving en prijsgroep)
-- Kleur kiezen uit de beschikbare codes (AS, BAL, CHO, etc.)
-
-### 2. Meubelen Configuratie (image003, image004)
-Uitgebreide eigenschappen per uitvoering:
-- Front: uitvoering, kleur
-- Korpus: kleur binnenzijde
-- Plint: hoogte en kleur
-- Greep: uitvoering en kleur
-- Scharnieren, lades, etc.
-- Kolomkast hoogte, aanrecht hoogte, blad dikte
-
-### 3. Apparatuur met Groepering (image005)
-Apparaten gegroepeerd per locatie:
-- "Apparatuur kastenwand bestaande uit:" (Miele koelkast, oven, etc.)
-- "Apparatuur eiland bestaande uit:" (kookplaat, afzuig, vaatwasser)
-
-### 4. Werkbladen (image006)
-Configuratie met:
-- Materiaal (Keramiek 12mm)
-- Kleur
-- Randafwerking
-- Groepering: "Werkblad voor eiland:", "Werkblad voor dressoir:"
-
-### 5. Montage Artikelen (image007)
-Serviceregels zoals:
-- Keukenmontage per m1
-- Aansluitkosten
-- Transportkosten per zone
+Dit plan optimaliseert alle pagina's in de applicatie voor mobiel gebruik. Uit de analyse blijkt dat sommige pagina's (Customers, Quotes) al goed geoptimaliseerd zijn met table-to-card transformaties, terwijl andere pagina's nog verbeteringen nodig hebben.
 
 ---
 
-## Huidige Situatie vs. Gewenste Situatie
+## Huidige Status per Pagina
 
-| Functie | Huidige Status | Nodig |
-|---------|----------------|-------|
-| Klant selecteren bij offerte | Ja | - |
-| Secties aanmaken (meubelen, apparatuur, etc.) | Ja | - |
-| Leverancier/Prijsgroep per sectie | Ja | - |
-| Kleur selectie per sectie | Ja | - |
-| Configuratie-eigenschappen (front, corpus, etc.) | Ja | - |
-| Producten toevoegen met prijs-lookup | Ja | - |
-| Groepkoppen (bijv. "Eiland bestaande uit:") | Ja | - |
-| Korting op offerte-niveau | Ja | - |
-| **Korting per sectie** | **Nee** | **Ja** |
-| Sectie-configuratie doorkopiëren naar order | Gedeeltelijk | Verbeteren |
-| Sectie-subtotalen met korting | Nee | Ja |
-
----
-
-## Te Implementeren Functionaliteiten
-
-### 1. Korting per Sectie
-
-Voeg de mogelijkheid toe om per sectie een korting (percentage of bedrag) in te stellen.
-
-**Database wijziging - quote_sections tabel:**
-```sql
-ALTER TABLE quote_sections ADD COLUMN discount_percentage numeric;
-ALTER TABLE quote_sections ADD COLUMN discount_amount numeric DEFAULT 0;
-ALTER TABLE quote_sections ADD COLUMN discount_description text;
-```
-
-**Database wijziging - order_sections tabel (nieuw):**
-Om secties ook op orders te behouden (voor facturatie en leveranciersorders):
-```sql
-CREATE TABLE order_sections (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
-  quote_section_id uuid REFERENCES quote_sections(id),
-  section_type text NOT NULL,
-  title text,
-  sort_order int,
-  subtotal numeric DEFAULT 0,
-  discount_percentage numeric,
-  discount_amount numeric DEFAULT 0,
-  discount_description text,
-  -- Configuratie velden (gekopieerd van quote_section)
-  range_id uuid REFERENCES product_ranges(id),
-  color_id uuid REFERENCES product_colors(id),
-  front_number text,
-  front_color text,
-  corpus_color text,
-  plinth_color text,
-  hinge_color text,
-  drawer_color text,
-  handle_number text,
-  column_height_mm int,
-  countertop_height_mm int,
-  countertop_thickness_mm int,
-  workbench_material text,
-  workbench_edge text,
-  workbench_color text,
-  description text,
-  created_at timestamp DEFAULT now()
-);
-```
-
-**Database wijziging - order_lines uitbreiden:**
-```sql
-ALTER TABLE order_lines ADD COLUMN section_id uuid REFERENCES order_sections(id);
-```
-
-### 2. UI Aanpassingen
-
-#### Sectie Korting Editor (QuoteSectionCard)
-Voeg een korting-editor toe aan elke sectie:
-- Percentage/bedrag toggle
-- Automatische berekening van kortingsbedrag
-- Optionele omschrijving (bijv. "Showroommodel", "Actie")
-
-#### Sectie Totalen Update
-Pas `QuoteSectionCard` aan om:
-- Bruto subtotaal te tonen (som van alle regels)
-- Korting regel te tonen (als korting > 0)
-- Netto sectietotaal te tonen
-
-#### QuoteTotals Component
-Pas aan voor:
-- Toon totalen per sectie met korting
-- Totaal alle secties
-- Quote-niveau korting
-- Eindtotalen
-
-### 3. Quote naar Order Conversie Verbeteren
-
-Update `useConvertQuoteToOrder` om:
-1. Order secties aan te maken (nieuw)
-2. Sectie-configuratie volledig te kopiëren
-3. Sectie-korting mee te nemen
-4. Order lines te koppelen aan order sections
-
-### 4. Order Secties Weergave
-
-Update `OrderLinesTable` om:
-- Regels per sectie te groeperen
-- Sectie-korting te tonen
-- Sectie-totalen te berekenen
+| Pagina | Desktop | Mobile | Status |
+|--------|---------|--------|--------|
+| Dashboard | Goed | Goed | OK |
+| Customers | Tabel | Cards | OK |
+| CustomerDetail | Goed | Goed | OK |
+| Quotes | Tabel | Cards | OK |
+| QuoteDetail | Goed | Goed | OK |
+| Orders | Tabel | ONTBREEKT | Aanpassen |
+| OrderDetail | Goed | Goed | OK |
+| Products | Tabel | ONTBREEKT | Aanpassen |
+| Service | Filters horizontaal | ONTBREEKT | Aanpassen |
+| ServiceTicketDetail | 3-kolom grid | ONTBREEKT | Aanpassen |
+| Invoices | Tabel | ONTBREEKT | Aanpassen |
+| Settings | Tabel | ONTBREEKT | Aanpassen |
+| Calendar | 7-kolom grid | ONTBREEKT | Aanpassen |
+| Installation | Cards | Responsive tweaks | Kleine aanpassingen |
+| Reports | Grid | OK | Kleine aanpassingen |
+| PriceGroups | Tabel | ONTBREEKT | Aanpassen |
+| ProductImport | Multi-step form | OK | Kleine aanpassingen |
+| ServiceTicketPublicForm | Responsive | OK | OK |
+| Login | Centered card | OK | OK |
 
 ---
 
-## Technische Implementatie
+## Te Wijzigen Bestanden
 
-### Fase 1: Database Migratie
+### 1. Orders.tsx - Mobile Cards View
 
-```sql
--- 1. Korting velden toevoegen aan quote_sections
-ALTER TABLE quote_sections 
-ADD COLUMN IF NOT EXISTS discount_percentage numeric,
-ADD COLUMN IF NOT EXISTS discount_amount numeric DEFAULT 0,
-ADD COLUMN IF NOT EXISTS discount_description text;
+**Probleem**: De Orders pagina toont alleen een tabel die op mobile slecht leesbaar is.
 
--- 2. Order sections tabel aanmaken
-CREATE TABLE order_sections (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  quote_section_id uuid REFERENCES quote_sections(id),
-  section_type text NOT NULL,
-  title text,
-  sort_order int DEFAULT 0,
-  subtotal numeric DEFAULT 0,
-  discount_percentage numeric,
-  discount_amount numeric DEFAULT 0,
-  discount_description text,
-  range_id uuid REFERENCES product_ranges(id),
-  color_id uuid REFERENCES product_colors(id),
-  front_number text,
-  front_color text,
-  corpus_color text,
-  plinth_color text,
-  hinge_color text,
-  drawer_color text,
-  handle_number text,
-  column_height_mm int,
-  countertop_height_mm int,
-  countertop_thickness_mm int,
-  workbench_material text,
-  workbench_edge text,
-  workbench_color text,
-  description text,
-  created_at timestamptz DEFAULT now()
-);
-
--- 3. Section_id toevoegen aan order_lines
-ALTER TABLE order_lines 
-ADD COLUMN IF NOT EXISTS section_id uuid REFERENCES order_sections(id);
-
--- 4. RLS policies
-ALTER TABLE order_sections ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Authenticated users can view order sections"
-ON order_sections FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Authenticated users can insert order sections"
-ON order_sections FOR INSERT TO authenticated WITH CHECK (true);
-
-CREATE POLICY "Authenticated users can update order sections"
-ON order_sections FOR UPDATE TO authenticated USING (true);
-
--- 5. Index voor performance
-CREATE INDEX idx_order_sections_order_id ON order_sections(order_id);
-CREATE INDEX idx_order_lines_section_id ON order_lines(section_id);
-```
-
-### Fase 2: Frontend - Sectie Korting
-
-**Bestanden te wijzigen:**
-
-1. `src/hooks/useQuoteSections.ts` - Update types voor discount velden
-2. `src/components/quotes/QuoteSectionCard.tsx` - Korting UI toevoegen
-3. `src/components/quotes/QuoteSectionConfig.tsx` - Korting tab toevoegen in config dialog
-4. `src/components/quotes/QuoteTotals.tsx` - Sectie-korting meenemen in berekening
-
-**Nieuwe component: SectionDiscountEditor**
-```
-src/components/quotes/SectionDiscountEditor.tsx
-```
-- Percentage/bedrag toggle
-- Input velden
-- Live preview van korting
-
-### Fase 3: Quote naar Order Conversie
-
-**Bestanden te wijzigen:**
-
-1. `src/hooks/useConvertQuoteToOrder.ts` - Volledig herschrijven om order_sections te creëren
-2. `src/integrations/supabase/types.ts` - Wordt automatisch geüpdatet na migratie
-
-**Nieuwe hooks:**
-```
-src/hooks/useOrderSections.ts - CRUD voor order sections
-```
-
-### Fase 4: Order Weergave Update
-
-**Bestanden te wijzigen:**
-
-1. `src/hooks/useOrders.ts` - Order sections ophalen
-2. `src/components/orders/OrderLinesTable.tsx` - Groeperen per sectie
-3. `src/pages/OrderDetail.tsx` - Secties tonen met configuratie
-
----
-
-## Workflow Diagram
+**Oplossing**:
+- Header responsive maken met flex-wrap
+- Filters in mobiele layout stapelen
+- Mobile cards view toevoegen (vergelijkbaar met Customers/Quotes)
 
 ```text
-OFFERTE AANMAKEN
-┌────────────────────────────────────────────────────────────────┐
-│ 1. Klant selecteren/aanmaken                                   │
-│ 2. Nieuwe sectie toevoegen (bijv. "Meubelen - Eiland")        │
-│    ├─ Leverancier kiezen                                       │
-│    ├─ Prijsgroep (Range) selecteren                           │
-│    ├─ Kleur kiezen                                            │
-│    └─ Configuratie invullen (front, corpus, etc.)             │
-│ 3. Producten toevoegen aan sectie                              │
-│    ├─ Prijs automatisch op basis van prijsgroep               │
-│    ├─ Groepkoppen toevoegen ("Bestaande uit:")                │
-│    └─ Sub-regels/accessoires                                  │
-│ 4. Sectie korting toepassen (optioneel)                        │
-│ 5. Herhaal voor andere secties (apparatuur, werkblad, etc.)   │
-│ 6. Offerte-niveau korting toepassen (optioneel)               │
-│ 7. Betalingsvoorwaarden instellen                              │
-│ 8. PDF exporteren en versturen                                 │
-└────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-OFFERTE GEACCEPTEERD → OMZETTEN NAAR ORDER
-┌────────────────────────────────────────────────────────────────┐
-│ • Alle secties met configuratie gekopieerd                     │
-│ • Alle regels met prijzen gekopieerd                          │
-│ • Sectie-kortingen behouden                                    │
-│ • Status: "Nieuw"                                              │
-└────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-ORDER VERWERKING
-┌────────────────────────────────────────────────────────────────┐
-│ • Bestelklaar maken (vier-ogen principe)                       │
-│ • Per sectie/leverancier inkooporders plaatsen                │
-│ • Levering en montage plannen                                  │
-│ • Betalingen registreren                                       │
-└────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-FACTURATIE
-┌────────────────────────────────────────────────────────────────┐
-│ • Factuur genereren op basis van order + secties               │
-│ • Sectie-structuur behouden in factuurregels                  │
-│ • Push naar Exact Online                                       │
-└────────────────────────────────────────────────────────────────┘
+DESKTOP: Tabel met 6 kolommen
+MOBILE: Card per order met:
+  - Order nummer + Status badge
+  - Klantnaam
+  - Bedrag + Betaalstatus
+  - Leverdatum
+```
+
+### 2. Products.tsx - Mobile Cards View
+
+**Probleem**: De Products pagina toont alleen een tabel.
+
+**Oplossing**:
+- Filters responsive stapelen
+- Mobile cards toevoegen
+
+```text
+DESKTOP: Tabel met 6 kolommen
+MOBILE: Card per product met:
+  - Artikelcode
+  - Naam
+  - Leverancier + Categorie
+  - Verkoop-/Inkoopprijs
+```
+
+### 3. Service.tsx - Filter Optimalisatie
+
+**Probleem**: Filters staan horizontaal en knijpen op mobile.
+
+**Oplossing**:
+- Filters in flex-wrap stapelen
+- Zoekbalk full width op mobile
+- View toggle compact maken
+
+### 4. ServiceTicketDetail.tsx - Mobile Layout
+
+**Probleem**: 3-kolom grid wordt te smal op mobile.
+
+**Oplossing**:
+- Grid naar 1 kolom op mobile
+- Sidebar cards onder main content
+- Accordion voor sommige cards om ruimte te besparen
+
+### 5. ServiceTicketTable.tsx - Mobile Cards
+
+**Probleem**: Tabel is onleesbaar op mobile.
+
+**Oplossing**:
+- Tabel hidden op mobile
+- Mobile cards view toevoegen
+
+### 6. Invoices.tsx - Mobile Optimalisatie
+
+**Probleem**: Stat cards en tabel zijn niet responsive.
+
+**Oplossing**:
+- Stat cards 2x2 grid op mobile
+- Filters stapelen
+- Tabel naar scrollable of cards
+
+### 7. Calendar.tsx - Mobile View
+
+**Probleem**: 7-kolom grid is te smal op mobile.
+
+**Oplossing**:
+- Weeknamen afkorten tot 1 letter
+- Kleinere cellen
+- Events compacter weergeven
+- Optioneel: agenda list view voor mobile
+
+### 8. Settings.tsx - Mobile Tabel
+
+**Probleem**: Gebruikerstabel is niet mobile-friendly.
+
+**Oplossing**:
+- Tabel hidden op mobile
+- Mobile cards view voor gebruikers
+
+### 9. PriceGroups.tsx - Mobile Cards
+
+**Probleem**: Tabel niet mobile-friendly.
+
+**Oplossing**:
+- Tabel hidden op mobile
+- Cards view voor prijsgroepen
+
+### 10. Installation.tsx - Kleine Tweaks
+
+**Probleem**: Header en filters kunnen beter.
+
+**Oplossing**:
+- Header flex-wrap
+- Filters stapelen op mobile
+
+### 11. Reports.tsx - Grid Tweaks
+
+**Probleem**: Charts kunnen overlopen.
+
+**Oplossing**:
+- Maandelijkse revenue chart responsive maken
+
+---
+
+## Implementatie Details
+
+### Algemene Patronen
+
+Alle mobile optimalisaties volgen dezelfde patronen:
+
+1. **Header**: `flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between`
+2. **Filters**: `flex flex-col sm:flex-row sm:flex-wrap gap-3`
+3. **Tabel-to-Cards**: 
+   - Desktop: `hidden md:block` voor tabel
+   - Mobile: `md:hidden space-y-3` voor cards
+4. **Grids**: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` progressieve breakpoints
+
+### Fase 1: Kritieke Pagina's (Meest Gebruikt)
+
+1. **Orders.tsx**
+   - Header responsive maken
+   - Filters stapelen
+   - Mobile cards view toevoegen
+
+2. **Service.tsx**
+   - Filters responsive maken
+
+3. **ServiceTicketDetail.tsx**
+   - Grid naar 1 kolom op mobile
+   - Cards order aanpassen
+
+4. **ServiceTicketTable.tsx**
+   - Mobile cards toevoegen
+
+### Fase 2: Secundaire Pagina's
+
+5. **Products.tsx**
+   - Filters responsive
+   - Mobile cards
+
+6. **Invoices.tsx**
+   - Stat cards responsive
+   - Filters en tabel
+
+7. **Settings.tsx**
+   - Tabs responsive
+   - Gebruikerstabel naar cards
+
+### Fase 3: Planning Pagina's
+
+8. **Calendar.tsx**
+   - Compactere mobile view
+   - Kleinere dag-cellen
+
+9. **Installation.tsx**
+   - Header en filters responsive
+
+### Fase 4: Overige
+
+10. **PriceGroups.tsx**
+    - Mobile cards
+
+11. **Reports.tsx**
+    - Charts responsive
+
+---
+
+## Verwachte Wijzigingen per Bestand
+
+| Bestand | Wijziging Type |
+|---------|----------------|
+| `src/pages/Orders.tsx` | Header, filters, mobile cards |
+| `src/pages/Products.tsx` | Header, filters, mobile cards |
+| `src/pages/Service.tsx` | Filters, zoekbalk |
+| `src/pages/ServiceTicketDetail.tsx` | Grid, card volgorde |
+| `src/components/service/ServiceTicketTable.tsx` | Mobile cards |
+| `src/pages/Invoices.tsx` | Stats, filters, tabel |
+| `src/pages/Calendar.tsx` | Compactere view |
+| `src/pages/Installation.tsx` | Header, filters |
+| `src/pages/Settings.tsx` | Tabs, gebruikerstabel |
+| `src/pages/PriceGroups.tsx` | Header, mobile cards |
+| `src/pages/Reports.tsx` | Chart aanpassingen |
+
+---
+
+## Technische Details
+
+### Mobile Card Component Patroon
+
+Alle mobile cards volgen dit patroon:
+
+```tsx
+{/* Desktop Table */}
+<div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card">
+  <table>...</table>
+</div>
+
+{/* Mobile Cards */}
+<div className="md:hidden space-y-3">
+  {items.map((item) => (
+    <div 
+      key={item.id}
+      onClick={() => navigate(`/path/${item.id}`)}
+      className="p-4 rounded-xl border border-border bg-card cursor-pointer 
+                 transition-colors hover:bg-muted/30 active:bg-muted/50"
+    >
+      {/* Card content */}
+    </div>
+  ))}
+</div>
+```
+
+### Responsive Filter Patroon
+
+```tsx
+<div className="mb-4 md:mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+  {/* Division filter */}
+  <div className="flex items-center gap-2">
+    <span className="text-[13px] text-muted-foreground hidden sm:inline">Label:</span>
+    <Select>...</Select>
+  </div>
+  
+  {/* Search - full width on mobile */}
+  <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
+    <Input />
+  </div>
+</div>
+```
+
+### ServiceTicketDetail Grid Aanpassing
+
+```tsx
+// Van:
+<div className="grid gap-4 lg:grid-cols-3">
+  <div className="lg:col-span-2">...</div>
+  <div>...</div>
+</div>
+
+// Naar:
+<div className="grid gap-4 lg:grid-cols-3">
+  {/* Main content first on all screens */}
+  <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">...</div>
+  
+  {/* Sidebar - shows above on mobile for quick status changes */}
+  <div className="space-y-4 order-1 lg:order-2">...</div>
+</div>
 ```
 
 ---
 
-## Bestanden Overzicht
+## Prioriteit
 
-### Nieuwe bestanden
-- `src/components/quotes/SectionDiscountEditor.tsx`
-- `src/hooks/useOrderSections.ts`
+De implementatie volgt deze volgorde op basis van gebruiksfrequentie:
 
-### Te wijzigen bestanden
-- `src/hooks/useQuoteSections.ts` - Discount types
-- `src/components/quotes/QuoteSectionCard.tsx` - Korting UI
-- `src/components/quotes/QuoteSectionConfig.tsx` - Korting tab
-- `src/components/quotes/QuoteTotals.tsx` - Berekeningen update
-- `src/hooks/useConvertQuoteToOrder.ts` - Sectie-conversie
-- `src/hooks/useOrders.ts` - Sections ophalen
-- `src/components/orders/OrderLinesTable.tsx` - Sectie-groepering
-- `src/pages/OrderDetail.tsx` - Secties weergave
+1. Orders (dagelijks gebruikt)
+2. Service module (nieuw, moet direct goed werken)
+3. Products (regelmatig gebruikt)
+4. Invoices (maandelijks)
+5. Calendar/Installation (planning)
+6. Settings (incidenteel)
+7. Reports/PriceGroups (incidenteel)
 
-### Database migratie
-- 1 migratie met alle schema-wijzigingen
-
----
-
-## Voordelen van deze Aanpak
-
-1. **Consistentie**: Sectie-structuur blijft behouden door hele workflow
-2. **Flexibiliteit**: Korting op zowel sectie- als offerte-niveau
-3. **Traceerbaarheid**: Van offerte-sectie naar order-sectie naar factuur
-4. **Leveranciersorders**: Per sectie (= per leverancier) bestellingen plaatsen
-5. **Rapportage**: Marge-analyse per sectie/leverancier mogelijk
