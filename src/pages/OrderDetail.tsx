@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, ExternalLink } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
-import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote } from "@/hooks/useOrderMutations";
+import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates } from "@/hooks/useOrderMutations";
 import { OrderStatusSelect } from "@/components/orders/OrderStatusSelect";
 import { PaymentCard } from "@/components/orders/PaymentCard";
 import { DocumentsCard } from "@/components/orders/DocumentsCard";
@@ -43,6 +43,7 @@ const OrderDetail = () => {
   const deleteDocument = useDeleteOrderDocument();
   const addNote = useAddOrderNote();
   const deleteNote = useDeleteOrderNote();
+  const updateDates = useUpdateOrderDates();
 
   useEffect(() => {
     if (error) {
@@ -181,6 +182,48 @@ const OrderDetail = () => {
     }
   };
 
+  const handleUpdateDeliveryDate = async (date: Date | null) => {
+    if (!id) return;
+
+    try {
+      await updateDates.mutateAsync({
+        orderId: id,
+        expectedDeliveryDate: date ? date.toISOString().split("T")[0] : null,
+      });
+      toast({
+        title: "Leverdatum bijgewerkt",
+        description: date ? `Leverdatum ingesteld op ${date.toLocaleDateString("nl-NL")}.` : "Leverdatum verwijderd.",
+      });
+    } catch (error) {
+      toast({
+        title: "Fout bij bijwerken",
+        description: "De leverdatum kon niet worden bijgewerkt.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateInstallationDate = async (date: Date | null) => {
+    if (!id) return;
+
+    try {
+      await updateDates.mutateAsync({
+        orderId: id,
+        expectedInstallationDate: date ? date.toISOString().split("T")[0] : null,
+      });
+      toast({
+        title: "Montagedatum bijgewerkt",
+        description: date ? `Montagedatum ingesteld op ${date.toLocaleDateString("nl-NL")}.` : "Montagedatum verwijderd.",
+      });
+    } catch (error) {
+      toast({
+        title: "Fout bij bijwerken",
+        description: "De montagedatum kon niet worden bijgewerkt.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <AppLayout title="Order" breadcrumb="Order laden...">
@@ -265,6 +308,9 @@ const OrderDetail = () => {
             orderDate={order.order_date}
             expectedDeliveryDate={order.expected_delivery_date}
             expectedInstallationDate={order.expected_installation_date}
+            onUpdateDeliveryDate={handleUpdateDeliveryDate}
+            onUpdateInstallationDate={handleUpdateInstallationDate}
+            isUpdating={updateDates.isPending}
           />
 
           <PaymentCard

@@ -27,6 +27,12 @@ interface UploadDocumentParams {
   visibleToInstaller?: boolean;
 }
 
+interface UpdateOrderDatesParams {
+  orderId: string;
+  expectedDeliveryDate?: string | null;
+  expectedInstallationDate?: string | null;
+}
+
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
@@ -228,6 +234,39 @@ export function useDeleteOrderNote() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["order", data.orderId] });
+    },
+  });
+}
+
+export function useUpdateOrderDates() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, expectedDeliveryDate, expectedInstallationDate }: UpdateOrderDatesParams) => {
+      const updates: Record<string, string | null> = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (expectedDeliveryDate !== undefined) {
+        updates.expected_delivery_date = expectedDeliveryDate;
+      }
+
+      if (expectedInstallationDate !== undefined) {
+        updates.expected_installation_date = expectedInstallationDate;
+      }
+
+      const { error } = await supabase
+        .from("orders")
+        .update(updates)
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      return { orderId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["order", data.orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
 }
