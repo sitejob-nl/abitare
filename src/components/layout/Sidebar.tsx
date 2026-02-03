@@ -100,11 +100,10 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
     ? roles[0].charAt(0).toUpperCase() + roles[0].slice(1) 
     : "Gebruiker";
 
-  // Get active division name
-  const activeDivision = activeDivisionId 
-    ? divisions?.find(d => d.id === activeDivisionId)
-    : divisions?.[0];
-  const divisionName = activeDivision?.name || "Alle vestigingen";
+  // Get active division name - show "Alle vestigingen" when no specific division is selected
+  const divisionName = activeDivisionId 
+    ? divisions?.find(d => d.id === activeDivisionId)?.name || "Onbekend"
+    : "Alle vestigingen";
 
   // Admins can switch divisions, others see only their own
   const canSwitchDivision = isAdmin && divisions && divisions.length > 1;

@@ -58,11 +58,10 @@ export function useCustomer(id: string | undefined) {
         .from("customers")
         .select(`
           *,
-          division:divisions(id, name),
-          referred_by:customers!customers_referred_by_customer_id_fkey(id, first_name, last_name)
+          division:divisions(id, name)
         `)
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return data;
