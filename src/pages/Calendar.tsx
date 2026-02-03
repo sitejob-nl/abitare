@@ -113,16 +113,21 @@ const CalendarPage = () => {
     return filteredEvents?.filter((event) => event.date === dateStr) || [];
   };
 
+  // Mobile day names (1 letter)
+  const mobileDayNames = ["M", "D", "W", "D", "V", "Z", "Z"];
+  // Desktop day names
+  const desktopDayNames = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
+
   return (
     <AppLayout title="Agenda" breadcrumb="Agenda">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Agenda
         </h1>
         <div className="flex items-center gap-3">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alles tonen" />
             </SelectTrigger>
             <SelectContent>
@@ -153,7 +158,7 @@ const CalendarPage = () => {
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <h2 className="ml-2 text-lg font-semibold text-foreground">
+          <h2 className="ml-2 text-base sm:text-lg font-semibold text-foreground">
             {format(currentMonth, "MMMM yyyy", { locale: nl })}
           </h2>
         </div>
@@ -177,12 +182,13 @@ const CalendarPage = () => {
           <>
             {/* Day Headers */}
             <div className="grid grid-cols-7 border-b border-border bg-muted/50">
-              {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day) => (
+              {desktopDayNames.map((day, index) => (
                 <div
                   key={day}
-                  className="px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  className="px-1 sm:px-2 py-2 sm:py-3 text-center text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
                 >
-                  {day}
+                  <span className="hidden sm:inline">{day}</span>
+                  <span className="sm:hidden">{mobileDayNames[index]}</span>
                 </div>
               ))}
             </div>
@@ -198,16 +204,16 @@ const CalendarPage = () => {
                   <div
                     key={index}
                     className={cn(
-                      "min-h-[100px] border-b border-r border-border-light p-2",
+                      "min-h-[60px] sm:min-h-[100px] border-b border-r border-border-light p-1 sm:p-2",
                       !isCurrentMonth && "bg-muted/30",
                       index % 7 === 6 && "border-r-0"
                     )}
                   >
                     <div
                       className={cn(
-                        "mb-1 text-sm font-medium",
+                        "mb-0.5 sm:mb-1 text-xs sm:text-sm font-medium",
                         isTodayDate
-                          ? "inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                          ? "inline-flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-primary text-primary-foreground"
                           : isCurrentMonth
                           ? "text-foreground"
                           : "text-muted-foreground"
@@ -215,28 +221,29 @@ const CalendarPage = () => {
                     >
                       {format(day, "d")}
                     </div>
-                    <div className="space-y-1">
-                      {dayEvents.slice(0, 3).map((event) => (
+                    <div className="space-y-0.5 sm:space-y-1">
+                      {dayEvents.slice(0, 2).map((event) => (
                         <div
                           key={event.id}
                           className={cn(
-                            "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                            "flex items-center gap-0.5 sm:gap-1 rounded px-1 py-0.5 text-[8px] sm:text-[10px] font-medium",
                             event.type === "delivery"
                               ? "bg-cyan-100 text-cyan-800"
                               : "bg-emerald-100 text-emerald-800"
                           )}
                         >
                           {event.type === "delivery" ? (
-                            <Truck className="h-3 w-3" />
+                            <Truck className="h-2 w-2 sm:h-3 sm:w-3 shrink-0" />
                           ) : (
-                            <Wrench className="h-3 w-3" />
+                            <Wrench className="h-2 w-2 sm:h-3 sm:w-3 shrink-0" />
                           )}
-                          <span className="truncate">{event.customerName}</span>
+                          <span className="truncate hidden sm:inline">{event.customerName}</span>
+                          <span className="truncate sm:hidden">#{event.orderNumber}</span>
                         </div>
                       ))}
-                      {dayEvents.length > 3 && (
-                        <div className="px-1.5 text-[10px] text-muted-foreground">
-                          +{dayEvents.length - 3} meer
+                      {dayEvents.length > 2 && (
+                        <div className="px-1 text-[8px] sm:text-[10px] text-muted-foreground">
+                          +{dayEvents.length - 2}
                         </div>
                       )}
                     </div>

@@ -105,7 +105,7 @@ const OrdersPage = () => {
   return (
     <AppLayout title="Orders" breadcrumb="Orders">
       {/* Page Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Orders
         </h1>
@@ -125,17 +125,18 @@ const OrdersPage = () => {
           </ToggleGroup>
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
-            Nieuwe order
+            <span className="hidden sm:inline">Nieuwe order</span>
+            <span className="sm:hidden">Nieuw</span>
           </Button>
         </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">Vestiging:</span>
+          <span className="text-[13px] text-muted-foreground hidden sm:inline">Vestiging:</span>
           <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-[13px]">
+            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
               <SelectValue placeholder="Alle vestigingen" />
             </SelectTrigger>
             <SelectContent>
@@ -151,9 +152,9 @@ const OrdersPage = () => {
 
         {viewMode === "list" && (
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-muted-foreground">Status:</span>
+            <span className="text-[13px] text-muted-foreground hidden sm:inline">Status:</span>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[160px] text-[13px]">
+              <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
                 <SelectValue placeholder="Alle statussen" />
               </SelectTrigger>
               <SelectContent>
@@ -168,7 +169,7 @@ const OrdersPage = () => {
           </div>
         )}
 
-        <div className="relative ml-auto max-w-[300px] flex-1">
+        <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Zoek op ordernummer of klant..."
@@ -186,91 +187,142 @@ const OrdersPage = () => {
 
       {/* List View */}
       {viewMode === "list" && (
-        <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+        <>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
-          </div>
-        ) : filteredOrders && filteredOrders.length > 0 ? (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Order
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Klant
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Bedrag
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Status
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Betaling
-                </th>
-                <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Leverdatum
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map((order) => {
-                const customer = order.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
-                const status = order.status as OrderStatus;
-                const paymentStatus = order.payment_status || "open";
-                const statusCfg = statusConfig[status] || statusConfig.nieuw;
-                const paymentCfg = paymentStatusConfig[paymentStatus] || paymentStatusConfig.open;
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
+            </div>
+          ) : filteredOrders && filteredOrders.length > 0 ? (
+            <>
+              {/* Desktop Table */}
+              <div className="hidden md:block animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Order
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Klant
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Bedrag
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Status
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Betaling
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Leverdatum
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.map((order) => {
+                      const customer = order.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
+                      const status = order.status as OrderStatus;
+                      const paymentStatus = order.payment_status || "open";
+                      const statusCfg = statusConfig[status] || statusConfig.nieuw;
+                      const paymentCfg = paymentStatusConfig[paymentStatus] || paymentStatusConfig.open;
+
+                      return (
+                        <tr
+                          key={order.id}
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                          className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                        >
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-medium text-foreground">
+                              #{order.order_number}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="text-sm text-foreground">
+                              {getCustomerName(customer)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-medium text-foreground">
+                              {formatCurrency(order.total_incl_vat)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", statusCfg.color)}>
+                              {statusCfg.label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", paymentCfg.color)}>
+                              {paymentCfg.label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-muted-foreground">
+                            {formatDate(order.expected_delivery_date)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3">
+                {filteredOrders.map((order) => {
+                  const customer = order.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
+                  const status = order.status as OrderStatus;
+                  const paymentStatus = order.payment_status || "open";
+                  const statusCfg = statusConfig[status] || statusConfig.nieuw;
+                  const paymentCfg = paymentStatusConfig[paymentStatus] || paymentStatusConfig.open;
 
                   return (
-                    <tr
+                    <div
                       key={order.id}
                       onClick={() => navigate(`/orders/${order.id}`)}
-                      className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                      className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
                     >
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        #{order.order_number}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-foreground">
-                        {getCustomerName(customer)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        {formatCurrency(order.total_incl_vat)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", statusCfg.color)}>
-                        {statusCfg.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", paymentCfg.color)}>
-                        {paymentCfg.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">
-                      {formatDate(order.expected_delivery_date)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <div className="py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              {debouncedSearch ? "Geen orders gevonden voor deze zoekopdracht" : "Nog geen orders aanwezig"}
-            </p>
-          </div>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className="text-sm font-semibold text-foreground">
+                            Order #{order.order_number}
+                          </span>
+                          <div className="text-sm text-foreground mt-0.5">
+                            {getCustomerName(customer)}
+                          </div>
+                        </div>
+                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", statusCfg.color)}>
+                          {statusCfg.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-light">
+                        <div>
+                          <span className="text-sm font-medium text-foreground">
+                            {formatCurrency(order.total_incl_vat)}
+                          </span>
+                          <span className={cn("ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium", paymentCfg.color)}>
+                            {paymentCfg.label}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(order.expected_delivery_date)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-border bg-card py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                {debouncedSearch ? "Geen orders gevonden voor deze zoekopdracht" : "Nog geen orders aanwezig"}
+              </p>
+            </div>
           )}
-        </div>
+        </>
       )}
     </AppLayout>
   );

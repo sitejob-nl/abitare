@@ -62,7 +62,7 @@ export default function Service() {
   return (
     <AppLayout title="Service Tickets">
       <div className="space-y-4">
-        {/* Header */}
+      {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Service Tickets</h1>
@@ -73,14 +73,15 @@ export default function Service() {
           <Button asChild>
             <Link to="/service/new">
               <Plus className="mr-2 h-4 w-4" />
-              Nieuw ticket
+              <span className="hidden sm:inline">Nieuw ticket</span>
+              <span className="sm:hidden">Nieuw</span>
             </Link>
           </Button>
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+          <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Zoeken..."
@@ -90,61 +91,65 @@ export default function Service() {
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle statussen</SelectItem>
-              <SelectItem value="nieuw">Nieuw</SelectItem>
-              <SelectItem value="in_behandeling">In behandeling</SelectItem>
-              <SelectItem value="wacht_op_klant">Wacht op klant</SelectItem>
-              <SelectItem value="wacht_op_onderdelen">Wacht op onderdelen</SelectItem>
-              <SelectItem value="ingepland">Ingepland</SelectItem>
-              <SelectItem value="afgerond">Afgerond</SelectItem>
-              <SelectItem value="geannuleerd">Geannuleerd</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-2 sm:flex gap-3">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[160px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle statussen</SelectItem>
+                <SelectItem value="nieuw">Nieuw</SelectItem>
+                <SelectItem value="in_behandeling">In behandeling</SelectItem>
+                <SelectItem value="wacht_op_klant">Wacht op klant</SelectItem>
+                <SelectItem value="wacht_op_onderdelen">Wacht op onderdelen</SelectItem>
+                <SelectItem value="ingepland">Ingepland</SelectItem>
+                <SelectItem value="afgerond">Afgerond</SelectItem>
+                <SelectItem value="geannuleerd">Geannuleerd</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Categorie" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle categorieën</SelectItem>
-              <SelectItem value="klacht">Klacht</SelectItem>
-              <SelectItem value="garantie">Garantie</SelectItem>
-              <SelectItem value="schade">Schade</SelectItem>
-              <SelectItem value="overig">Overig</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectValue placeholder="Categorie" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle categorieën</SelectItem>
+                <SelectItem value="klacht">Klacht</SelectItem>
+                <SelectItem value="garantie">Garantie</SelectItem>
+                <SelectItem value="schade">Schade</SelectItem>
+                <SelectItem value="overig">Overig</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue placeholder="Prioriteit" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle prioriteiten</SelectItem>
-              <SelectItem value="laag">Laag</SelectItem>
-              <SelectItem value="normaal">Normaal</SelectItem>
-              <SelectItem value="hoog">Hoog</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3">
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger className="w-full sm:w-[130px]">
+                <SelectValue placeholder="Prioriteit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle prioriteiten</SelectItem>
+                <SelectItem value="laag">Laag</SelectItem>
+                <SelectItem value="normaal">Normaal</SelectItem>
+                <SelectItem value="hoog">Hoog</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <div className="ml-auto">
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(value) => value && setViewMode(value as ViewMode)}
-            >
-              <ToggleGroupItem value="list" aria-label="Lijstweergave">
-                <List className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="kanban" aria-label="Kanbanweergave">
-                <Columns3 className="h-4 w-4" />
-              </ToggleGroupItem>
-            </ToggleGroup>
+            <div className="ml-auto">
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={(value) => value && setViewMode(value as ViewMode)}
+              >
+                <ToggleGroupItem value="list" aria-label="Lijstweergave">
+                  <List className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="kanban" aria-label="Kanbanweergave">
+                  <Columns3 className="h-4 w-4" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </div>
 

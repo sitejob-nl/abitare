@@ -118,52 +118,52 @@ const Reports = () => {
       ) : (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                   Totaal Klanten
                 </CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats?.customerCount || 0}</div>
+                <div className="text-xl sm:text-2xl font-bold">{reportStats?.customerCount || 0}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                   Totaal Offertes
                 </CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats?.quoteCount || 0}</div>
+                <div className="text-xl sm:text-2xl font-bold">{reportStats?.quoteCount || 0}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                   Totaal Orders
                 </CardTitle>
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats?.orderCount || 0}</div>
+                <div className="text-xl sm:text-2xl font-bold">{reportStats?.orderCount || 0}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
                   Conversieratio
                 </CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats?.conversionRate || 0}%</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats?.conversionRate || 0}%</div>
               </CardContent>
             </Card>
           </div>
@@ -171,24 +171,24 @@ const Reports = () => {
           {/* Monthly Revenue */}
           <Card>
             <CardHeader>
-              <CardTitle>Omzet per Maand</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Omzet per Maand</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-end gap-2 h-[200px]">
+              <div className="flex items-end gap-1 sm:gap-2 h-[180px] sm:h-[200px]">
                 {reportStats?.monthlyRevenue.map((item, index) => {
                   const maxRevenue = Math.max(...(reportStats?.monthlyRevenue.map(r => r.revenue) || [1]));
                   const height = maxRevenue > 0 ? (item.revenue / maxRevenue) * 100 : 0;
                   
                   return (
-                    <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="w-full flex flex-col items-center justify-end h-[160px]">
+                    <div key={index} className="flex-1 flex flex-col items-center gap-1 sm:gap-2">
+                      <div className="w-full flex flex-col items-center justify-end h-[120px] sm:h-[160px]">
                         <div 
-                          className="w-full max-w-[40px] bg-primary rounded-t"
+                          className="w-full max-w-[30px] sm:max-w-[40px] bg-primary rounded-t"
                           style={{ height: `${Math.max(height, 4)}%` }}
                         />
                       </div>
-                      <span className="text-xs text-muted-foreground">{item.month}</span>
-                      <span className="text-xs font-medium">{formatCurrency(item.revenue)}</span>
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">{item.month}</span>
+                      <span className="text-[10px] sm:text-xs font-medium hidden sm:block">{formatCurrency(item.revenue)}</span>
                     </div>
                   );
                 })}
@@ -199,19 +199,19 @@ const Reports = () => {
           {/* Orders by Status */}
           <Card>
             <CardHeader>
-              <CardTitle>Orders per Status</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Orders per Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
                 {Object.entries(reportStats?.statusCounts || {}).map(([status, count]) => (
                   <div
                     key={status}
-                    className="flex items-center justify-between rounded-lg border border-border p-3"
+                    className="flex items-center justify-between rounded-lg border border-border p-2 sm:p-3"
                   >
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs sm:text-sm text-muted-foreground truncate pr-2">
                       {statusLabels[status] || status}
                     </span>
-                    <span className="text-sm font-semibold">{count as number}</span>
+                    <span className="text-xs sm:text-sm font-semibold shrink-0">{count as number}</span>
                   </div>
                 ))}
               </div>

@@ -214,26 +214,27 @@ export default function PriceGroups() {
     <AppLayout title="Prijsgroepen">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Prijsgroepen</h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Beheer prijsgroepen en kleuren per leverancier
             </p>
           </div>
           <Button onClick={() => handleOpenRangeDialog()}>
             <Plus className="h-4 w-4 mr-2" />
-            Nieuwe prijsgroep
+            <span className="hidden sm:inline">Nieuwe prijsgroep</span>
+            <span className="sm:hidden">Nieuw</span>
           </Button>
         </div>
 
         {/* Filter */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Label className="whitespace-nowrap">Filter op leverancier:</Label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <Label className="whitespace-nowrap text-sm">Filter op leverancier:</Label>
               <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
-                <SelectTrigger className="w-[280px]">
+                <SelectTrigger className="w-full sm:w-[280px]">
                   <SelectValue placeholder="Alle leveranciers" />
                 </SelectTrigger>
                 <SelectContent>
@@ -249,100 +250,160 @@ export default function PriceGroups() {
           </CardContent>
         </Card>
 
-        {/* Ranges Table */}
+        {/* Ranges */}
         <Card>
           <CardHeader>
             <CardTitle>Prijsgroepen</CardTitle>
-            <CardDescription>
-              Prijsgroepen bepalen de verkoopprijs van producten. Elk product kan verschillende prijzen hebben per prijsgroep.
+            <CardDescription className="text-xs sm:text-sm">
+              Prijsgroepen bepalen de verkoopprijs van producten.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Naam</TableHead>
-                  <TableHead>Prijsgroep</TableHead>
-                  <TableHead>Leverancier</TableHead>
-                  <TableHead>Kleuren</TableHead>
-                  <TableHead className="w-[120px]">Acties</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rangesLoading ? (
+            {/* Desktop Table */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Laden...
-                    </TableCell>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Naam</TableHead>
+                    <TableHead>Prijsgroep</TableHead>
+                    <TableHead>Leverancier</TableHead>
+                    <TableHead>Kleuren</TableHead>
+                    <TableHead className="w-[120px]">Acties</TableHead>
                   </TableRow>
-                ) : ranges.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Geen prijsgroepen gevonden
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  ranges.map((range) => (
-                    <TableRow key={range.id}>
-                      <TableCell className="font-mono font-medium">{range.code}</TableCell>
-                      <TableCell>{range.name || "-"}</TableCell>
-                      <TableCell>
-                        {range.price_group ? (
-                          <Badge variant="secondary">Groep {range.price_group}</Badge>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {range.supplier ? (
-                          <span className="text-sm">
-                            {range.supplier.name}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenColorDialog(range.id)}
-                        >
-                          <Palette className="h-4 w-4 mr-1" />
-                          Kleuren
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenRangeDialog(range)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteRange(range.id, range.code)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {rangesLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Laden...
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : ranges.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Geen prijsgroepen gevonden
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    ranges.map((range) => (
+                      <TableRow key={range.id}>
+                        <TableCell className="font-mono font-medium">{range.code}</TableCell>
+                        <TableCell>{range.name || "-"}</TableCell>
+                        <TableCell>
+                          {range.price_group ? (
+                            <Badge variant="secondary">Groep {range.price_group}</Badge>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {range.supplier ? (
+                            <span className="text-sm">
+                              {range.supplier.name}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenColorDialog(range.id)}
+                          >
+                            <Palette className="h-4 w-4 mr-1" />
+                            Kleuren
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenRangeDialog(range)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteRange(range.id, range.code)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+              {rangesLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Laden...</div>
+              ) : ranges.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">Geen prijsgroepen gevonden</div>
+              ) : (
+                ranges.map((range) => (
+                  <div
+                    key={range.id}
+                    className="p-4 rounded-xl border border-border bg-card"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="min-w-0">
+                        <div className="font-mono text-sm font-medium">{range.code}</div>
+                        <div className="text-sm text-foreground truncate">
+                          {range.name || "-"}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleOpenColorDialog(range.id)}
+                        >
+                          <Palette className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleOpenRangeDialog(range)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteRange(range.id, range.code)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border-light text-xs text-muted-foreground">
+                      {range.price_group && (
+                        <Badge variant="secondary" className="text-xs">Groep {range.price_group}</Badge>
+                      )}
+                      <span>{range.supplier?.name || "-"}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
 
         {/* Range Dialog */}
         <Dialog open={rangeDialogOpen} onOpenChange={setRangeDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
                 {editingRange ? "Prijsgroep bewerken" : "Nieuwe prijsgroep"}
@@ -387,7 +448,8 @@ export default function PriceGroups() {
                         <SelectItem key={supplier.id} value={supplier.id}>
                           {supplier.name}
                         </SelectItem>
-                      ))}</SelectContent>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
@@ -414,7 +476,7 @@ export default function PriceGroups() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               {/* Add new color form */}
-              <div className="grid grid-cols-4 gap-3 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
                 <div className="space-y-2">
                   <Label>Code *</Label>
                   <Input
@@ -441,12 +503,13 @@ export default function PriceGroups() {
                 </div>
                 <Button onClick={handleSaveColor} disabled={createColor.isPending}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Toevoegen
+                  <span className="hidden sm:inline">Toevoegen</span>
+                  <span className="sm:hidden">+</span>
                 </Button>
               </div>
 
               {/* Existing colors */}
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -482,7 +545,7 @@ export default function PriceGroups() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-destructive hover:text-destructive"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
                               onClick={() => handleDeleteColor(color.id, color.name)}
                             >
                               <Trash2 className="h-4 w-4" />
