@@ -2,6 +2,7 @@ import { ReactNode, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDivisionChange } from "@/hooks/useDivisionChange";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -12,6 +13,9 @@ interface AppLayoutProps {
 export function AppLayout({ children, title, breadcrumb }: AppLayoutProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Clear React Query cache when division changes
+  useDivisionChange();
 
   return (
     <div className="flex h-screen overflow-hidden">
