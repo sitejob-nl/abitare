@@ -65,7 +65,8 @@ export function useOrder(id: string | undefined) {
           customer:customers(*),
           division:divisions(*),
           quote:quotes(id, quote_number),
-          order_lines(*)
+          order_lines(*),
+          order_documents(*)
         `)
         .eq("id", id)
         .single();
