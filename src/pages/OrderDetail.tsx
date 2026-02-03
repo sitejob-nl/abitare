@@ -11,6 +11,7 @@ import { DocumentsCard } from "@/components/orders/DocumentsCard";
 import { OrderInfoCard } from "@/components/orders/OrderInfoCard";
 import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
 import { NotesCard } from "@/components/orders/NotesCard";
+import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -199,6 +200,7 @@ const OrderDetail = () => {
   const orderLines = (order.order_lines || []) as any[];
   const documents = (order as any).order_documents || [];
   const notes = (order as any).order_notes || [];
+  const statusHistory = (order as any).order_status_history || [];
   const quote = order.quote as { id: string; quote_number: number } | null;
 
   return (
@@ -288,6 +290,8 @@ const OrderDetail = () => {
             isAdding={addNote.isPending}
             isDeleting={deleteNote.isPending}
           />
+
+          <StatusHistoryCard history={statusHistory} />
         </div>
       </div>
     </AppLayout>

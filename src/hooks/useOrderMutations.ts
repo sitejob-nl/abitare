@@ -48,6 +48,8 @@ export function useUpdateOrderStatus() {
       if (updateError) throw updateError;
 
       // Add to status history
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const { error: historyError } = await supabase
         .from("order_status_history")
         .insert({
@@ -55,6 +57,7 @@ export function useUpdateOrderStatus() {
           from_status: currentOrder?.status,
           to_status: status,
           notes,
+          changed_by: user?.id,
         });
 
       if (historyError) throw historyError;
