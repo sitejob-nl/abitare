@@ -14,6 +14,7 @@ import { QuoteLine } from "@/hooks/useQuoteLines";
 import { QuoteLineRow } from "./QuoteLineRow";
 import { AddProductDialog } from "./AddProductDialog";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
+import { SectionDiscountEditor } from "./SectionDiscountEditor";
 
 interface QuoteSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
@@ -54,8 +55,16 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
     subLinesMap.get(parentId)!.push(subLine);
   });
 
-  // Calculate section subtotal from lines
-  const subtotal = lines.reduce((sum, line) => sum + (line.line_total || 0), 0);
+  // Calculate section subtotal from lines (bruto)
+  const brutoSubtotal = lines.reduce((sum, line) => sum + (line.line_total || 0), 0);
+  
+  // Calculate discount amount
+  const discountAmount = section.discount_percentage 
+    ? (brutoSubtotal * (section.discount_percentage || 0)) / 100
+    : (section.discount_amount || 0);
+  
+  // Net subtotal after discount
+  const nettoSubtotal = brutoSubtotal - discountAmount;
 
   // Number the lines sequentially
   let lineNumber = 0;
@@ -151,18 +160,35 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
 
           {/* Section footer */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t bg-muted/10 px-3 md:px-4 py-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 w-full sm:w-auto"
-              onClick={() => setShowAddProduct(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Product toevoegen
-            </Button>
-            <div className="text-sm text-center sm:text-right">
-              <span className="text-muted-foreground">Sectie totaal:</span>
-              <span className="ml-2 font-semibold">{formatCurrency(subtotal)}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowAddProduct(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Product toevoegen
+              </Button>
+              <SectionDiscountEditor section={section} subtotal={brutoSubtotal} />
+            </div>
+            <div className="text-sm text-center sm:text-right space-y-0.5">
+              {discountAmount > 0 && (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">Subtotaal:</span>
+                    <span className="ml-2">{formatCurrency(brutoSubtotal)}</span>
+                  </div>
+                  <div className="text-green-600">
+                    <span>Korting{section.discount_percentage ? ` (${section.discount_percentage}%)` : ""}:</span>
+                    <span className="ml-2">- {formatCurrency(discountAmount)}</span>
+                  </div>
+                </>
+              )}
+              <div>
+                <span className="text-muted-foreground">Sectie totaal:</span>
+                <span className="ml-2 font-semibold">{formatCurrency(nettoSubtotal)}</span>
+              </div>
             </div>
           </div>
         </CardContent>

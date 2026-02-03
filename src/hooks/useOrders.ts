@@ -75,6 +75,11 @@ export function useOrder(id: string | undefined) {
             created_at,
             notes,
             changed_by
+          ),
+          order_sections(
+            *,
+            range:product_ranges(id, code, name, price_group),
+            color:product_colors(id, code, name, hex_color)
           )
         `)
         .eq("id", id)

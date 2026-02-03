@@ -1,5 +1,5 @@
-import { Package } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useMemo } from "react";
+import { Package, Percent } from "lucide-react";
 
 interface OrderLine {
   id: string;
@@ -13,10 +13,25 @@ interface OrderLine {
   is_group_header: boolean | null;
   group_title: string | null;
   section_type: string | null;
+  section_id: string | null;
+}
+
+interface OrderSection {
+  id: string;
+  section_type: string;
+  title: string | null;
+  sort_order: number | null;
+  subtotal: number | null;
+  discount_percentage: number | null;
+  discount_amount: number | null;
+  discount_description: string | null;
+  range?: { id: string; code: string; name: string | null } | null;
+  color?: { id: string; code: string; name: string } | null;
 }
 
 interface OrderLinesTableProps {
   lines: OrderLine[];
+  sections?: OrderSection[];
 }
 
 function formatCurrency(value: number | null): string {
@@ -27,7 +42,65 @@ function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
-export function OrderLinesTable({ lines }: OrderLinesTableProps) {
+const SECTION_TYPE_LABELS: Record<string, string> = {
+  meubelen: "Keukenmeubelen",
+  apparatuur: "Apparatuur",
+  werkbladen: "Werkbladen",
+  montage: "Montage",
+  transport: "Transport",
+  overig: "Overig",
+};
+
+export function OrderLinesTable({ lines, sections = [] }: OrderLinesTableProps) {
+  // Group lines by section
+  const groupedData = useMemo(() => {
+    if (!sections || sections.length === 0) {
+      // Fallback to old grouping by group_title
+      return null;
+    }
+
+    // Sort sections by sort_order
+    const sortedSections = [...sections].sort((a, b) => 
+      (a.sort_order || 0) - (b.sort_order || 0)
+    );
+
+    return sortedSections.map((section) => {
+      const sectionLines = lines
+        .filter((line) => line.section_id === section.id)
+        .sort((a, b) => {
+          // Sort by is_group_header first (headers come first), then by any existing order
+          if (a.is_group_header && !b.is_group_header) return -1;
+          if (!a.is_group_header && b.is_group_header) return 1;
+          return 0;
+        });
+
+      const brutoSubtotal = sectionLines.reduce(
+        (sum, line) => sum + (line.line_total || 0),
+        0
+      );
+
+      const discountAmount = section.discount_percentage
+        ? (brutoSubtotal * section.discount_percentage) / 100
+        : (section.discount_amount || 0);
+
+      const nettoSubtotal = brutoSubtotal - discountAmount;
+
+      return {
+        section,
+        lines: sectionLines,
+        brutoSubtotal,
+        discountAmount,
+        nettoSubtotal,
+      };
+    });
+  }, [lines, sections]);
+
+  // Lines without a section
+  const orphanLines = useMemo(() => {
+    if (!sections || sections.length === 0) return lines;
+    return lines.filter((line) => !line.section_id);
+  }, [lines, sections]);
+
   if (!lines || lines.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card p-5">
@@ -45,7 +118,179 @@ export function OrderLinesTable({ lines }: OrderLinesTableProps) {
     );
   }
 
-  // Group lines by section_type or group_title
+  // If we have sections, render grouped view
+  if (groupedData && groupedData.length > 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border p-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Package className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Orderregels</h3>
+              <p className="text-xs text-muted-foreground">
+                {lines.length} regel(s) in {groupedData.length} sectie(s)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="divide-y divide-border">
+          {groupedData.map(({ section, lines: sectionLines, brutoSubtotal, discountAmount, nettoSubtotal }) => (
+            <div key={section.id}>
+              {/* Section header */}
+              <div className="bg-muted/50 px-5 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-sm uppercase tracking-wide">
+                      {section.title || SECTION_TYPE_LABELS[section.section_type] || section.section_type}
+                    </h4>
+                    {section.range && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {section.range.code}
+                        {section.range.name && ` - ${section.range.name}`}
+                        {section.color && ` • ${section.color.name}`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right text-sm">
+                    {discountAmount > 0 && (
+                      <div className="flex items-center gap-1 text-green-600 text-xs">
+                        <Percent className="h-3 w-3" />
+                        {section.discount_percentage
+                          ? `${section.discount_percentage}%`
+                          : formatCurrency(discountAmount)}
+                      </div>
+                    )}
+                    <div className="font-semibold">{formatCurrency(nettoSubtotal)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section lines */}
+              {sectionLines.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Artikel
+                        </th>
+                        <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Omschrijving
+                        </th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Aantal
+                        </th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Prijs
+                        </th>
+                        <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Totaal
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectionLines.map((line) =>
+                        line.is_group_header ? (
+                          <tr key={line.id} className="bg-muted/10">
+                            <td colSpan={5} className="px-4 py-2 text-xs font-medium text-muted-foreground">
+                              {line.group_title || line.description}
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={line.id} className="border-b border-border/50 last:border-b-0">
+                            <td className="px-4 py-2.5 text-sm text-muted-foreground">
+                              {line.article_code || "-"}
+                            </td>
+                            <td className="px-4 py-2.5 text-sm text-foreground">
+                              {line.description}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-sm text-foreground">
+                              {line.quantity} {line.unit}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-sm text-foreground">
+                              {formatCurrency(line.unit_price)}
+                              {line.discount_percentage && line.discount_percentage > 0 && (
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                  (-{line.discount_percentage}%)
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right text-sm font-medium text-foreground">
+                              {formatCurrency(line.line_total)}
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="px-5 py-4 text-sm text-muted-foreground text-center">
+                  Geen regels in deze sectie
+                </div>
+              )}
+
+              {/* Section discount row */}
+              {discountAmount > 0 && (
+                <div className="px-5 py-2 bg-green-50 border-t border-green-100 flex justify-between text-sm">
+                  <span className="text-green-700">
+                    Sectiekorting
+                    {section.discount_description && ` (${section.discount_description})`}
+                  </span>
+                  <span className="font-medium text-green-700">
+                    - {formatCurrency(discountAmount)}
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Orphan lines (lines without a section) */}
+          {orphanLines.length > 0 && (
+            <div>
+              <div className="bg-muted/30 px-5 py-3">
+                <h4 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+                  Overige regels
+                </h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <tbody>
+                    {orphanLines
+                      .filter((line) => !line.is_group_header)
+                      .map((line) => (
+                        <tr key={line.id} className="border-b border-border/50 last:border-b-0">
+                          <td className="px-4 py-2.5 text-sm text-muted-foreground">
+                            {line.article_code || "-"}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm text-foreground">
+                            {line.description}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-sm text-foreground">
+                            {line.quantity} {line.unit}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-sm text-foreground">
+                            {formatCurrency(line.unit_price)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-sm font-medium text-foreground">
+                            {formatCurrency(line.line_total)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: original flat/grouped view for orders without sections
   const groupedLines: { title: string; lines: OrderLine[] }[] = [];
   let currentGroup: { title: string; lines: OrderLine[] } | null = null;
 
@@ -58,7 +303,6 @@ export function OrderLinesTable({ lines }: OrderLinesTableProps) {
     } else if (currentGroup) {
       currentGroup.lines.push(line);
     } else {
-      // Lines without a group header
       if (!groupedLines.find((g) => g.title === "Algemeen")) {
         groupedLines.push({ title: "Algemeen", lines: [] });
       }
@@ -70,7 +314,6 @@ export function OrderLinesTable({ lines }: OrderLinesTableProps) {
     groupedLines.push(currentGroup);
   }
 
-  // If no groups were created, show all lines flat
   const hasGroups = groupedLines.some((g) => g.lines.length > 0);
 
   return (
