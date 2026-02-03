@@ -1,196 +1,155 @@
 
-# Plan: Gebruikers, Vestigingen en Facturen Beheer
+# Plan: Klant-gecentreerd Offertes Overzicht
 
 ## Probleemanalyse
 
-Na onderzoek van de codebase en database heb ik de volgende ontbrekende functionaliteit geïdentificeerd:
+Uit de codebase-analyse blijkt dat:
 
-### 1. Vestigingen (Divisions)
-- **Huidige situatie**: Er bestaan al 2 vestigingen in de database (Roermond en Maastricht)
-- **Probleem**: De knop "Nieuwe vestiging" op de Settings pagina doet niets - er is geen dialog of mutation om vestigingen toe te voegen/bewerken
-
-### 2. Gebruikers (Users/Profiles)
-- **Huidige situatie**: Er is 1 admin gebruiker aanwezig
-- **Probleem**: De knop "Nieuwe gebruiker" doet niets - er is geen functionaliteit om:
-  - Nieuwe gebruikers uit te nodigen
-  - Gebruikers aan vestigingen te koppelen
-  - Rollen toe te wijzen
-
-### 3. Facturen (Invoices)
-- **Huidige situatie**: Facturen worden afgeleid van orders (`useInvoices` query)
-- **Probleem**: Er is geen "facturen aanmaken" functie omdat facturen automatisch ontstaan wanneer een offerte wordt omgezet naar een order - maar die "Offerte → Order" conversie ontbreekt
+1. **Geen klantdetailpagina bestaat** - Er is geen route `/customers/:id` waar alle offertes van een klant zichtbaar zijn
+2. **Nieuwe offertes beginnen "leeg"** - Bij het aanmaken van een offerte moet je telkens zoeken naar een klant
+3. **Geen overzicht van klanthistorie** - Je kunt niet snel zien welke offertes al voor een klant gemaakt zijn
+4. **Dupliceren werkt wel** - Er is al een `useDuplicateQuote` hook, maar je kunt niet snel een "variatie" van een bestaande offerte maken
 
 ---
 
 ## Oplossingsplan
 
-### Fase 1: Vestigingen Beheer
+### 1. Klantdetailpagina
 
-**Nieuwe componenten:**
-- `DivisionFormDialog.tsx` - Dialog voor toevoegen/bewerken van vestigingen
+Een nieuwe pagina `/customers/:id` met:
+- Klantgegevens (contactinfo, adres)
+- **Tabs** voor overzicht:
+  - Offertes (met statusbadges)
+  - Orders (indien omgezet)
+  - Notities/historie
 
-**Uitbreiding bestaande code:**
-- `useDivisions.ts` - Toevoegen van `useCreateDivision` en `useUpdateDivision` mutations
-- `Settings.tsx` - Koppelen van dialogs aan de bestaande knoppen
+**Quick actions op deze pagina:**
+- "Nieuwe offerte voor deze klant" (pre-filled customer)
+- "Kopieer offerte" vanuit de lijst
 
-**Functionaliteit:**
-- Vestiging naam, code, adres, telefoon, email
-- Actief/Inactief toggle
-- RLS policies staan al correct ingesteld (alleen admin kan invoegen/wijzigen)
+### 2. Verbeterde Klantentabel
+
+Maak de klantrijen klikbaar:
+- Klik → Navigeer naar klantdetail
+- Voeg kolom toe: "Laatste offerte" of "Aantal offertes"
+
+### 3. Snelle Offerte-aanmaak vanuit Klant
+
+Twee manieren om snel een offerte te maken:
+
+**a) Vanuit klantdetailpagina:**
+- Button "Nieuwe offerte" opent dialog met klant al geselecteerd
+- Extra optie: "Kopieer bestaande offerte" dropdown
+
+**b) Vanuit offerteoverzicht:**
+- "Snel dupliceren" knop per offerte
+- "Nieuwe versie" voor variant-offertes
+
+### 4. Pre-filled QuoteFormDialog
+
+Pas de `QuoteFormDialog` aan om een `customerId` prop te accepteren:
+- Indien meegegeven → klant automatisch geselecteerd
+- Snellere workflow vanaf klantpagina
 
 ---
 
-### Fase 2: Gebruikersbeheer
+## Nieuwe Bestanden
 
-**Nieuwe componenten:**
-- `UserFormDialog.tsx` - Dialog voor uitnodigen/bewerken van gebruikers
-- `UserRoleSelect.tsx` - Component voor rol-selectie
-
-**Uitbreiding bestaande code:**
-- Nieuw hook `useUsers.ts` met:
-  - `useInviteUser()` - Invite via Supabase Admin API (edge function)
-  - `useUpdateUser()` - Update profiel en rollen
-  - `useDeactivateUser()` - Deactiveer gebruiker
-
-**Edge Function:**
-- `invite-user/index.ts` - Server-side gebruiker uitnodiging (vereist service role key)
-
-**Functionaliteit:**
-- Gebruiker uitnodigen via email
-- Vestiging toewijzen
-- Rol(len) toewijzen (admin, manager, verkoper, monteur)
-- Actief/Inactief toggle
+| Bestand | Beschrijving |
+|---------|--------------|
+| `src/pages/CustomerDetail.tsx` | Klantdetailpagina met tabs |
+| `src/components/customers/CustomerQuotesTab.tsx` | Offertes-tab component |
+| `src/components/customers/CustomerOrdersTab.tsx` | Orders-tab component |
+| `src/components/customers/CustomerInfoCard.tsx` | Klantinfo kaart |
+| `src/hooks/useCustomerQuotes.ts` | Hook voor offertes per klant |
+| `src/hooks/useCustomerOrders.ts` | Hook voor orders per klant |
 
 ---
 
-### Fase 3: Offerte naar Order Conversie
+## Bestaande Bestanden te Wijzigen
 
-**Nieuwe componenten:**
-- `ConvertToOrderDialog.tsx` - Bevestigingsdialog voor conversie
-
-**Uitbreiding bestaande code:**
-- Nieuw hook `useConvertQuoteToOrder.ts` met logica:
-  1. Maak nieuwe order aan met data van offerte
-  2. Kopieer alle offerte-regels naar order-regels
-  3. Update offerte status naar "geaccepteerd"
-  4. Navigeer naar nieuwe order
-
-- `QuoteActions.tsx` - Voeg "Omzetten naar order" knop toe
-
-**Workflow:**
-```
-Offerte (status: geaccepteerd)
-       ↓
-[Omzetten naar order]
-       ↓
-Order wordt aangemaakt
-       ↓
-Order verschijnt in Facturen overzicht
-```
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/App.tsx` | Route toevoegen: `/customers/:id` |
+| `src/pages/Customers.tsx` | Rijen klikbaar maken → navigatie |
+| `src/components/quotes/QuoteFormDialog.tsx` | Prop `customerId` toevoegen voor pre-fill |
 
 ---
 
 ## Technische Details
 
-### Database - Geen wijzigingen nodig
-Alle benodigde tabellen en RLS policies bestaan al:
-- `divisions` - Vestigingen met INSERT/UPDATE voor admin
-- `profiles` - Gebruikersprofielen met INSERT/UPDATE policies
-- `user_roles` - Rollen met admin-only policies
-- `orders` - Orders met correcte division-based policies
-
-### Nieuwe Edge Function: `invite-user`
-
-Nodig voor het aanmaken van gebruikers via Supabase Auth Admin API:
+### Nieuwe Hook: `useCustomerQuotes`
 
 ```text
-POST /invite-user
-Body: {
-  email: string,
-  full_name: string,
-  division_id: string,
-  roles: ["verkoper" | "manager" | "monteur"]
-}
+useCustomerQuotes(customerId: string)
 
-Response: {
-  success: boolean,
-  user_id: string
+Query:
+  SELECT * FROM quotes
+  WHERE customer_id = $customerId
+  ORDER BY created_at DESC
+  
+Returns: Quote[] met status, bedrag, datum
+```
+
+### CustomerDetail Page Structuur
+
+```text
+┌─────────────────────────────────────────────────┐
+│  ← Terug    Klant #1234 - Van der Berg         │
+├─────────────────────────────────────────────────┤
+│ ┌─────────────────────┐  ┌───────────────────┐ │
+│ │ Contactgegevens     │  │ Actions           │ │
+│ │ - Email             │  │ [+ Nieuwe offerte]│ │
+│ │ - Telefoon          │  │ [Bewerken]        │ │
+│ │ - Adres             │  │                   │ │
+│ └─────────────────────┘  └───────────────────┘ │
+├─────────────────────────────────────────────────┤
+│  [Offertes (3)]  [Orders (1)]  [Notities]      │
+├─────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────┐   │
+│  │ #2024-042  │  Concept   │  €12.450  │ → │   │
+│  │ #2024-038  │  Verstuurd │  €8.200   │ → │   │
+│  │ #2024-021  │  Accepted  │  €15.800  │ → │   │
+│  └─────────────────────────────────────────┘   │
+│                                                 │
+│  [+ Kopieer #2024-042 als nieuwe offerte]      │
+└─────────────────────────────────────────────────┘
+```
+
+### QuoteFormDialog met Pre-fill
+
+Wijziging in props:
+```text
+interface QuoteFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  customerId?: string;  // NIEUW: pre-fill klant
 }
 ```
 
-De functie:
-1. Roept `supabase.auth.admin.createUser()` aan
-2. Update het profiel met division_id
-3. Voegt de gewenste rollen toe aan user_roles
-4. Stuurt uitnodigingsmail (optioneel)
-
-### Quote naar Order Conversie Logica
-
-```text
-Input: quote_id
-
-1. Haal offerte op met alle secties en regels
-2. Maak order aan:
-   - customer_id: van offerte
-   - division_id: van offerte
-   - quote_id: link naar originele offerte
-   - order_date: vandaag
-   - status: "nieuw"
-   - payment_status: "open"
-   - Kopieer bedragen (subtotal, totals, etc.)
-
-3. Kopieer quote_lines naar order_lines:
-   - Behoud section_type, group_title
-   - Kopieer alle prijzen en configuraties
-
-4. Update offerte status naar "geaccepteerd"
-
-5. Return nieuwe order_id
-```
-
----
-
-## Bestandsoverzicht
-
-### Nieuwe bestanden:
-
-| Bestand | Type | Doel |
-|---------|------|------|
-| `src/components/settings/DivisionFormDialog.tsx` | Component | Vestiging aanmaken/bewerken |
-| `src/components/settings/UserFormDialog.tsx` | Component | Gebruiker uitnodigen/bewerken |
-| `src/components/settings/UserRoleSelect.tsx` | Component | Rol-selectie component |
-| `src/components/quotes/ConvertToOrderDialog.tsx` | Component | Bevestiging voor conversie |
-| `src/hooks/useUsers.ts` | Hook | User management mutations |
-| `src/hooks/useConvertQuoteToOrder.ts` | Hook | Quote → Order conversie |
-| `supabase/functions/invite-user/index.ts` | Edge Function | User invitation via admin API |
-
-### Bestaande bestanden te wijzigen:
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/hooks/useDivisions.ts` | Toevoegen create/update mutations |
-| `src/pages/Settings.tsx` | Integreren dialogs en acties |
-| `src/components/quotes/QuoteActions.tsx` | Toevoegen "Omzetten naar order" knop |
-| `supabase/config.toml` | Registreren invite-user function |
+Gedrag:
+- Als `customerId` is meegegeven:
+  - Klant-selector is disabled en toont geselecteerde klant
+  - Focus gaat direct naar geldig-tot datum
 
 ---
 
 ## Verwacht Resultaat
 
-Na implementatie kan de admin:
+Na implementatie kan een verkoper:
 
-1. **Vestigingen beheren**
-   - Nieuwe vestiging toevoegen via dialog
-   - Bestaande vestigingen bewerken
-   - Vestigingen (de)activeren
+1. **Vanuit klantenoverzicht:**
+   - Klikken op klant → opent klantdetail
+   - Direct alle offertes en orders zien
 
-2. **Gebruikers beheren**
-   - Nieuwe gebruiker uitnodigen via email
-   - Gebruiker aan vestiging koppelen
-   - Rollen toewijzen/wijzigen
-   - Gebruikers deactiveren
+2. **Vanuit klantdetail:**
+   - "Nieuwe offerte" → dialog met klant al ingevuld
+   - "Kopieer offerte" → dupliceert bestaande offerte
 
-3. **Orders/Facturen aanmaken**
-   - Geaccepteerde offerte omzetten naar order
-   - Order verschijnt automatisch in Facturen overzicht
-   - Synchronisatie naar Exact Online werkt op basis van orders
+3. **Betere navigatie:**
+   - Snel schakelen tussen offertes van dezelfde klant
+   - Overzicht van klanthistorie op één plek
+
+4. **Workflow versnelling:**
+   - Minder klikken voor nieuwe offerte
+   - Variaties maken door dupliceren
