@@ -4,12 +4,13 @@ import { ArrowLeft, Loader2, ExternalLink } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
-import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument } from "@/hooks/useOrderMutations";
+import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote } from "@/hooks/useOrderMutations";
 import { OrderStatusSelect } from "@/components/orders/OrderStatusSelect";
 import { PaymentCard } from "@/components/orders/PaymentCard";
 import { DocumentsCard } from "@/components/orders/DocumentsCard";
 import { OrderInfoCard } from "@/components/orders/OrderInfoCard";
 import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
+import { NotesCard } from "@/components/orders/NotesCard";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -39,6 +40,8 @@ const OrderDetail = () => {
   const registerPayment = useRegisterPayment();
   const uploadDocument = useUploadOrderDocument();
   const deleteDocument = useDeleteOrderDocument();
+  const addNote = useAddOrderNote();
+  const deleteNote = useDeleteOrderNote();
 
   useEffect(() => {
     if (error) {
@@ -141,6 +144,42 @@ const OrderDetail = () => {
     }
   };
 
+  const handleAddNote = async (content: string, noteType: string) => {
+    if (!id) return;
+
+    try {
+      await addNote.mutateAsync({ orderId: id, content, noteType });
+      toast({
+        title: "Notitie toegevoegd",
+        description: "De notitie is opgeslagen.",
+      });
+    } catch (error) {
+      toast({
+        title: "Fout bij toevoegen",
+        description: "De notitie kon niet worden toegevoegd.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!id) return;
+
+    try {
+      await deleteNote.mutateAsync({ noteId, orderId: id });
+      toast({
+        title: "Notitie verwijderd",
+        description: "De notitie is verwijderd.",
+      });
+    } catch (error) {
+      toast({
+        title: "Fout bij verwijderen",
+        description: "De notitie kon niet worden verwijderd.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <AppLayout title="Order" breadcrumb="Order laden...">
@@ -159,6 +198,7 @@ const OrderDetail = () => {
   const division = order.division as any;
   const orderLines = (order.order_lines || []) as any[];
   const documents = (order as any).order_documents || [];
+  const notes = (order as any).order_notes || [];
   const quote = order.quote as { id: string; quote_number: number } | null;
 
   return (
@@ -239,6 +279,14 @@ const OrderDetail = () => {
             onDelete={handleDeleteDocument}
             isUploading={uploadDocument.isPending}
             isDeleting={deleteDocument.isPending}
+          />
+
+          <NotesCard
+            notes={notes}
+            onAdd={handleAddNote}
+            onDelete={handleDeleteNote}
+            isAdding={addNote.isPending}
+            isDeleting={deleteNote.isPending}
           />
         </div>
       </div>

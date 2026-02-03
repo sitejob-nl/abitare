@@ -66,7 +66,8 @@ export function useOrder(id: string | undefined) {
           division:divisions(*),
           quote:quotes(id, quote_number),
           order_lines(*),
-          order_documents(*)
+          order_documents(*),
+          order_notes(*)
         `)
         .eq("id", id)
         .single();
