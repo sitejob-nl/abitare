@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, Users, Shield, Link2 } from "lucide-react";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
+import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -210,7 +211,8 @@ const Settings = () => {
           </TabsContent>
 
           {/* Integrations Tab */}
-          <TabsContent value="integrations" className="space-y-4">
+          <TabsContent value="integrations" className="space-y-6">
+            <TradeplaceSettings />
             <ExactOnlineSettings />
           </TabsContent>
         </Tabs>

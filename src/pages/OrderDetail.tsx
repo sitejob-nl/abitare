@@ -12,6 +12,7 @@ import { OrderInfoCard } from "@/components/orders/OrderInfoCard";
 import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
 import { NotesCard } from "@/components/orders/NotesCard";
 import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
+import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -295,9 +296,20 @@ const OrderDetail = () => {
 
       {/* Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main content - Order lines */}
-        <div className="lg:col-span-2">
+        {/* Main content - Order lines and Supplier orders */}
+        <div className="lg:col-span-2 space-y-6">
           <OrderLinesTable lines={orderLines} />
+          <SupplierOrdersCard 
+            orderId={order.id} 
+            orderLines={orderLines.map(line => ({
+              id: line.id,
+              product_id: line.product_id,
+              description: line.description,
+              quantity: line.quantity,
+              unit_price: line.unit_price,
+              supplier_id: line.supplier_id
+            }))}
+          />
         </div>
 
         {/* Sidebar */}

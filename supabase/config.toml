@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.exact-sync-customers]
 verify_jwt = false
+
+[functions.tradeplace-config]
+verify_jwt = false
+
+[functions.tradeplace-availability]
+verify_jwt = false
+
+[functions.tradeplace-order]
+verify_jwt = false
+
+[functions.tradeplace-webhook]
+verify_jwt = false
