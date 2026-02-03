@@ -230,7 +230,13 @@ const QuoteDetail = () => {
           onStatusChange={handleStatusChange}
           isUpdating={updateQuote.isPending}
         />
-        <QuoteActions quoteId={id!} quoteNumber={quote.quote_number} />
+        <QuoteActions 
+          quoteId={id!} 
+          quoteNumber={quote.quote_number}
+          customerName={getCustomerName(customer)}
+          totalAmount={quote.total_incl_vat || 0}
+          status={quote.status || "concept"}
+        />
       </div>
 
       {/* Add section button */}

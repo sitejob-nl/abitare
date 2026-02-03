@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Trash2, Loader2 } from "lucide-react";
+import { Copy, Trash2, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,19 +15,35 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useDeleteQuote } from "@/hooks/useQuotes";
 import { useDuplicateQuote } from "@/hooks/useQuoteDuplicate";
+import { useConvertQuoteToOrder } from "@/hooks/useConvertQuoteToOrder";
+import { ConvertToOrderDialog } from "./ConvertToOrderDialog";
 import { toast } from "@/hooks/use-toast";
 
 interface QuoteActionsProps {
   quoteId: string;
   quoteNumber: number;
+  customerName?: string;
+  totalAmount?: number;
+  status?: string;
 }
 
-export function QuoteActions({ quoteId, quoteNumber }: QuoteActionsProps) {
+export function QuoteActions({ 
+  quoteId, 
+  quoteNumber, 
+  customerName = "Klant",
+  totalAmount = 0,
+  status = "concept"
+}: QuoteActionsProps) {
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
   
   const deleteQuote = useDeleteQuote();
   const duplicateQuote = useDuplicateQuote();
+  const convertToOrder = useConvertQuoteToOrder();
+
+  // Can convert if not already accepted or rejected
+  const canConvert = !["geaccepteerd", "afgewezen"].includes(status);
 
   const handleDelete = async () => {
     try {
@@ -65,8 +81,44 @@ export function QuoteActions({ quoteId, quoteNumber }: QuoteActionsProps) {
     }
   };
 
+  const handleConvert = async () => {
+    try {
+      const result = await convertToOrder.mutateAsync(quoteId);
+      toast({
+        title: "Order aangemaakt",
+        description: `Order #${result.orderNumber} is succesvol aangemaakt.`,
+      });
+      setShowConvertDialog(false);
+      navigate(`/orders/${result.orderId}`);
+    } catch (error) {
+      console.error("Error converting quote:", error);
+      toast({
+        title: "Fout bij conversie",
+        description: "De offerte kon niet worden omgezet naar een order.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex items-center gap-1">
+      {canConvert && (
+        <Button
+          variant="default"
+          size="sm"
+          className="gap-1.5 h-8"
+          onClick={() => setShowConvertDialog(true)}
+          disabled={convertToOrder.isPending}
+        >
+          {convertToOrder.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ArrowRight className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden sm:inline">Naar order</span>
+        </Button>
+      )}
+
       <Button
         variant="outline"
         size="sm"
@@ -117,6 +169,16 @@ export function QuoteActions({ quoteId, quoteNumber }: QuoteActionsProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ConvertToOrderDialog
+        open={showConvertDialog}
+        onOpenChange={setShowConvertDialog}
+        onConfirm={handleConvert}
+        quoteNumber={quoteNumber}
+        customerName={customerName}
+        totalAmount={totalAmount}
+        isPending={convertToOrder.isPending}
+      />
     </div>
   );
 }
