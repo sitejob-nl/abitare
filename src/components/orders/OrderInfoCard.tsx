@@ -1,6 +1,15 @@
-import { User, MapPin, Calendar, Phone, Mail, Building2 } from "lucide-react";
+import { useState } from "react";
+import { User, MapPin, Calendar, Phone, Mail, Building2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface Customer {
   id: string;
@@ -29,6 +38,9 @@ interface OrderInfoCardProps {
   orderDate: string | null;
   expectedDeliveryDate: string | null;
   expectedInstallationDate: string | null;
+  onUpdateDeliveryDate?: (date: Date | null) => void;
+  onUpdateInstallationDate?: (date: Date | null) => void;
+  isUpdating?: boolean;
 }
 
 function formatDate(date: string | null): string {
@@ -62,12 +74,76 @@ function getAddress(customer: Customer | null, useDelivery = false): string {
   ].filter(Boolean).join(", ") || "-";
 }
 
+interface EditableDateProps {
+  label: string;
+  value: string | null;
+  onUpdate: (date: Date | null) => void;
+  isUpdating?: boolean;
+}
+
+function EditableDate({ label, value, onUpdate, isUpdating }: EditableDateProps) {
+  const [open, setOpen] = useState(false);
+  const currentDate = value ? new Date(value) : undefined;
+
+  const handleSelect = (date: Date | undefined) => {
+    onUpdate(date || null);
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground group">
+      <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+      <div className="flex-1">
+        <span className="text-xs text-muted-foreground/70">{label}: </span>
+        <span>{formatDate(value)}</span>
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+            disabled={isUpdating}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <CalendarComponent
+            mode="single"
+            selected={currentDate}
+            onSelect={handleSelect}
+            initialFocus
+            className={cn("p-3 pointer-events-auto")}
+            locale={nl}
+          />
+          {value && (
+            <div className="border-t p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-destructive hover:text-destructive"
+                onClick={() => handleSelect(undefined)}
+              >
+                Datum verwijderen
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export function OrderInfoCard({
   customer,
   division,
   orderDate,
   expectedDeliveryDate,
   expectedInstallationDate,
+  onUpdateDeliveryDate,
+  onUpdateInstallationDate,
+  isUpdating,
 }: OrderInfoCardProps) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -135,7 +211,15 @@ export function OrderInfoCard({
               <span>{formatDate(orderDate)}</span>
             </div>
           </div>
-          {expectedDeliveryDate && (
+          
+          {onUpdateDeliveryDate ? (
+            <EditableDate
+              label="Levering"
+              value={expectedDeliveryDate}
+              onUpdate={onUpdateDeliveryDate}
+              isUpdating={isUpdating}
+            />
+          ) : expectedDeliveryDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-3.5 w-3.5" />
               <div>
@@ -144,7 +228,15 @@ export function OrderInfoCard({
               </div>
             </div>
           )}
-          {expectedInstallationDate && (
+          
+          {onUpdateInstallationDate ? (
+            <EditableDate
+              label="Montage"
+              value={expectedInstallationDate}
+              onUpdate={onUpdateInstallationDate}
+              isUpdating={isUpdating}
+            />
+          ) : expectedInstallationDate && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-3.5 w-3.5" />
               <div>
