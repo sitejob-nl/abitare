@@ -179,3 +179,52 @@ export function useDeleteOrderDocument() {
     },
   });
 }
+
+interface AddNoteParams {
+  orderId: string;
+  content: string;
+  noteType: string;
+}
+
+export function useAddOrderNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, content, noteType }: AddNoteParams) => {
+      const { error } = await supabase
+        .from("order_notes")
+        .insert({
+          order_id: orderId,
+          content,
+          note_type: noteType,
+        });
+
+      if (error) throw error;
+
+      return { orderId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["order", data.orderId] });
+    },
+  });
+}
+
+export function useDeleteOrderNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ noteId, orderId }: { noteId: string; orderId: string }) => {
+      const { error } = await supabase
+        .from("order_notes")
+        .delete()
+        .eq("id", noteId);
+
+      if (error) throw error;
+
+      return { orderId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["order", data.orderId] });
+    },
+  });
+}
