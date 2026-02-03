@@ -74,12 +74,11 @@ export function useOrder(id: string | undefined) {
             to_status,
             created_at,
             notes,
-            changed_by,
-            profile:profiles!order_status_history_changed_by_fkey(full_name, email)
+            changed_by
           )
         `)
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return data;
