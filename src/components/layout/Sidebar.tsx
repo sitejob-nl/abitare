@@ -18,6 +18,7 @@ import {
   ChevronDown,
   X,
   Check,
+  Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +61,7 @@ const navSections: NavSection[] = [
     items: [
       { icon: Calendar, label: "Agenda", href: "/calendar" },
       { icon: Wrench, label: "Montage", href: "/installation" },
+      { icon: Ticket, label: "Service", href: "/service" },
     ],
   },
   {

@@ -24,6 +24,9 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import CustomerDetail from "./pages/CustomerDetail";
+import Service from "./pages/Service";
+import ServiceTicketDetail from "./pages/ServiceTicketDetail";
+import ServiceTicketPublicForm from "./pages/ServiceTicketPublicForm";
 
 const queryClient = new QueryClient();
 
@@ -36,8 +39,9 @@ const App = () => (
         <InstallPrompt />
         <BrowserRouter>
           <Routes>
-            {/* Public route */}
+            {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/service/new" element={<ServiceTicketPublicForm />} />
             
             {/* Protected routes */}
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -56,6 +60,8 @@ const App = () => (
             <Route path="/settings/price-groups" element={<ProtectedRoute><PriceGroups /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
+            <Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
