@@ -14,6 +14,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ArrowLeft,
   Mail,
   Phone,
@@ -26,6 +39,12 @@ import {
   X,
   Send,
   ExternalLink,
+  Download,
+  Users,
+  FileText,
+  Package,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -40,6 +59,10 @@ import {
   useUnassignUser,
 } from "@/hooks/useServiceTicketMutations";
 import { useProfiles } from "@/hooks/useUsers";
+import { useCustomers } from "@/hooks/useCustomers";
+import { useQuotes } from "@/hooks/useQuotes";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   nieuw: { label: "Nieuw", className: "bg-blue-100 text-blue-700" },
@@ -72,14 +95,19 @@ export default function ServiceTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: ticket, isLoading } = useServiceTicket(id);
   const { data: users = [] } = useProfiles();
+  const { data: customers = [] } = useCustomers({ limit: 200 });
+  const { data: quotes = [] } = useQuotes({ limit: 200 });
   const updateStatus = useUpdateTicketStatus();
   const updateTicket = useUpdateTicket();
   const addNote = useAddTicketNote();
   const assignUser = useAssignUser();
   const unassignUser = useUnassignUser();
+  const { toast } = useToast();
 
   const [noteContent, setNoteContent] = useState("");
   const [isAddingAssignee, setIsAddingAssignee] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -122,6 +150,11 @@ export default function ServiceTicketDetail() {
     (user) => !assignees.some((a) => a.user_id === user.id)
   );
 
+  // Filter quotes by selected customer if one is selected
+  const filteredQuotes = ticket.customer_id
+    ? quotes.filter((q) => q.customer_id === ticket.customer_id)
+    : quotes;
+
   const handleStatusChange = (newStatus: string) => {
     updateStatus.mutate({
       ticketId: ticket.id,
@@ -135,6 +168,24 @@ export default function ServiceTicketDetail() {
       id: ticket.id,
       priority: newPriority as TicketPriority,
     });
+  };
+
+  const handleCustomerChange = (customerId: string | null) => {
+    updateTicket.mutate({
+      id: ticket.id,
+      customer_id: customerId,
+      // Clear quote if customer changes
+      quote_id: null,
+    });
+    setCustomerOpen(false);
+  };
+
+  const handleQuoteChange = (quoteId: string | null) => {
+    updateTicket.mutate({
+      id: ticket.id,
+      quote_id: quoteId,
+    });
+    setQuoteOpen(false);
   };
 
   const handleAddNote = () => {
@@ -152,6 +203,38 @@ export default function ServiceTicketDetail() {
 
   const handleUnassignUser = (userId: string) => {
     unassignUser.mutate({ ticketId: ticket.id, userId });
+  };
+
+  const handleDownloadAttachment = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("service-attachments")
+        .download(filePath);
+
+      if (error) throw error;
+
+      // Create download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        title: "Download mislukt",
+        description: "Kon het bestand niet downloaden",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getCustomerName = (customer: { first_name: string | null; last_name: string } | null) => {
+    if (!customer) return "";
+    return [customer.first_name, customer.last_name].filter(Boolean).join(" ");
   };
 
   return (
@@ -205,9 +288,20 @@ export default function ServiceTicketDetail() {
                         key={attachment.id}
                         className="flex items-center justify-between rounded-lg border p-2"
                       >
-                        <span className="text-sm truncate">{attachment.file_name}</span>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="h-4 w-4" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm truncate block">{attachment.file_name}</span>
+                          {attachment.file_size && (
+                            <span className="text-xs text-muted-foreground">
+                              {(attachment.file_size / 1024).toFixed(1)} KB
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadAttachment(attachment.file_path, attachment.file_name)}
+                        >
+                          <Download className="h-4 w-4" />
                         </Button>
                       </div>
                     ))}
@@ -356,14 +450,159 @@ export default function ServiceTicketDetail() {
                     {format(new Date(ticket.created_at), "d MMMM yyyy", { locale: nl })}
                   </p>
                 </div>
+              </CardContent>
+            </Card>
 
+            {/* Customer & Quote linking */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Koppelingen
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Customer selector */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Klant</label>
+                  <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={customerOpen}
+                        className="w-full justify-between"
+                      >
+                        {ticket.customer ? (
+                          <span className="truncate">{getCustomerName(ticket.customer)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Selecteer klant...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Zoek klant..." />
+                        <CommandList>
+                          <CommandEmpty>Geen klant gevonden</CommandEmpty>
+                          <CommandGroup>
+                            {ticket.customer_id && (
+                              <CommandItem onSelect={() => handleCustomerChange(null)}>
+                                <X className="mr-2 h-4 w-4" />
+                                Koppeling verwijderen
+                              </CommandItem>
+                            )}
+                            {customers.map((customer) => (
+                              <CommandItem
+                                key={customer.id}
+                                value={`${customer.first_name || ""} ${customer.last_name}`}
+                                onSelect={() => handleCustomerChange(customer.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    ticket.customer_id === customer.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {customer.first_name} {customer.last_name}
+                                {customer.company_name && (
+                                  <span className="ml-1 text-muted-foreground">
+                                    ({customer.company_name})
+                                  </span>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {ticket.customer && (
+                    <Link
+                      to={`/customers/${ticket.customer.id}`}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      Bekijk klant <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+
+                {/* Quote selector */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Offerte</label>
+                  <Popover open={quoteOpen} onOpenChange={setQuoteOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={quoteOpen}
+                        className="w-full justify-between"
+                      >
+                        {ticket.quote ? (
+                          <span>Offerte #{ticket.quote.quote_number}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Selecteer offerte...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Zoek offerte..." />
+                        <CommandList>
+                          <CommandEmpty>Geen offerte gevonden</CommandEmpty>
+                          <CommandGroup>
+                            {ticket.quote_id && (
+                              <CommandItem onSelect={() => handleQuoteChange(null)}>
+                                <X className="mr-2 h-4 w-4" />
+                                Koppeling verwijderen
+                              </CommandItem>
+                            )}
+                            {filteredQuotes.map((quote) => (
+                              <CommandItem
+                                key={quote.id}
+                                value={`${quote.quote_number}`}
+                                onSelect={() => handleQuoteChange(quote.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    ticket.quote_id === quote.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                #{quote.quote_number}
+                                {quote.customer && (
+                                  <span className="ml-1 text-muted-foreground truncate">
+                                    - {(quote.customer as any).first_name} {(quote.customer as any).last_name}
+                                  </span>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {ticket.quote && (
+                    <Link
+                      to={`/quotes/${ticket.quote.id}`}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      Bekijk offerte <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+
+                {/* Order link (if exists) */}
                 {ticket.order && (
-                  <div>
-                    <label className="text-xs text-muted-foreground">Gekoppelde order</label>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Order</label>
                     <Link
                       to={`/orders/${ticket.order.id}`}
                       className="text-sm text-primary hover:underline flex items-center gap-1"
                     >
+                      <Package className="h-3 w-3" />
                       Order #{ticket.order.order_number}
                       <ExternalLink className="h-3 w-3" />
                     </Link>

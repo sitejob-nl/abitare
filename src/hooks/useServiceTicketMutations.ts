@@ -28,6 +28,7 @@ interface UpdateTicketData {
   division_id?: string | null;
   order_id?: string | null;
   customer_id?: string | null;
+  quote_id?: string | null;
 }
 
 export function useCreateTicket() {
