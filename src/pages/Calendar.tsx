@@ -353,22 +353,22 @@ const CalendarPage = () => {
   return (
     <AppLayout title="Agenda" breadcrumb="Agenda">
       {/* Page Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-[28px] font-semibold text-foreground">
+      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-xl sm:text-[28px] font-semibold text-foreground">
           Agenda
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <CalendarViewToggle view={view} onViewChange={setView} />
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-[160px] text-[13px]">
-              <SelectValue placeholder="Alles tonen" />
+            <SelectTrigger className="h-9 w-[120px] sm:w-[160px] text-[13px]">
+              <SelectValue placeholder="Alles" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alles tonen</SelectItem>
               <SelectItem value="delivery">Leveringen</SelectItem>
               <SelectItem value="installation">Montages</SelectItem>
               {msConnection?.is_active && (
-                <SelectItem value="microsoft">Microsoft Agenda</SelectItem>
+                <SelectItem value="microsoft">Microsoft</SelectItem>
               )}
             </SelectContent>
           </Select>
@@ -376,12 +376,12 @@ const CalendarPage = () => {
       </div>
 
       {/* Navigation */}
-      <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 sm:mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             onClick={goToPrevious}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -389,17 +389,18 @@ const CalendarPage = () => {
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             onClick={goToNext}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <h2 className="ml-2 text-base sm:text-lg font-semibold text-foreground capitalize">
+          <h2 className="ml-1 sm:ml-2 text-sm sm:text-lg font-semibold text-foreground capitalize truncate max-w-[140px] sm:max-w-none">
             {getViewTitle()}
           </h2>
         </div>
-        <Button variant="outline" size="sm" onClick={goToToday}>
-          Vandaag
+        <Button variant="outline" size="sm" onClick={goToToday} className="text-xs sm:text-sm">
+          <span className="hidden sm:inline">Vandaag</span>
+          <span className="sm:hidden">Nu</span>
         </Button>
       </div>
 

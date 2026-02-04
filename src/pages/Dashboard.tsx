@@ -23,13 +23,13 @@ const Dashboard = () => {
   return (
     <AppLayout title="Dashboard" breadcrumb="Dashboard">
       {/* Stats Grid */}
-      <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 sm:mb-8 grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
         {isLoading ? (
           <>
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="flex h-[140px] items-center justify-center rounded-xl border border-border bg-card"
+                className="flex h-[100px] sm:h-[140px] items-center justify-center rounded-xl border border-border bg-card"
               >
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
@@ -38,7 +38,7 @@ const Dashboard = () => {
         ) : (
           <>
             <StatCard
-              icon={<Euro className="h-5 w-5" />}
+              icon={<Euro className="h-4 w-4 sm:h-5 sm:w-5" />}
               iconVariant="primary"
               value={formatCurrency(stats?.monthlyRevenue || 0)}
               label="Omzet deze maand"
@@ -53,24 +53,24 @@ const Dashboard = () => {
               animationDelay={0}
             />
             <StatCard
-              icon={<FileText className="h-5 w-5" />}
+              icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />}
               iconVariant="accent"
               value={formatCurrency(stats?.openQuotesValue || 0)}
-              label={`Openstaande offertes (${stats?.openQuotesCount || 0})`}
+              label={`Offertes (${stats?.openQuotesCount || 0})`}
               animationDelay={1}
             />
             <StatCard
-              icon={<Package className="h-5 w-5" />}
+              icon={<Package className="h-4 w-4 sm:h-5 sm:w-5" />}
               iconVariant="success"
               value={String(stats?.ordersInProgress || 0)}
-              label="Orders in behandeling"
+              label="In behandeling"
               animationDelay={2}
             />
             <StatCard
-              icon={<Target className="h-5 w-5" />}
+              icon={<Target className="h-4 w-4 sm:h-5 sm:w-5" />}
               iconVariant="warning"
               value={`${stats?.conversionRate || 0}%`}
-              label="Conversieratio (90 dagen)"
+              label="Conversie (90d)"
               animationDelay={3}
             />
           </>
