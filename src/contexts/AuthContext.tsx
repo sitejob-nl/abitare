@@ -17,6 +17,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isAdminOrManager: boolean;
+  isInstaller: boolean;
   activeDivisionId: string | null;
   setActiveDivisionId: (id: string | null) => void;
 }
@@ -135,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = roles.includes("admin");
   const isAdminOrManager = roles.includes("admin") || roles.includes("manager");
+  const isInstaller = roles.includes("monteur");
 
   return (
     <AuthContext.Provider
@@ -149,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         isAdmin,
         isAdminOrManager,
+        isInstaller,
         activeDivisionId,
         setActiveDivisionId,
       }}
