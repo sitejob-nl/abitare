@@ -201,15 +201,28 @@ async function pushInvoicesInternal(
 
       const customer = order.customer || (order as any).customers;
       
-      // Check if customer is linked to Exact
-      if (!customer?.exact_account_id) {
-        results.skipped++;
-        results.errors.push(`Order #${order.order_number}: Klant niet gekoppeld aan Exact Online`);
-        continue;
+      // Ensure customer is linked to Exact (auto-create if not)
+      let accountId = customer?.exact_account_id;
+      
+      if (!accountId) {
+        console.log(`Order #${order.order_number}: Klant niet gekoppeld, probeer automatisch te synchroniseren...`);
+        accountId = await ensureCustomerInExact(
+          supabase,
+          accessToken,
+          exactDivision,
+          order.customer_id
+        );
+        
+        if (!accountId) {
+          results.skipped++;
+          results.errors.push(`Order #${order.order_number}: Kon klant niet aanmaken in Exact Online`);
+          continue;
+        }
+        console.log(`Order #${order.order_number}: Klant succesvol gekoppeld met Exact account ${accountId}`);
       }
 
       // Build invoice
-      const exactInvoice = mapToExactInvoice(order, customer.exact_account_id);
+      const exactInvoice = mapToExactInvoice(order, accountId);
 
       // Create sales invoice in Exact
       const response = await fetch(
@@ -426,6 +439,175 @@ function mapToExactInvoice(order: AbitareOrder, accountId: string): ExactSalesIn
     YourRef: `ORD-${order.order_number}`,
     SalesInvoiceLines: lines,
   };
+}
+
+// ============= Customer Auto-Sync Functions =============
+
+/**
+ * Ensures a customer exists in Exact Online. 
+ * If not linked, tries to find by customer_number or creates a new account.
+ */
+async function ensureCustomerInExact(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  accessToken: string,
+  exactDivision: number,
+  customerId: string
+): Promise<string | null> {
+  try {
+    // 1. Fetch customer from database
+    const { data: customer, error } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("id", customerId)
+      .single();
+    
+    if (error || !customer) {
+      console.error("Customer not found:", customerId);
+      return null;
+    }
+    
+    // 2. Already linked? Return existing ID
+    if (customer.exact_account_id) {
+      return customer.exact_account_id;
+    }
+    
+    // 3. Try to find existing account in Exact by customer_number
+    const existingAccountId = await findExactAccountByCode(
+      accessToken, 
+      exactDivision, 
+      customer.customer_number
+    );
+    
+    if (existingAccountId) {
+      console.log(`Found existing Exact account ${existingAccountId} for customer ${customer.customer_number}`);
+      // Link existing account to customer
+      await supabase
+        .from("customers")
+        .update({ exact_account_id: existingAccountId })
+        .eq("id", customerId);
+      return existingAccountId;
+    }
+    
+    // 4. Create new account in Exact
+    const newAccountId = await createExactAccount(
+      accessToken, 
+      exactDivision, 
+      customer
+    );
+    
+    if (newAccountId) {
+      console.log(`Created new Exact account ${newAccountId} for customer ${customer.customer_number}`);
+      await supabase
+        .from("customers")
+        .update({ exact_account_id: newAccountId })
+        .eq("id", customerId);
+    }
+    
+    return newAccountId;
+  } catch (err) {
+    console.error("Error ensuring customer in Exact:", err);
+    return null;
+  }
+}
+
+/**
+ * Search for an existing Exact Online account by Code (customer_number)
+ */
+async function findExactAccountByCode(
+  accessToken: string,
+  exactDivision: number,
+  customerNumber: number
+): Promise<string | null> {
+  try {
+    // Search by Code (customer number as string)
+    const code = String(customerNumber);
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/crm/Accounts?$filter=Code eq '${code}'&$select=ID,Code,Name`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    
+    if (!response.ok) {
+      console.error("Failed to search Exact accounts:", await response.text());
+      return null;
+    }
+    
+    const data = await response.json();
+    const accounts = data.d?.results || [];
+    
+    if (accounts.length > 0) {
+      return accounts[0].ID;
+    }
+    
+    return null;
+  } catch (err) {
+    console.error("Error searching Exact account:", err);
+    return null;
+  }
+}
+
+/**
+ * Create a new account in Exact Online
+ */
+async function createExactAccount(
+  accessToken: string,
+  exactDivision: number,
+  // deno-lint-ignore no-explicit-any
+  customer: any
+): Promise<string | null> {
+  try {
+    // Determine name: company_name or first_name + last_name
+    const name = customer.company_name 
+      ? customer.company_name 
+      : [customer.first_name, customer.last_name].filter(Boolean).join(" ");
+    
+    // Build account data
+    const accountData: Record<string, unknown> = {
+      Code: String(customer.customer_number),
+      Name: name || `Klant ${customer.customer_number}`,
+      Status: "C", // Customer
+    };
+    
+    // Add optional fields if available
+    if (customer.email) accountData.Email = customer.email;
+    if (customer.phone) accountData.Phone = customer.phone;
+    if (customer.mobile) accountData.PhoneMobile = customer.mobile;
+    if (customer.city) accountData.City = customer.city;
+    if (customer.postal_code) accountData.Postcode = customer.postal_code;
+    if (customer.street_address) accountData.AddressLine1 = customer.street_address;
+    if (customer.country) accountData.Country = customer.country === "Nederland" ? "NL" : customer.country;
+    if (customer.vat_number) accountData.VATNumber = customer.vat_number;
+    if (customer.coc_number) accountData.ChamberOfCommerce = customer.coc_number;
+    
+    const response = await fetch(
+      `${EXACT_API_URL}/api/v1/${exactDivision}/crm/Accounts`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(accountData),
+      }
+    );
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Failed to create Exact account:", errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    return data.d?.ID || null;
+  } catch (err) {
+    console.error("Error creating Exact account:", err);
+    return null;
+  }
 }
 
 // deno-lint-ignore no-explicit-any
