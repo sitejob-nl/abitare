@@ -10,63 +10,32 @@ serve(async (req) => {
   try {
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
     const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
-
-    // Debug logging - show actual URL prefix to verify format
-    console.log("Environment check:", {
-      MICROSOFT_CLIENT_ID_present: !!MICROSOFT_CLIENT_ID,
-      MICROSOFT_TENANT_ID: MICROSOFT_TENANT_ID,
-      SUPABASE_URL: SUPABASE_URL ? SUPABASE_URL.substring(0, 40) + "..." : "NOT SET",
-      SUPABASE_ANON_KEY_length: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
-    });
-
-    // Validate SUPABASE_URL format
-    if (!SUPABASE_URL || !SUPABASE_URL.startsWith("https://")) {
-      throw new Error(`SUPABASE_URL is invalid or missing. Got: ${SUPABASE_URL?.substring(0, 50)}`);
-    }
 
     if (!MICROSOFT_CLIENT_ID) {
       throw new Error("MICROSOFT_CLIENT_ID is not configured");
     }
 
-    if (!SUPABASE_URL) {
-      throw new Error("SUPABASE_URL is not configured");
-    }
-
-    if (!SUPABASE_ANON_KEY) {
-      throw new Error("SUPABASE_ANON_KEY is not configured");
-    }
-
     // Verify user is authenticated
-    const authHeader = req.headers.get("authorization");
-    console.log("Authorization header present:", !!authHeader);
-    
+    const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: "Authorization header required", details: "No authorization header was provided in the request" }),
+        JSON.stringify({ error: "No authorization header" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
       );
     }
 
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { authorization: authHeader } },
-    });
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     
-    if (userError) {
-      console.error("Auth getUser error:", userError);
+    if (userError || !user) {
+      console.error("Auth error:", userError);
       return new Response(
-        JSON.stringify({ error: "Not authenticated", details: userError.message }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
-      );
-    }
-    
-    if (!user) {
-      console.error("No user returned from getUser");
-      return new Response(
-        JSON.stringify({ error: "Not authenticated", details: "No user found for provided token" }),
+        JSON.stringify({ error: "Not authenticated", details: userError?.message }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
       );
     }
@@ -74,7 +43,7 @@ serve(async (req) => {
     console.log("User authenticated:", user.id);
 
     // Build the Microsoft OAuth URL
-    const redirectUri = `${SUPABASE_URL}/functions/v1/microsoft-auth-callback`;
+    const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/microsoft-auth-callback`;
     const scopes = [
       "openid",
       "profile",
@@ -102,6 +71,8 @@ serve(async (req) => {
     authUrl.searchParams.set("response_mode", "query");
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("prompt", "consent");
+
+    console.log("Starting Microsoft OAuth flow for user:", user.id);
 
     return new Response(
       JSON.stringify({ authUrl: authUrl.toString() }),
