@@ -27,6 +27,7 @@ import {
   subWeeks,
   addDays,
   subDays,
+  parseISO,
 } from "date-fns";
 import { nl } from "date-fns/locale";
 import { DndContext, DragEndEvent, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -36,8 +37,11 @@ import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarEventCard, type CalendarEventData } from "@/components/calendar/CalendarEventCard";
 import { CalendarEventPopover } from "@/components/calendar/CalendarEventPopover";
 import { ConflictBadge } from "@/components/calendar/ConflictBadge";
+import { MicrosoftEventCard } from "@/components/calendar/MicrosoftEventCard";
 import { useCalendarConflicts, type ConflictInfo } from "@/hooks/useCalendarConflicts";
 import { useUpdateEventDate } from "@/hooks/useUpdateEventDate";
+import { useMicrosoftCalendarEvents, type MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
+import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
 import { toast } from "@/hooks/use-toast";
 
 function useCalendarEvents(month: Date) {
@@ -149,7 +153,8 @@ function DraggableMonthEvent({ event }: { event: CalendarEventData }) {
 // Droppable day cell for month view
 function DroppableMonthDay({ 
   day, 
-  dayEvents, 
+  dayEvents,
+  microsoftEvents,
   isCurrentMonth,
   isTodayDate,
   dayConflict,
@@ -157,6 +162,7 @@ function DroppableMonthDay({
 }: { 
   day: Date; 
   dayEvents: CalendarEventData[];
+  microsoftEvents: MicrosoftCalendarEvent[];
   isCurrentMonth: boolean;
   isTodayDate: boolean;
   dayConflict?: ConflictInfo;
@@ -167,6 +173,13 @@ function DroppableMonthDay({
     id: dateStr,
     data: { date: day },
   });
+
+  const totalEvents = dayEvents.length + microsoftEvents.length;
+  const maxVisible = 2;
+  const visibleOrderEvents = dayEvents.slice(0, maxVisible);
+  const remainingSlots = maxVisible - visibleOrderEvents.length;
+  const visibleMsEvents = microsoftEvents.slice(0, Math.max(0, remainingSlots));
+  const hiddenCount = totalEvents - visibleOrderEvents.length - visibleMsEvents.length;
 
   return (
     <div
@@ -194,12 +207,15 @@ function DroppableMonthDay({
         {dayConflict && <ConflictBadge conflict={dayConflict} />}
       </div>
       <div className="space-y-0.5 sm:space-y-1">
-        {dayEvents.slice(0, 2).map((event) => (
+        {visibleOrderEvents.map((event) => (
           <DraggableMonthEvent key={event.id} event={event} />
         ))}
-        {dayEvents.length > 2 && (
+        {visibleMsEvents.map((event) => (
+          <MicrosoftEventCard key={event.id} event={event} compact />
+        ))}
+        {hiddenCount > 0 && (
           <div className="px-1 text-[8px] sm:text-[10px] text-muted-foreground">
-            +{dayEvents.length - 2}
+            +{hiddenCount}
           </div>
         )}
       </div>
@@ -215,6 +231,8 @@ const CalendarPage = () => {
 
   const { data: events, isLoading } = useCalendarEvents(currentDate);
   const { data: conflicts } = useCalendarConflicts(currentDate);
+  const { data: microsoftEvents } = useMicrosoftCalendarEvents(currentDate);
+  const { data: msConnection } = useMicrosoftConnection();
   const updateEventDate = useUpdateEventDate();
 
   const sensors = useSensors(
@@ -226,9 +244,14 @@ const CalendarPage = () => {
   );
 
   const filteredEvents = events?.filter((event) => {
-    if (typeFilter === "all") return true;
+    if (typeFilter === "all" || typeFilter === "microsoft") return true;
     return event.type === typeFilter;
   }) || [];
+
+  // Filter Microsoft events based on filter
+  const filteredMsEvents = (typeFilter === "all" || typeFilter === "microsoft") 
+    ? (microsoftEvents || []) 
+    : [];
 
   // Add conflict info to events
   const eventsWithConflicts = filteredEvents.map((event) => ({
@@ -241,6 +264,14 @@ const CalendarPage = () => {
     const dateStr = format(date, "yyyy-MM-dd");
     return eventsWithConflicts.filter((event) => event.date === dateStr);
   }, [eventsWithConflicts]);
+
+  const getMsEventsForDay = useCallback((date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return filteredMsEvents.filter((event) => {
+      const eventDate = format(parseISO(event.start.dateTime), "yyyy-MM-dd");
+      return eventDate === dateStr;
+    });
+  }, [filteredMsEvents]);
 
   // Navigation handlers
   const goToPrevious = () => {
@@ -336,6 +367,9 @@ const CalendarPage = () => {
               <SelectItem value="all">Alles tonen</SelectItem>
               <SelectItem value="delivery">Leveringen</SelectItem>
               <SelectItem value="installation">Montages</SelectItem>
+              {msConnection?.is_active && (
+                <SelectItem value="microsoft">Microsoft Agenda</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -399,6 +433,7 @@ const CalendarPage = () => {
             <div className="grid grid-cols-7">
               {days.map((day, index) => {
                 const dayEvents = getEventsForDay(day);
+                const dayMsEvents = getMsEventsForDay(day);
                 const isCurrentMonth = isSameMonth(day, currentDate);
                 const isTodayDate = isToday(day);
                 const dateStr = format(day, "yyyy-MM-dd");
@@ -409,6 +444,7 @@ const CalendarPage = () => {
                     key={index}
                     day={day}
                     dayEvents={dayEvents}
+                    microsoftEvents={dayMsEvents}
                     isCurrentMonth={isCurrentMonth}
                     isTodayDate={isTodayDate}
                     dayConflict={dayConflict}
