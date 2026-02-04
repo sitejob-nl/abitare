@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InstallerRoute } from "@/components/auth/InstallerRoute";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { UpdatePrompt } from "@/components/pwa/UpdatePrompt";
 import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
 import Quotes from "./pages/Quotes";
@@ -55,6 +56,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <InstallPrompt />
+        <UpdatePrompt />
         <BrowserRouter>
           <Routes>
             {/* Public routes */}
