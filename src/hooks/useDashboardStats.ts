@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DashboardStats {
   monthlyRevenue: number;
@@ -11,8 +12,10 @@ interface DashboardStats {
 }
 
 export function useDashboardStats() {
+  const { activeDivisionId } = useAuth();
+
   return useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", activeDivisionId],
     queryFn: async (): Promise<DashboardStats> => {
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -20,6 +23,43 @@ export function useDashboardStats() {
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      // Build base queries with optional division filter
+      let thisMonthQuery = supabase
+        .from("orders")
+        .select("total_incl_vat")
+        .gte("order_date", startOfMonth.toISOString().split("T")[0]);
+      
+      let lastMonthQuery = supabase
+        .from("orders")
+        .select("total_incl_vat")
+        .gte("order_date", startOfLastMonth.toISOString().split("T")[0])
+        .lte("order_date", endOfLastMonth.toISOString().split("T")[0]);
+      
+      let openQuotesQuery = supabase
+        .from("quotes")
+        .select("total_incl_vat")
+        .in("status", ["concept", "verstuurd", "bekeken"]);
+      
+      let inProgressQuery = supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .not("status", "eq", "afgerond");
+      
+      let recentQuotesQuery = supabase
+        .from("quotes")
+        .select("status")
+        .gte("quote_date", ninetyDaysAgo.toISOString().split("T")[0])
+        .not("status", "eq", "concept");
+
+      // Apply division filter if set
+      if (activeDivisionId) {
+        thisMonthQuery = thisMonthQuery.eq("division_id", activeDivisionId);
+        lastMonthQuery = lastMonthQuery.eq("division_id", activeDivisionId);
+        openQuotesQuery = openQuotesQuery.eq("division_id", activeDivisionId);
+        inProgressQuery = inProgressQuery.eq("division_id", activeDivisionId);
+        recentQuotesQuery = recentQuotesQuery.eq("division_id", activeDivisionId);
+      }
 
       // Run all queries in parallel for better performance
       const [
@@ -29,37 +69,11 @@ export function useDashboardStats() {
         inProgressOrdersResult,
         recentQuotesResult,
       ] = await Promise.all([
-        // This month's orders revenue
-        supabase
-          .from("orders")
-          .select("total_incl_vat")
-          .gte("order_date", startOfMonth.toISOString().split("T")[0]),
-        
-        // Last month's orders revenue for comparison
-        supabase
-          .from("orders")
-          .select("total_incl_vat")
-          .gte("order_date", startOfLastMonth.toISOString().split("T")[0])
-          .lte("order_date", endOfLastMonth.toISOString().split("T")[0]),
-        
-        // Open quotes (concept + verstuurd + bekeken)
-        supabase
-          .from("quotes")
-          .select("total_incl_vat")
-          .in("status", ["concept", "verstuurd", "bekeken"]),
-        
-        // Orders in progress (not afgerond)
-        supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .not("status", "eq", "afgerond"),
-        
-        // Recent quotes for conversion rate (last 90 days, excluding concept)
-        supabase
-          .from("quotes")
-          .select("status")
-          .gte("quote_date", ninetyDaysAgo.toISOString().split("T")[0])
-          .not("status", "eq", "concept"),
+        thisMonthQuery,
+        lastMonthQuery,
+        openQuotesQuery,
+        inProgressQuery,
+        recentQuotesQuery,
       ]);
 
       const monthlyRevenue = thisMonthOrdersResult.data?.reduce(
