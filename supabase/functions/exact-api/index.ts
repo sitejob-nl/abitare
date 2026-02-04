@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { decryptToken, encryptToken, isEncrypted } from "../_shared/crypto.ts";
 
 const EXACT_API_URL = "https://start.exactonline.nl";
 const EXACT_TOKEN_URL = "https://start.exactonline.nl/api/oauth2/token";
@@ -40,21 +41,36 @@ serve(async (req) => {
     }
 
     // Check if token needs refresh
+    // Decrypt the stored tokens
     let accessToken = connection.access_token;
+    let refreshToken = connection.refresh_token;
+    
+    // Handle migration: check if tokens are encrypted
+    if (isEncrypted(accessToken)) {
+      accessToken = await decryptToken(accessToken);
+    }
+    if (isEncrypted(refreshToken)) {
+      refreshToken = await decryptToken(refreshToken);
+    }
+
     const tokenExpiry = new Date(connection.token_expires_at);
     
     if (new Date() >= tokenExpiry) {
       // Refresh the token
-      const newTokens = await refreshAccessToken(connection.refresh_token);
+      const newTokens = await refreshAccessToken(refreshToken);
       accessToken = newTokens.access_token;
+
+      // Encrypt new tokens before storing
+      const encryptedAccessToken = await encryptToken(newTokens.access_token);
+      const encryptedRefreshToken = await encryptToken(newTokens.refresh_token);
 
       // Update stored tokens
       const tokenExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
       await supabase
         .from("exact_online_connections")
         .update({
-          access_token: newTokens.access_token,
-          refresh_token: newTokens.refresh_token,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: tokenExpiresAt.toISOString(),
         })
         .eq("id", connection.id);
