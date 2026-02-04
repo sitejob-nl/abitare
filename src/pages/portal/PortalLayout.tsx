@@ -76,8 +76,8 @@ export default function PortalLayout() {
             <div className="flex items-center gap-4">
               <img src={logoSvg} alt="Logo" className="h-8" />
               <div className="hidden sm:block">
-                <span className="text-muted-foreground">/</span>
-                <span className="ml-2 font-medium">{customerName}</span>
+                <span className="text-primary-foreground">/</span>
+                <span className="ml-2 font-medium text-primary-foreground">{customerName}</span>
               </div>
             </div>
             
