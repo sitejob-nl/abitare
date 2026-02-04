@@ -368,7 +368,7 @@ function mapToExactAccount(customer: AbitareCustomer): ExactAccount {
   }
 
   return {
-    Code: `ABT${customer.customer_number.toString().padStart(6, "0")}`,
+    Code: customer.customer_number.toString(), // Exact Online only accepts numeric codes
     Name: name,
     Email: customer.email || undefined,
     Phone: customer.phone || customer.mobile || undefined,
