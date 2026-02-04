@@ -50,13 +50,18 @@ serve(async (req) => {
       throw new Error("Microsoft credentials not configured");
     }
 
-    // Debug logging
+    // Debug logging - show actual URL prefix to verify format
     console.log("Environment check:", {
       MICROSOFT_CLIENT_ID_present: !!MICROSOFT_CLIENT_ID,
-      SUPABASE_URL_present: !!SUPABASE_URL,
+      SUPABASE_URL: SUPABASE_URL ? SUPABASE_URL.substring(0, 40) + "..." : "NOT SET",
       SUPABASE_SERVICE_ROLE_KEY_present: !!SUPABASE_SERVICE_ROLE_KEY,
-      SUPABASE_ANON_KEY_present: !!SUPABASE_ANON_KEY,
+      SUPABASE_ANON_KEY_length: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
     });
+
+    // Validate SUPABASE_URL format
+    if (!SUPABASE_URL || !SUPABASE_URL.startsWith("https://")) {
+      throw new Error(`SUPABASE_URL is invalid or missing. Got: ${SUPABASE_URL?.substring(0, 50)}`);
+    }
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
       const missing = [];
