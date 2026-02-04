@@ -1,115 +1,287 @@
 
-# Plan: PWA Update Notificatie
+# Plan: Microsoft Entra (Outlook) Integratie voor Agenda & Mail
 
 ## Overzicht
 
-Wanneer er een nieuwe versie van de app beschikbaar is, krijgt de gebruiker een melding met een knop om de app bij te werken. Dit is een betere ervaring dan de huidige automatische updates zonder feedback.
+Elke gebruiker kan zijn eigen Microsoft 365 account koppelen om:
+- **Agenda synchronisatie**: Orders/montages in Outlook agenda zetten
+- **Mail toegang**: Emails lezen/versturen vanuit de app
 
-## Huidige Situatie
+De integratie volgt hetzelfde patroon als de bestaande Exact Online koppeling.
 
-- PWA gebruikt `registerType: "autoUpdate"` → updates gebeuren stil op de achtergrond
-- Gebruiker heeft geen idee wanneer er een nieuwe versie is
-- Soms moet de gebruiker handmatig de app sluiten en opnieuw openen
+---
 
-## Aanpak
+## Stap 1: Azure Portal - App Registratie
 
-### 1. Wijzig registerType naar "prompt"
+Voordat we code schrijven, moet je een app registreren in Microsoft Entra:
 
-In `vite.config.ts` veranderen we van automatische updates naar handmatige updates met een prompt:
+### 1.1 Ga naar Azure Portal
+1. Ga naar https://portal.azure.com
+2. Zoek naar "App registrations" (of "App-registraties")
+3. Klik op "+ New registration"
 
-```typescript
-VitePWA({
-  registerType: "prompt",  // was: "autoUpdate"
-  // ...rest blijft hetzelfde
-})
+### 1.2 Registreer de applicatie
+- **Name**: `Abitare Keukens`
+- **Supported account types**: Kies "Accounts in any organizational directory and personal Microsoft accounts"
+- **Redirect URI**: 
+  - Platform: `Web`
+  - URL: `https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/microsoft-auth-callback`
+
+### 1.3 Noteer de credentials
+Na registratie, noteer:
+- **Application (client) ID** → wordt `MICROSOFT_CLIENT_ID`
+- **Directory (tenant) ID** → wordt `MICROSOFT_TENANT_ID` (gebruik "common" voor multi-tenant)
+
+### 1.4 Client Secret aanmaken
+1. Ga naar "Certificates & secrets"
+2. Klik op "+ New client secret"
+3. Beschrijving: `Abitare Production`
+4. Expiratie: 24 maanden
+5. Noteer de **Value** → wordt `MICROSOFT_CLIENT_SECRET`
+
+### 1.5 API Permissions instellen
+Ga naar "API permissions" en voeg toe:
+
+| API | Permission | Type |
+|-----|------------|------|
+| Microsoft Graph | `Calendars.ReadWrite` | Delegated |
+| Microsoft Graph | `Mail.ReadWrite` | Delegated |
+| Microsoft Graph | `Mail.Send` | Delegated |
+| Microsoft Graph | `User.Read` | Delegated |
+| Microsoft Graph | `offline_access` | Delegated |
+
+Klik daarna op "Grant admin consent" (optioneel, afhankelijk van policy).
+
+---
+
+## Stap 2: Supabase Secrets Toevoegen
+
+In Supabase Dashboard → Settings → Edge Functions → Secrets:
+
+| Secret | Waarde |
+|--------|--------|
+| `MICROSOFT_CLIENT_ID` | Jouw Application ID |
+| `MICROSOFT_CLIENT_SECRET` | Jouw Client Secret |
+| `MICROSOFT_TENANT_ID` | `common` (voor multi-tenant) |
+
+---
+
+## Stap 3: Database Migratie
+
+Nieuwe tabel voor gebruiker-specifieke Microsoft koppelingen:
+
+```sql
+CREATE TABLE public.microsoft_connections (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  token_expires_at TIMESTAMPTZ NOT NULL,
+  scopes TEXT[] NOT NULL,
+  microsoft_user_id TEXT,
+  microsoft_email TEXT,
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  UNIQUE(user_id)
+);
+
+-- RLS: gebruikers zien alleen hun eigen connectie
+ALTER TABLE public.microsoft_connections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own connection"
+ON public.microsoft_connections FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own connection"
+ON public.microsoft_connections FOR DELETE
+USING (auth.uid() = user_id);
 ```
 
-### 2. Nieuw Component: UpdatePrompt
+---
 
-Een nieuwe component die:
-- De `useRegisterSW` hook van vite-plugin-pwa gebruikt
-- Detecteert wanneer een nieuwe versie beschikbaar is (`needRefresh`)
-- Een toast/melding toont met "Update beschikbaar"
-- Een "Nu bijwerken" knop biedt die de app herlaadt
-- Ook "offline ready" meldingen kan tonen (optioneel)
+## Stap 4: Edge Functions
 
-## Visueel Ontwerp
+### 4.1 `microsoft-auth` - Start OAuth flow
 
 ```text
-┌──────────────────────────────────────────────────┐
-│  🔄  Er is een update beschikbaar                │
-│      Klik op bijwerken voor de nieuwste versie   │
-│                                                  │
-│              [Later]  [Nu bijwerken]             │
-└──────────────────────────────────────────────────┘
+supabase/functions/microsoft-auth/index.ts
 ```
 
-De melding verschijnt als een floating card onderaan het scherm, consistent met de huidige InstallPrompt styling.
+- Ontvangt user ID
+- Bouwt Microsoft OAuth URL met juiste scopes
+- Returnt redirect URL naar Microsoft login
 
-## Bestandswijzigingen
+### 4.2 `microsoft-auth-callback` - Handle OAuth response
+
+```text
+supabase/functions/microsoft-auth-callback/index.ts
+```
+
+- Ontvangt authorization code van Microsoft
+- Wisselt code in voor access + refresh token
+- Haalt gebruiker info op via Graph API
+- Slaat tokens encrypted op in database
+- Redirect terug naar app
+
+### 4.3 `microsoft-api` - Proxy voor Graph API calls
+
+```text
+supabase/functions/microsoft-api/index.ts
+```
+
+- Verifieert user authenticated
+- Haalt tokens op uit database
+- Refresh token indien nodig
+- Voert Graph API call uit
+- Returnt resultaat
+
+---
+
+## Stap 5: Frontend Componenten
+
+### 5.1 Settings component: `MicrosoftSettings.tsx`
+
+Locatie in Account tab (niet Koppelingen, want dit is per-gebruiker):
+
+```text
+src/components/settings/MicrosoftSettings.tsx
+```
+
+- Toont koppelstatus per ingelogde gebruiker
+- "Koppel Outlook" knop → start OAuth
+- "Ontkoppelen" knop indien verbonden
+- Sync opties: handmatig agenda sync
+
+### 5.2 Hook: `useMicrosoftConnection.ts`
+
+```text
+src/hooks/useMicrosoftConnection.ts
+```
+
+- `useMicrosoftConnection()` - haal connectie status
+- `useStartMicrosoftAuth()` - start OAuth
+- `useDisconnectMicrosoft()` - verwijder connectie
+- `useMicrosoftCalendar()` - agenda operaties
+- `useMicrosoftMail()` - mail operaties
+
+---
+
+## Stap 6: Agenda Integratie
+
+### Sync naar Outlook
+Wanneer een order een montagedatum krijgt:
+1. Maak een Outlook calendar event
+2. Sla event ID op bij order voor updates/deletes
+
+### Velden in event:
+- **Subject**: `Montage #1234 - Van den Berg`
+- **Location**: Klant adres
+- **Body**: Order details, producten
+- **Start/End**: Montagedatum (hele dag of specifieke tijd)
+
+### Database uitbreiding:
+```sql
+ALTER TABLE orders 
+ADD COLUMN outlook_event_id TEXT;
+```
+
+---
+
+## Stap 7: Mail Integratie (Fase 2)
+
+Mogelijke features:
+- Inbox widget met recente emails
+- Email versturen vanuit order/offerte
+- Email templates
+
+---
+
+## Bestandsstructuur
+
+### Nieuwe bestanden:
+
+```text
+supabase/functions/
+  microsoft-auth/index.ts
+  microsoft-auth-callback/index.ts
+  microsoft-api/index.ts
+  microsoft-calendar-sync/index.ts
+
+src/components/settings/
+  MicrosoftSettings.tsx
+
+src/hooks/
+  useMicrosoftConnection.ts
+```
+
+### Aangepaste bestanden:
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `vite.config.ts` | `registerType` van `"autoUpdate"` naar `"prompt"` |
-| `src/components/pwa/UpdatePrompt.tsx` | **NIEUW** - Update notificatie component |
-| `src/vite-env.d.ts` | Type declarations voor `virtual:pwa-register/react` |
-| `src/App.tsx` | UpdatePrompt component toevoegen |
+| `src/pages/Settings.tsx` | MicrosoftSettings toevoegen in Account tab |
+| `src/pages/OrderDetail.tsx` | "Sync naar Outlook" knop (optioneel) |
 
-## Technische Details
+---
 
-### UpdatePrompt Component
+## Visueel Ontwerp
 
-```typescript
-import { useRegisterSW } from 'virtual:pwa-register/react'
+### Account Tab - Microsoft Koppeling
 
-function UpdatePrompt() {
-  const {
-    needRefresh: [needRefresh, setNeedRefresh],
-    offlineReady: [offlineReady, setOfflineReady],
-    updateServiceWorker,
-  } = useRegisterSW({
-    onRegistered(r) {
-      // Optioneel: periodiek controleren op updates
-      r && setInterval(() => r.update(), 60 * 60 * 1000) // elk uur
-    },
-  })
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Microsoft 365 Koppeling                                    │
+│  Koppel je Outlook account voor agenda en email integratie  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ○ Niet gekoppeld                                           │
+│                                                             │
+│  [🔗 Koppel Microsoft Account]                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 
-  // Toon update prompt als needRefresh true is
-  if (!needRefresh && !offlineReady) return null;
+// Of indien gekoppeld:
 
-  return (
-    // UI met "Nu bijwerken" knop
-  )
-}
+┌─────────────────────────────────────────────────────────────┐
+│  Microsoft 365 Koppeling                                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ✓ Gekoppeld als jan@abitare.nl                             │
+│    Gekoppeld op: 4 februari 2026                            │
+│                                                             │
+│  ☐ Automatisch montages naar agenda                         │
+│  ☐ Automatisch leveringen naar agenda                       │
+│                                                             │
+│  [Synchroniseer Nu]  [Ontkoppelen]                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Type Declarations
+---
 
-Voor TypeScript ondersteuning voegen we type declarations toe:
+## Fasering
 
-```typescript
-declare module 'virtual:pwa-register/react' {
-  export function useRegisterSW(options?: {
-    onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void;
-    onRegisterError?: (error: Error) => void;
-  }): {
-    needRefresh: [boolean, (value: boolean) => void];
-    offlineReady: [boolean, (value: boolean) => void];
-    updateServiceWorker: (reloadPage?: boolean) => Promise<void>;
-  };
-}
-```
+### Fase 1: Basis OAuth (dit plan)
+- App registratie in Azure
+- Edge functions voor auth flow
+- Database tabel
+- Settings UI voor koppelen/ontkoppelen
 
-## Gedrag
+### Fase 2: Agenda Sync
+- Calendar events aanmaken bij montage/levering
+- Events bijwerken bij datum wijziging
+- Events verwijderen bij annulering
 
-1. **Nieuwe versie beschikbaar**: Wanneer de service worker detecteert dat er nieuwe content is, wordt `needRefresh` true
-2. **Gebruiker klikt "Nu bijwerken"**: `updateServiceWorker(true)` wordt aangeroepen → pagina herlaadt met nieuwe versie
-3. **Gebruiker klikt "Later"**: De prompt verdwijnt, maar de update wordt toegepast bij de volgende keer dat de app wordt geopend
-4. **Offline ready** (optioneel): Eenmalige melding dat de app offline kan werken
+### Fase 3: Mail Integratie
+- Inbox widget
+- Email versturen vanuit app
+- Email threading per klant/order
 
-## Resultaat
+---
 
-- Gebruikers zien een duidelijke melding wanneer er een update beschikbaar is
-- Gebruikers kunnen zelf kiezen wanneer ze updaten
-- Geen verwarring meer over "waarom werkt iets niet" door outdated cache
-- Betere controle over de app lifecycle
+## Volgende Stappen
+
+1. **Eerst**: Registreer de app in Azure Portal (instructies hierboven)
+2. **Dan**: Voeg secrets toe in Supabase
+3. **Dan**: Ik implementeer de code
+
+Wil je dat ik de Azure Portal stappen in meer detail uitleg, of ben je klaar om de app te registreren?
