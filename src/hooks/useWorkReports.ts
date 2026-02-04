@@ -65,6 +65,56 @@ export function useWorkReport(id: string | undefined) {
   });
 }
 
+// Get work report by order ID (for admin viewing)
+export function useWorkReportByOrderAdmin(orderId: string | undefined) {
+  return useQuery({
+    queryKey: ["work-report-by-order-admin", orderId],
+    queryFn: async () => {
+      if (!orderId) return null;
+
+      // Step 1: Get work report without installer join
+      const { data: report, error } = await supabase
+        .from("work_reports")
+        .select(`
+          *,
+          order:orders(id, order_number),
+          customer:customers(id, first_name, last_name, company_name, phone, mobile, email),
+          work_report_photos(*),
+          work_report_tasks(*)
+        `)
+        .eq("order_id", orderId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!report) return null;
+
+      // Step 2: Get installer profile separately
+      let installer: { id: string; full_name: string | null } | null = null;
+      if (report.installer_id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .eq("id", report.installer_id)
+          .maybeSingle();
+        
+        installer = profile;
+      }
+
+      return {
+        ...report,
+        installer,
+      } as WorkReport & {
+        order: { id: string; order_number: number } | null;
+        customer: { id: string; first_name: string | null; last_name: string; company_name: string | null; phone: string | null; mobile: string | null; email: string | null } | null;
+        installer: { id: string; full_name: string | null } | null;
+        work_report_photos: WorkReportPhoto[];
+        work_report_tasks: WorkReportTask[];
+      };
+    },
+    enabled: !!orderId,
+  });
+}
+
 export function useWorkReportByOrder(orderId: string | undefined) {
   const { user } = useAuth();
 

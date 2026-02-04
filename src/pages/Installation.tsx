@@ -158,7 +158,7 @@ const Installation = () => {
             return (
               <div
                 key={order.id}
-                onClick={() => navigate(`/orders/${order.id}`)}
+                onClick={() => navigate(`/installation/${order.id}`)}
                 className="animate-fade-in cursor-pointer rounded-xl border border-border bg-card p-4 sm:p-5 transition-colors hover:bg-muted/30"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
