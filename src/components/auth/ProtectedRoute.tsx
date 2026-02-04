@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isLoading, authInitError, retryAuthInit, signOut } = useAuth();
+  const { user, isLoading, authInitError, retryAuthInit, signOut, roles } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -50,6 +50,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Redirect monteurs naar hun eigen omgeving
+  const isOnlyInstaller = roles.includes("monteur") && 
+                          !roles.includes("admin") && 
+                          !roles.includes("manager");
+  
+  if (isOnlyInstaller && location.pathname === "/") {
+    return <Navigate to="/monteur" replace />;
   }
 
   return <>{children}</>;
