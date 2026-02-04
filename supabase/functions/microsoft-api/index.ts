@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 async function refreshAccessToken(
   refreshToken: string,
@@ -54,14 +50,31 @@ serve(async (req) => {
       throw new Error("Microsoft credentials not configured");
     }
 
+    // Debug logging
+    console.log("Environment check:", {
+      MICROSOFT_CLIENT_ID_present: !!MICROSOFT_CLIENT_ID,
+      SUPABASE_URL_present: !!SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY_present: !!SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_ANON_KEY_present: !!SUPABASE_ANON_KEY,
+    });
+
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
-      throw new Error("Supabase credentials not configured");
+      const missing = [];
+      if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+      if (!SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+      if (!SUPABASE_ANON_KEY) missing.push("SUPABASE_ANON_KEY");
+      throw new Error(`Supabase credentials not configured: ${missing.join(", ")}`);
     }
 
     // Verify user is authenticated
     const authHeader = req.headers.get("authorization");
+    console.log("Authorization header present:", !!authHeader);
+    
     if (!authHeader) {
-      throw new Error("Authorization header required");
+      return new Response(
+        JSON.stringify({ error: "Authorization header required", details: "No authorization header was provided" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
     }
 
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -69,9 +82,23 @@ serve(async (req) => {
     });
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      throw new Error("Not authenticated");
+    
+    if (userError) {
+      console.error("Auth getUser error:", userError);
+      return new Response(
+        JSON.stringify({ error: "Not authenticated", details: userError.message }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
     }
+    
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: "Not authenticated", details: "No user found" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+    
+    console.log("User authenticated:", user.id);
 
     // Get request body
     const body = await req.json();
