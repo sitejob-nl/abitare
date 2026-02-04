@@ -37,23 +37,22 @@ interface AbitareOrderLine {
   article_code: string | null;
 }
 
-interface ExactSalesInvoiceLine {
-  AmountDC: number;
+// SalesEntries (financiële boekingen) - gebruikt voor diensten/facturen zonder artikelkoppeling
+interface ExactSalesEntryLine {
+  GLAccount: string;
   Description: string;
-  Quantity: number;
-  UnitPrice: number;
-  VATPercentage?: number;
-  Item?: string;
+  AmountFC: number;
+  VATCode: string;
 }
 
-interface ExactSalesInvoice {
-  InvoiceTo: string; // Account GUID
-  OrderedBy: string; // Account GUID
-  InvoiceDate?: string;
-  PaymentCondition?: string;
+interface ExactSalesEntry {
+  Customer: string;
+  EntryDate?: string;
+  Journal: string;
   Description?: string;
   YourRef?: string;
-  SalesInvoiceLines?: ExactSalesInvoiceLine[];
+  Currency: string;
+  SalesEntryLines: ExactSalesEntryLine[];
 }
 
 serve(async (req) => {
@@ -221,12 +220,20 @@ async function pushInvoicesInternal(
         console.log(`Order #${order.order_number}: Klant succesvol gekoppeld met Exact account ${accountId}`);
       }
 
-      // Build invoice
-      const exactInvoice = mapToExactInvoice(order, accountId);
+      // Get default GL account for revenue (only once per batch)
+      const glAccountId = await getDefaultRevenueGLAccount(accessToken, exactDivision);
+      if (!glAccountId) {
+        results.failed++;
+        results.errors.push(`Order #${order.order_number}: Kon geen standaard omzet-grootboekrekening vinden in Exact`);
+        continue;
+      }
 
-      // Create sales invoice in Exact
+      // Build sales entry (financiële boeking)
+      const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId);
+
+      // Create sales entry in Exact (financieel endpoint - geen artikel vereist)
       const response = await fetch(
-        `${EXACT_API_URL}/api/v1/${exactDivision}/salesinvoice/SalesInvoices`,
+        `${EXACT_API_URL}/api/v1/${exactDivision}/salesentry/SalesEntries`,
         {
           method: "POST",
           headers: {
@@ -234,26 +241,26 @@ async function pushInvoicesInternal(
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify(exactInvoice),
+          body: JSON.stringify(exactEntry),
         }
       );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Failed to create invoice for order ${order.order_number}:`, errorText);
+        console.error(`Failed to create sales entry for order ${order.order_number}:`, errorText);
         results.failed++;
         results.errors.push(`Order #${order.order_number}: ${errorText}`);
       } else {
         const data = await response.json();
-        const invoiceId = data.d?.InvoiceID;
-        const invoiceNumber = data.d?.InvoiceNumber;
+        const entryId = data.d?.EntryID;
+        const entryNumber = data.d?.EntryNumber;
 
-        if (invoiceId) {
-          // Update order with Exact Invoice ID
+        if (entryId || entryNumber) {
+          // Update order with Exact Entry ID (using EntryNumber as invoice reference)
           await supabase
             .from("orders")
             .update({ 
-              exact_invoice_id: invoiceNumber?.toString() || invoiceId,
+              exact_invoice_id: entryNumber?.toString() || entryId,
             })
             .eq("id", order.id);
         }
@@ -402,8 +409,60 @@ async function pullPaymentStatusInternal(
   return results;
 }
 
-function mapToExactInvoice(order: AbitareOrder, accountId: string): ExactSalesInvoice {
-  const lines: ExactSalesInvoiceLine[] = [];
+/**
+ * Map VAT rate percentage to Exact Online VATCode
+ * 0% = "1", 9% = "4", 21% = "2"
+ */
+function mapVatRateToCode(vatRate: number): string {
+  if (vatRate === 0) return "1";
+  if (vatRate === 9) return "4";
+  return "2"; // 21% (default)
+}
+
+/**
+ * Get default revenue GL account from Exact Online
+ * Type 32 = Revenue account
+ */
+async function getDefaultRevenueGLAccount(
+  accessToken: string,
+  exactDivision: number
+): Promise<string | null> {
+  try {
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 32&$select=ID,Code,Description&$top=1`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    
+    if (!response.ok) {
+      console.error("Failed to fetch GL accounts:", await response.text());
+      return null;
+    }
+    
+    const data = await response.json();
+    const accounts = data.d?.results || [];
+    
+    if (accounts.length > 0) {
+      console.log(`Using GL Account: ${accounts[0].Code} - ${accounts[0].Description}`);
+      return accounts[0].ID;
+    }
+    
+    return null;
+  } catch (err) {
+    console.error("Error fetching GL accounts:", err);
+    return null;
+  }
+}
+
+/**
+ * Map order to Exact SalesEntry (financiële boeking)
+ * Uses SalesEntries endpoint instead of SalesInvoices - no Item required
+ */
+function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountId: string): ExactSalesEntry {
+  const lines: ExactSalesEntryLine[] = [];
   
   const orderLines = order.order_lines || (order as any).order_lines || [];
   
@@ -412,32 +471,31 @@ function mapToExactInvoice(order: AbitareOrder, accountId: string): ExactSalesIn
     if ((line as any).is_group_header) continue;
     
     lines.push({
-      Description: line.description,
-      Quantity: line.quantity || 1,
-      UnitPrice: line.unit_price,
-      AmountDC: line.line_total || (line.unit_price * (line.quantity || 1)),
-      VATPercentage: (line.vat_rate || 21) / 100, // Exact expects decimal (0.21)
+      GLAccount: glAccountId,
+      Description: line.description.substring(0, 100), // Max 100 chars in Exact
+      AmountFC: line.line_total || (line.unit_price * (line.quantity || 1)),
+      VATCode: mapVatRateToCode(line.vat_rate || 21),
     });
   }
 
   // If no lines, create a single line with total
   if (lines.length === 0) {
     lines.push({
+      GLAccount: glAccountId,
       Description: `Order #${order.order_number}`,
-      Quantity: 1,
-      UnitPrice: order.total_excl_vat || 0,
-      AmountDC: order.total_excl_vat || 0,
-      VATPercentage: 0.21,
+      AmountFC: order.total_excl_vat || 0,
+      VATCode: "2", // 21%
     });
   }
 
   return {
-    InvoiceTo: accountId,
-    OrderedBy: accountId,
-    InvoiceDate: order.order_date || new Date().toISOString().split("T")[0],
+    Customer: accountId,
+    EntryDate: order.order_date || new Date().toISOString().split("T")[0],
+    Journal: "70", // Standaard verkoopboek
     Description: `Factuur order #${order.order_number}`,
     YourRef: `ORD-${order.order_number}`,
-    SalesInvoiceLines: lines,
+    Currency: "EUR",
+    SalesEntryLines: lines,
   };
 }
 
