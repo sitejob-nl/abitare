@@ -1,107 +1,93 @@
 
-# Plan: Fix Installation Pagina Query Fout
+# Plan: Wachtwoord Wijzigen in Instellingen
 
-## Probleem Geïdentificeerd
+## Overzicht
 
-De Installation pagina (`/installation`) geeft een **400 database error** en toont geen montages. Dit is GEEN RLS probleem maar een **query syntax fout**.
+Een nieuwe "Account" tab toevoegen aan de instellingenpagina waar elke ingelogde gebruiker zijn eigen wachtwoord kan wijzigen. Dit is toegankelijk voor alle gebruikers, niet alleen admins.
 
-### Foutmelding
-```
-"Could not find a relationship between 'orders' and 'profiles' 
-using the hint 'orders_installer_id_fkey'"
-```
+## Huidige Situatie
 
-### Oorzaak
-De code in `Installation.tsx` (regel 33) probeert:
-```typescript
-installer:profiles!orders_installer_id_fkey(id, full_name)
-```
+- De instellingenpagina (`/settings`) is momenteel alleen toegankelijk voor admins
+- Er is al een `SetPassword.tsx` pagina met wachtwoord validatie logica die we kunnen hergebruiken
+- Wachtwoord wijzigen kan via `supabase.auth.updateUser({ password: ... })`
 
-Maar de foreign key `orders_installer_id_fkey` wijst naar `auth.users`, niet naar `profiles`. Supabase PostgREST kan deze join niet uitvoeren omdat er geen directe FK relatie is tussen `orders.installer_id` en `profiles`.
+## Aanpak
 
-### Database Schema
-| Column | Foreign Key | Verwijst naar |
-|--------|-------------|---------------|
-| installer_id | orders_installer_id_fkey | auth.users |
-| salesperson_id | orders_salesperson_id_fkey | auth.users |
-| customer_id | orders_customer_id_fkey | customers |
+### 1. Nieuwe Component: ChangePasswordCard
 
-De `profiles` tabel heeft wel dezelfde ID's als `auth.users`, maar er is geen expliciete FK relatie gedefinieerd.
+Een aparte component maken voor het wachtwoord wijzigen formulier:
 
-## Oplossing
+**Functionaliteit:**
+- Huidig wachtwoord invoeren (optioneel - Supabase vereist dit niet als je ingelogd bent)
+- Nieuw wachtwoord invoeren
+- Bevestig nieuw wachtwoord
+- Wachtwoord tonen/verbergen toggle
+- Validatie: minimaal 8 tekens, wachtwoorden moeten overeenkomen
+- Succes/fout feedback via toast
 
-Wijzig de query om de installer informatie apart op te halen, of verwijder de directe join en haal de profile data via een tweede query.
+### 2. Settings Pagina Aanpassen
 
-### Aanpak: Aparte Profiles Query
-
-Haal eerst de orders op, en dan de profiles voor de installers in een aparte query.
+De instellingenpagina aanpassen zodat:
+- Niet-admins nu ook toegang hebben (voor hun eigen account instellingen)
+- Nieuwe "Account" tab toevoegen met wachtwoord wijzigen
+- Admin-only tabs (Vestigingen, Gebruikers, Koppelingen) blijven alleen voor admins zichtbaar
 
 ## Bestandswijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/pages/Installation.tsx` | Fix query om installer data correct op te halen |
+| `src/components/settings/ChangePasswordCard.tsx` | **NIEUW** - Wachtwoord wijzigen formulier |
+| `src/pages/Settings.tsx` | Account tab toevoegen, toegang voor alle gebruikers |
 
-## Code Wijziging
+## Technische Details
 
-```typescript
-// src/pages/Installation.tsx - useInstallationOrders hook
+### ChangePasswordCard Component
 
-function useInstallationOrders(statusFilter: string | null) {
-  return useQuery({
-    queryKey: ["installation-orders", statusFilter],
-    queryFn: async () => {
-      // Stap 1: Haal orders op zonder installer join
-      let query = supabase
-        .from("orders")
-        .select(`
-          id, order_number, expected_installation_date, actual_installation_date,
-          status, requires_elevator, installer_id,
-          customer:customers(id, first_name, last_name, company_name, city, delivery_floor)
-        `)
-        .in("status", ["montage_gepland", "gemonteerd", "geleverd"])
-        .order("expected_installation_date", { ascending: true });
-
-      if (statusFilter && statusFilter !== "all") {
-        query = query.eq("status", statusFilter);
-      }
-
-      const { data: orders, error } = await query;
-      if (error) throw error;
-
-      // Stap 2: Haal unieke installer IDs op
-      const installerIds = [...new Set(
-        orders
-          ?.filter(o => o.installer_id)
-          .map(o => o.installer_id) || []
-      )];
-
-      // Stap 3: Haal profiles op voor alle installers
-      let profilesMap: Record<string, { full_name: string }> = {};
-      if (installerIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", installerIds);
-        
-        profiles?.forEach(p => {
-          profilesMap[p.id] = { full_name: p.full_name || "" };
-        });
-      }
-
-      // Stap 4: Combineer data
-      return orders?.map(order => ({
-        ...order,
-        installer: order.installer_id ? profilesMap[order.installer_id] : null
-      })) || [];
-    },
-  });
-}
+```text
+┌─────────────────────────────────────────┐
+│  Wachtwoord Wijzigen                    │
+├─────────────────────────────────────────┤
+│                                         │
+│  Nieuw wachtwoord                       │
+│  ┌─────────────────────────────────┐    │
+│  │ ••••••••                    👁  │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Bevestig nieuw wachtwoord              │
+│  ┌─────────────────────────────────┐    │
+│  │ ••••••••                        │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ✓ Minimaal 8 tekens                    │
+│  ✓ Wachtwoorden komen overeen           │
+│                                         │
+│  [    Wachtwoord wijzigen     ]         │
+│                                         │
+└─────────────────────────────────────────┘
 ```
 
-## Resultaat Na Fix
+### Settings.tsx Wijzigingen
 
-- Admin kan alle montages zien (via RLS `is_admin()`)  
-- Orders worden correct geladen met installer namen
-- Geen 400 errors meer
-- Monteur omgeving blijft werken zoals voorheen
+```text
+Tabs voor ALLE gebruikers:
+┌────────────┐
+│  Account   │  ← Nieuwe tab (wachtwoord wijzigen)
+└────────────┘
+
+Tabs alleen voor ADMINS:
+┌─────────────┬────────────┬─────────────┐
+│ Vestigingen │ Gebruikers │ Koppelingen │
+└─────────────┴────────────┴─────────────┘
+```
+
+**Logica:**
+- Default tab = "account" voor iedereen
+- Als `!isAdmin`: toon alleen "Account" tab
+- Als `isAdmin`: toon alle tabs
+
+## Resultaat
+
+- Elke ingelogde gebruiker kan nu naar `/settings` gaan
+- Daar ziet iedereen minimaal de "Account" tab met wachtwoord wijzigen
+- Admins zien daarnaast ook de bestaande tabs voor beheer
+- Consistente UI met de rest van de applicatie
