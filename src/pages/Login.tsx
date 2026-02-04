@@ -47,7 +47,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
       <Card className="w-full max-w-[400px] border-border/50 bg-card shadow-xl">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto">
+          <div className="mx-auto rounded-lg bg-sidebar px-4 py-2">
             <img src={logo} alt="Abitare" className="h-8" />
           </div>
           <div className="space-y-1">
