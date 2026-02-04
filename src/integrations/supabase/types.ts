@@ -411,6 +411,51 @@ export type Database = {
           },
         ]
       }
+      microsoft_connections: {
+        Row: {
+          access_token: string
+          connected_at: string
+          created_at: string
+          id: string
+          is_active: boolean
+          microsoft_email: string | null
+          microsoft_user_id: string | null
+          refresh_token: string
+          scopes: string[]
+          token_expires_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          microsoft_email?: string | null
+          microsoft_user_id?: string | null
+          refresh_token: string
+          scopes: string[]
+          token_expires_at: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          microsoft_email?: string | null
+          microsoft_user_id?: string | null
+          refresh_token?: string
+          scopes?: string[]
+          token_expires_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       order_documents: {
         Row: {
           created_at: string | null
@@ -844,6 +889,7 @@ export type Database = {
           order_confirmation_sent_at: string | null
           order_date: string | null
           order_number: number
+          outlook_event_id: string | null
           payment_condition: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           quote_id: string | null
@@ -884,6 +930,7 @@ export type Database = {
           order_confirmation_sent_at?: string | null
           order_date?: string | null
           order_number?: number
+          outlook_event_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           quote_id?: string | null
@@ -924,6 +971,7 @@ export type Database = {
           order_confirmation_sent_at?: string | null
           order_date?: string | null
           order_number?: number
+          outlook_event_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           quote_id?: string | null

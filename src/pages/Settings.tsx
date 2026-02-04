@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, Users, Link2, Pencil, User } from "lucide-react";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
+import { MicrosoftSettings } from "@/components/settings/MicrosoftSettings";
 import { DivisionFormDialog } from "@/components/settings/DivisionFormDialog";
 import { UserFormDialog } from "@/components/settings/UserFormDialog";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
@@ -96,8 +97,9 @@ const Settings = () => {
 
           {/* Account Tab - visible to all users */}
           <TabsContent value="account" className="space-y-4">
-            <div className="max-w-md">
+            <div className="grid gap-4 md:grid-cols-2">
               <ChangePasswordCard />
+              <MicrosoftSettings />
             </div>
           </TabsContent>
 
