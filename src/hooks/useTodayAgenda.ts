@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface AgendaItem {
   id: string;
@@ -13,33 +13,45 @@ export interface AgendaItem {
 }
 
 export function useTodayAgenda() {
+  const { activeDivisionId } = useAuth();
+
   return useQuery({
-    queryKey: ["today-agenda"],
+    queryKey: ["today-agenda", activeDivisionId],
     queryFn: async () => {
       const today = new Date().toISOString().split('T')[0];
       const items: AgendaItem[] = [];
 
+      // Build queries with optional division filter
+      let deliveriesQuery = supabase
+        .from("orders")
+        .select(`
+          id, order_number, expected_delivery_date,
+          customer:customers(first_name, last_name, company_name, city)
+        `)
+        .eq("expected_delivery_date", today)
+        .in("status", ["levering_gepland", "besteld", "in_productie"])
+        .order("order_number", { ascending: true });
+
+      let installationsQuery = supabase
+        .from("orders")
+        .select(`
+          id, order_number, expected_installation_date,
+          customer:customers(first_name, last_name, company_name, city)
+        `)
+        .eq("expected_installation_date", today)
+        .in("status", ["montage_gepland", "geleverd"])
+        .order("order_number", { ascending: true });
+
+      // Apply division filter if set
+      if (activeDivisionId) {
+        deliveriesQuery = deliveriesQuery.eq("division_id", activeDivisionId);
+        installationsQuery = installationsQuery.eq("division_id", activeDivisionId);
+      }
+
       // Run both queries in parallel
       const [deliveriesResult, installationsResult] = await Promise.all([
-        supabase
-          .from("orders")
-          .select(`
-            id, order_number, expected_delivery_date,
-            customer:customers(first_name, last_name, company_name, city)
-          `)
-          .eq("expected_delivery_date", today)
-          .in("status", ["levering_gepland", "besteld", "in_productie"])
-          .order("order_number", { ascending: true }),
-        
-        supabase
-          .from("orders")
-          .select(`
-            id, order_number, expected_installation_date,
-            customer:customers(first_name, last_name, company_name, city)
-          `)
-          .eq("expected_installation_date", today)
-          .in("status", ["montage_gepland", "geleverd"])
-          .order("order_number", { ascending: true }),
+        deliveriesQuery,
+        installationsQuery,
       ]);
 
       const deliveries = deliveriesResult.data;

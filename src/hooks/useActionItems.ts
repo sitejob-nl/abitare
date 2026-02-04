@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { differenceInDays } from "date-fns";
 
 export interface ActionItem {
@@ -13,47 +14,58 @@ export interface ActionItem {
 }
 
 export function useActionItems(limit = 10) {
+  const { activeDivisionId } = useAuth();
+
   return useQuery({
-    queryKey: ["action-items", limit],
+    queryKey: ["action-items", limit, activeDivisionId],
     queryFn: async () => {
       const today = new Date().toISOString().split('T')[0];
       const actions: ActionItem[] = [];
 
+      // Build queries with optional division filter
+      let expiredQuotesQuery = supabase
+        .from("quotes")
+        .select(`
+          id, quote_number, valid_until,
+          customer:customers(first_name, last_name, company_name)
+        `)
+        .eq("status", "verstuurd")
+        .lt("valid_until", today)
+        .order("valid_until", { ascending: true })
+        .limit(5);
+
+      let pendingOrdersQuery = supabase
+        .from("orders")
+        .select(`
+          id, order_number, status,
+          customer:customers(first_name, last_name, company_name)
+        `)
+        .in("status", ["nieuw", "controle"])
+        .order("created_at", { ascending: true })
+        .limit(5);
+
+      let readyOrdersQuery = supabase
+        .from("orders")
+        .select(`
+          id, order_number,
+          customer:customers(first_name, last_name, company_name)
+        `)
+        .eq("status", "bestel_klaar")
+        .order("created_at", { ascending: true })
+        .limit(3);
+
+      // Apply division filter if set
+      if (activeDivisionId) {
+        expiredQuotesQuery = expiredQuotesQuery.eq("division_id", activeDivisionId);
+        pendingOrdersQuery = pendingOrdersQuery.eq("division_id", activeDivisionId);
+        readyOrdersQuery = readyOrdersQuery.eq("division_id", activeDivisionId);
+      }
+
       // Run all queries in parallel
       const [expiredQuotesResult, pendingOrdersResult, readyOrdersResult] = await Promise.all([
-        // Expired quotes (high priority)
-        supabase
-          .from("quotes")
-          .select(`
-            id, quote_number, valid_until,
-            customer:customers(first_name, last_name, company_name)
-          `)
-          .eq("status", "verstuurd")
-          .lt("valid_until", today)
-          .order("valid_until", { ascending: true })
-          .limit(5),
-        
-        // Orders needing attention (status = nieuw or controle)
-        supabase
-          .from("orders")
-          .select(`
-            id, order_number, status,
-            customer:customers(first_name, last_name, company_name)
-          `)
-          .in("status", ["nieuw", "controle"])
-          .order("created_at", { ascending: true })
-          .limit(5),
-        
-        // Orders awaiting confirmation (bestel_klaar)
-        supabase
-          .from("orders")
-          .select(`
-            id, order_number,
-            customer:customers(first_name, last_name, company_name)
-          `)
-          .eq("status", "bestel_klaar")
-          .order("created_at", { ascending: true })
-          .limit(3),
+        expiredQuotesQuery,
+        pendingOrdersQuery,
+        readyOrdersQuery,
       ]);
 
       const expiredQuotes = expiredQuotesResult.data;
