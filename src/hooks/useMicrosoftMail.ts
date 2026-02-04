@@ -116,6 +116,12 @@ export function useMicrosoftEmail(emailId: string | null) {
   });
 }
 
+export interface EmailAttachment {
+  name: string;
+  contentType: string;
+  contentBytes: string; // base64 encoded
+}
+
 export function useSendEmail() {
   const queryClient = useQueryClient();
 
@@ -190,6 +196,167 @@ export function useSendEmail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["microsoft-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-emails"] });
+      toast.success("Email verzonden");
+    },
+    onError: (error: Error) => {
+      toast.error("Fout bij verzenden", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+export function useSendEmailWithAttachments() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      to,
+      cc,
+      subject,
+      body,
+      attachments,
+      replyToId,
+    }: {
+      to: string[];
+      cc?: string[];
+      subject: string;
+      body: string;
+      attachments?: EmailAttachment[];
+      replyToId?: string;
+    }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("Niet ingelogd");
+      }
+
+      // Format attachments for Graph API
+      const formattedAttachments = attachments?.map((att) => ({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: att.name,
+        contentType: att.contentType,
+        contentBytes: att.contentBytes,
+      }));
+
+      const message = {
+        message: {
+          subject,
+          body: {
+            contentType: "HTML",
+            content: body,
+          },
+          toRecipients: to.map((email) => ({
+            emailAddress: { address: email },
+          })),
+          ccRecipients: cc?.map((email) => ({
+            emailAddress: { address: email },
+          })),
+          attachments: formattedAttachments,
+        },
+        saveToSentItems: true,
+      };
+
+      let endpoint = "/me/sendMail";
+      let requestData: any = message;
+
+      // If replying with attachments, we need to create a draft, add attachments, then send
+      if (replyToId && attachments && attachments.length > 0) {
+        // Create reply draft
+        const { data: draft, error: draftError } = await supabase.functions.invoke("microsoft-api", {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: {
+            endpoint: `/me/messages/${replyToId}/createReply`,
+            method: "POST",
+            data: {},
+          },
+        });
+
+        if (draftError || !draft?.id) {
+          throw new Error(draftError?.message || "Kon reply niet aanmaken");
+        }
+
+        // Update draft with body and attachments
+        const { error: updateError } = await supabase.functions.invoke("microsoft-api", {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: {
+            endpoint: `/me/messages/${draft.id}`,
+            method: "PATCH",
+            data: {
+              body: {
+                contentType: "HTML",
+                content: body,
+              },
+            },
+          },
+        });
+
+        if (updateError) {
+          throw new Error(updateError.message || "Kon bericht niet updaten");
+        }
+
+        // Add attachments one by one
+        for (const att of formattedAttachments || []) {
+          const { error: attError } = await supabase.functions.invoke("microsoft-api", {
+            headers: {
+              Authorization: `Bearer ${sessionData.session.access_token}`,
+            },
+            body: {
+              endpoint: `/me/messages/${draft.id}/attachments`,
+              method: "POST",
+              data: att,
+            },
+          });
+
+          if (attError) {
+            throw new Error(attError.message || "Kon bijlage niet toevoegen");
+          }
+        }
+
+        // Send the draft
+        const { error: sendError } = await supabase.functions.invoke("microsoft-api", {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+          body: {
+            endpoint: `/me/messages/${draft.id}/send`,
+            method: "POST",
+            data: {},
+          },
+        });
+
+        if (sendError) {
+          throw new Error(sendError.message || "Kon email niet verzenden");
+        }
+
+        return { success: true };
+      }
+
+      // Simple send without reply
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
+        body: {
+          endpoint,
+          method: "POST",
+          data: requestData,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || "Kon email niet versturen");
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["microsoft-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["customer-emails"] });
       toast.success("Email verzonden");
     },
     onError: (error: Error) => {

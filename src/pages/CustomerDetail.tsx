@@ -3,13 +3,15 @@ import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Plus, Edit, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Loader2, Mail } from "lucide-react";
 import { useCustomer } from "@/hooks/useCustomers";
 import { useCustomerQuotes } from "@/hooks/useCustomerQuotes";
 import { useCustomerOrders } from "@/hooks/useCustomerOrders";
+import { useUnreadCustomerEmailsCount } from "@/hooks/useCustomerEmails";
 import { CustomerInfoCard } from "@/components/customers/CustomerInfoCard";
 import { CustomerQuotesTab } from "@/components/customers/CustomerQuotesTab";
 import { CustomerOrdersTab } from "@/components/customers/CustomerOrdersTab";
+import { CustomerCommunicationTab } from "@/components/customers/CustomerCommunicationTab";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 import { QuoteFormDialog } from "@/components/quotes/QuoteFormDialog";
 
@@ -31,6 +33,7 @@ const CustomerDetail = () => {
   const { data: customer, isLoading: customerLoading } = useCustomer(id);
   const { data: quotes } = useCustomerQuotes(id);
   const { data: orders } = useCustomerOrders(id);
+  const unreadEmailsCount = useUnreadCustomerEmailsCount(customer?.email);
 
   const quotesCount = quotes?.length || 0;
   const ordersCount = orders?.length || 0;
@@ -107,7 +110,7 @@ const CustomerDetail = () => {
         {/* Right Column - Tabs */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="quotes" className="w-full">
-            <TabsList className="w-full justify-start">
+            <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
               <TabsTrigger value="quotes" className="gap-1.5">
                 Offertes
                 {quotesCount > 0 && (
@@ -124,6 +127,16 @@ const CustomerDetail = () => {
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="communication" className="gap-1.5">
+                <Mail className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Communicatie</span>
+                <span className="sm:hidden">Mail</span>
+                {unreadEmailsCount > 0 && (
+                  <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
+                    {unreadEmailsCount}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="quotes" className="mt-4">
@@ -132,6 +145,14 @@ const CustomerDetail = () => {
 
             <TabsContent value="orders" className="mt-4">
               <CustomerOrdersTab customerId={customer.id} />
+            </TabsContent>
+
+            <TabsContent value="communication" className="mt-4">
+              <CustomerCommunicationTab
+                customerId={customer.id}
+                customerEmail={customer.email}
+                customerName={displayName}
+              />
             </TabsContent>
           </Tabs>
         </div>
