@@ -296,11 +296,11 @@ const Invoices = () => {
                         <TableRow 
                           key={invoice.id} 
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => window.location.href = `/orders/${invoice.id}`}
+                          onClick={() => window.location.href = `/invoices/${invoice.id}`}
                         >
                           <TableCell>
                             <Link
-                              to={`/orders/${invoice.id}`}
+                              to={`/invoices/${invoice.id}`}
                               className="font-medium text-primary hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -362,7 +362,7 @@ const Invoices = () => {
                   return (
                     <Link 
                       key={invoice.id} 
-                      to={`/orders/${invoice.id}`}
+                      to={`/invoices/${invoice.id}`}
                       className="block p-4 hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-start justify-between mb-2">

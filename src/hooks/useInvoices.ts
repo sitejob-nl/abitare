@@ -1,6 +1,73 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+// Hook for fetching a single invoice by ID
+export function useInvoice(id: string | undefined) {
+  return useQuery({
+    queryKey: ["invoice", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id,
+          order_number,
+          order_date,
+          customer_id,
+          division_id,
+          total_incl_vat,
+          total_excl_vat,
+          total_vat,
+          payment_status,
+          amount_paid,
+          exact_invoice_id,
+          customers(
+            id,
+            first_name,
+            last_name,
+            company_name,
+            email,
+            phone,
+            street_address,
+            postal_code,
+            city
+          ),
+          divisions(name),
+          order_lines(
+            id,
+            description,
+            article_code,
+            quantity,
+            unit,
+            unit_price,
+            discount_percentage,
+            line_total,
+            is_group_header,
+            group_title,
+            section_type,
+            section_id,
+            vat_rate
+          ),
+          order_sections(
+            id,
+            title,
+            section_type,
+            sort_order,
+            subtotal,
+            discount_percentage,
+            discount_amount,
+            discount_description
+          )
+        `)
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+
 export interface Invoice {
   id: string;
   order_number: number;

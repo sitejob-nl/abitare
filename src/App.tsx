@@ -15,6 +15,7 @@ import QuoteDetail from "./pages/QuoteDetail";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
 import Calendar from "./pages/Calendar";
 import Installation from "./pages/Installation";
 import InstallationDetail from "./pages/InstallationDetail";
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
             <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
             <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+            <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceDetail /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/installation" element={<ProtectedRoute><Installation /></ProtectedRoute>} />
             <Route path="/installation/:orderId" element={<ProtectedRoute><InstallationDetail /></ProtectedRoute>} />
