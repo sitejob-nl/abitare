@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/crypto.ts";
 
 const EXACT_TOKEN_URL = "https://start.exactonline.nl/api/oauth2/token";
 const EXACT_API_URL = "https://start.exactonline.nl";
@@ -102,6 +103,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Encrypt tokens before storing
+    const encryptedAccessToken = await encryptToken(access_token);
+    const encryptedRefreshToken = await encryptToken(refresh_token);
+
     // Upsert connection (update if exists, insert if not)
     const { error: dbError } = await supabase
       .from("exact_online_connections")
@@ -109,8 +114,8 @@ serve(async (req) => {
         {
           division_id: divisionId,
           exact_division: exactDivision,
-          access_token,
-          refresh_token,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: tokenExpiresAt.toISOString(),
           connected_at: new Date().toISOString(),
           is_active: true,

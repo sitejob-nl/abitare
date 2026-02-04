@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { decryptToken, encryptToken, isEncrypted } from "../_shared/crypto.ts";
 
 const EXACT_API_URL = "https://start.exactonline.nl";
 const EXACT_TOKEN_URL = "https://start.exactonline.nl/api/oauth2/token";
@@ -429,6 +430,17 @@ function mapToExactInvoice(order: AbitareOrder, accountId: string): ExactSalesIn
 
 // deno-lint-ignore no-explicit-any
 async function getValidToken(supabase: any, connection: any) {
+  // Decrypt stored tokens
+  let accessToken = connection.access_token;
+  let refreshToken = connection.refresh_token;
+  
+  if (isEncrypted(accessToken)) {
+    accessToken = await decryptToken(accessToken);
+  }
+  if (isEncrypted(refreshToken)) {
+    refreshToken = await decryptToken(refreshToken);
+  }
+
   const tokenExpiry = new Date(connection.token_expires_at);
 
   if (new Date() >= tokenExpiry) {
@@ -446,7 +458,7 @@ async function getValidToken(supabase: any, connection: any) {
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: connection.refresh_token,
+        refresh_token: refreshToken,
         client_id: clientId,
         client_secret: clientSecret,
       }),
@@ -459,11 +471,15 @@ async function getValidToken(supabase: any, connection: any) {
     const tokens = await response.json();
     const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
+    // Encrypt new tokens before storing
+    const encryptedAccessToken = await encryptToken(tokens.access_token);
+    const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
+
     await supabase
       .from("exact_online_connections")
       .update({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
         token_expires_at: newExpiresAt.toISOString(),
       })
       .eq("id", connection.id);
@@ -471,5 +487,5 @@ async function getValidToken(supabase: any, connection: any) {
     return tokens.access_token;
   }
 
-  return connection.access_token;
+  return accessToken;
 }
