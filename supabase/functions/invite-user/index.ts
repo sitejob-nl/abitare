@@ -72,16 +72,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Create user with admin API
-    const { data: newUser, error: createError } = await serviceClient.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { full_name },
+    // Get origin for redirect URL
+    const origin = req.headers.get("origin") || "https://abitare.lovable.app";
+
+    // Invite user with admin API - this automatically sends the invite email
+    const { data: newUser, error: createError } = await serviceClient.auth.admin.inviteUserByEmail(email, {
+      data: { full_name },
+      redirectTo: `${origin}/set-password`,
     });
 
     if (createError) {
       // Check for duplicate email
-      if (createError.message.includes("already been registered")) {
+      if (createError.message.includes("already been registered") || createError.message.includes("already exists")) {
         return new Response(
           JSON.stringify({ error: "Dit emailadres is al geregistreerd" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -125,18 +127,8 @@ Deno.serve(async (req) => {
       console.error("Roles insert error:", rolesError);
     }
 
-    // Send password reset email so user can set their password
-    const { error: resetError } = await serviceClient.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-      options: {
-        redirectTo: `${req.headers.get("origin") || supabaseUrl}/login`,
-      },
-    });
-
-    if (resetError) {
-      console.warn("Could not generate magic link:", resetError);
-    }
+    // Note: inviteUserByEmail automatically sends the invite email
+    // No need for additional email generation
 
     return new Response(
       JSON.stringify({
