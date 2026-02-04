@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Eye, EyeOff, AlertCircle } from "lucide-react";
 import logo from "@/assets/logo.svg";
+import loginBg from "@/assets/login-bg.jpg";
 
 export default function SetPassword() {
   const [password, setPassword] = useState("");
@@ -122,10 +123,14 @@ export default function SetPassword() {
 
   if (isValidSession === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Laden...</p>
+      <div 
+        className="flex min-h-screen items-center justify-center p-4 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${loginBg})` }}
+      >
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="relative flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
+          <p className="text-sm text-gray-300">Laden...</p>
         </div>
       </div>
     );
@@ -133,18 +138,22 @@ export default function SetPassword() {
 
   if (!isValidSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
-        <Card className="w-full max-w-[400px] border-border/50 bg-card shadow-xl">
+      <div 
+        className="flex min-h-screen items-center justify-center p-4 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${loginBg})` }}
+      >
+        <div className="absolute inset-0 bg-black/40" />
+        <Card className="relative w-full max-w-[400px] border-border/20 bg-black/90 text-white shadow-2xl backdrop-blur-sm">
           <CardHeader className="space-y-4 text-center">
             <div className="mx-auto">
               <img src={logo} alt="Abitare" className="h-8" />
             </div>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <AlertCircle className="h-6 w-6 text-destructive" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-500/20">
+              <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
             <div className="space-y-1">
-              <CardTitle className="text-xl font-semibold">Link ongeldig of verlopen</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl font-semibold text-white">Link ongeldig of verlopen</CardTitle>
+              <CardDescription className="text-gray-400">
                 Deze link is niet meer geldig. Vraag een nieuwe reset link aan of neem contact op met een administrator.
               </CardDescription>
             </div>
@@ -152,7 +161,7 @@ export default function SetPassword() {
           <CardContent>
             <Button 
               onClick={() => navigate("/reset-password")} 
-              className="w-full"
+              className="w-full bg-white text-black hover:bg-gray-200"
             >
               Nieuwe link aanvragen
             </Button>
@@ -163,15 +172,19 @@ export default function SetPassword() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
-      <Card className="w-full max-w-[400px] border-border/50 bg-card shadow-xl">
+    <div 
+      className="flex min-h-screen items-center justify-center p-4 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url(${loginBg})` }}
+    >
+      <div className="absolute inset-0 bg-black/40" />
+      <Card className="relative w-full max-w-[400px] border-border/20 bg-black/90 text-white shadow-2xl backdrop-blur-sm">
         <CardHeader className="space-y-4 text-center">
           <div className="mx-auto">
             <img src={logo} alt="Abitare" className="h-8" />
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-xl font-semibold">Nieuw wachtwoord instellen</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-xl font-semibold text-white">Nieuw wachtwoord instellen</CardTitle>
+            <CardDescription className="text-gray-400">
               Kies een sterk wachtwoord van minimaal 8 tekens.
             </CardDescription>
           </div>
@@ -179,7 +192,7 @@ export default function SetPassword() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">Nieuw wachtwoord</Label>
+              <Label htmlFor="password" className="text-gray-300">Nieuw wachtwoord</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -190,12 +203,12 @@ export default function SetPassword() {
                   required
                   minLength={8}
                   autoComplete="new-password"
-                  className="pr-10"
+                  className="border-gray-700 bg-gray-900/50 text-white placeholder:text-gray-500 pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -206,7 +219,7 @@ export default function SetPassword() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Bevestig wachtwoord</Label>
+              <Label htmlFor="confirmPassword" className="text-gray-300">Bevestig wachtwoord</Label>
               <Input
                 id="confirmPassword"
                 type={showPassword ? "text" : "password"}
@@ -216,16 +229,17 @@ export default function SetPassword() {
                 required
                 minLength={8}
                 autoComplete="new-password"
+                className="border-gray-700 bg-gray-900/50 text-white placeholder:text-gray-500"
               />
             </div>
             
             {/* Password requirements */}
             <div className="space-y-1 text-sm">
-              <div className={`flex items-center gap-2 ${password.length >= 8 ? "text-green-500" : "text-muted-foreground"}`}>
+              <div className={`flex items-center gap-2 ${password.length >= 8 ? "text-green-400" : "text-gray-500"}`}>
                 <CheckCircle className="h-3.5 w-3.5" />
                 <span>Minimaal 8 tekens</span>
               </div>
-              <div className={`flex items-center gap-2 ${password && password === confirmPassword ? "text-green-500" : "text-muted-foreground"}`}>
+              <div className={`flex items-center gap-2 ${password && password === confirmPassword ? "text-green-400" : "text-gray-500"}`}>
                 <CheckCircle className="h-3.5 w-3.5" />
                 <span>Wachtwoorden komen overeen</span>
               </div>
@@ -233,12 +247,12 @@ export default function SetPassword() {
 
             <Button 
               type="submit" 
-              className="w-full" 
+              className="w-full bg-white text-black hover:bg-gray-200" 
               disabled={isLoading || password.length < 8 || password !== confirmPassword}
             >
               {isLoading ? (
                 <>
-                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
                   Opslaan...
                 </>
               ) : (
