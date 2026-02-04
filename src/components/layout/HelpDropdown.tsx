@@ -21,7 +21,7 @@ export function HelpDropdown() {
       icon: MessageCircle,
       label: "Support",
       description: "Neem contact op met support",
-      action: () => window.open("mailto:support@abitare.nl", "_blank"),
+      action: () => window.open("mailto:info@sitejob.nl", "_blank"),
     },
     {
       icon: Keyboard,
@@ -59,9 +59,7 @@ export function HelpDropdown() {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <div className="px-3 py-2 text-xs text-muted-foreground">
-          Versie 1.0.0
-        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground">Versie 1.0.0</div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
