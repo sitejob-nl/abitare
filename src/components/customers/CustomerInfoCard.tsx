@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Phone, MapPin, Building2, User } from "lucide-react";
+import { Mail, Phone, MapPin, Building2, User, Truck } from "lucide-react";
 import type { Customer } from "@/hooks/useCustomers";
 
 interface CustomerInfoCardProps {
@@ -11,12 +11,22 @@ export function CustomerInfoCard({ customer }: CustomerInfoCardProps) {
     .filter(Boolean)
     .join(" ");
 
-  const fullAddress = [
+  const billingAddress = [
     customer.street_address,
     [customer.postal_code, customer.city].filter(Boolean).join(" "),
   ]
     .filter(Boolean)
     .join(", ");
+
+  const deliveryAddress = [
+    customer.delivery_street_address,
+    [customer.delivery_postal_code, customer.delivery_city].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const hasDeliveryAddress = !!(customer.delivery_street_address || customer.delivery_postal_code || customer.delivery_city);
+  const addressesDiffer = hasDeliveryAddress && deliveryAddress !== billingAddress;
 
   return (
     <Card>
@@ -80,10 +90,37 @@ export function CustomerInfoCard({ customer }: CustomerInfoCardProps) {
           </div>
         )}
 
-        {fullAddress && (
+        {/* Billing Address */}
+        {billingAddress && (
           <div className="flex items-start gap-3">
             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-            <p className="text-sm">{fullAddress}</p>
+            <div>
+              {addressesDiffer && (
+                <p className="text-xs text-muted-foreground mb-0.5">Factuuradres</p>
+              )}
+              <p className="text-sm">{billingAddress}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Delivery Address (only if different) */}
+        {addressesDiffer && (
+          <div className="flex items-start gap-3">
+            <Truck className="h-4 w-4 text-muted-foreground mt-0.5" />
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Bezorgadres</p>
+              <p className="text-sm">{deliveryAddress}</p>
+              {(customer.delivery_floor || customer.delivery_has_elevator !== null) && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {[
+                    customer.delivery_floor ? `Verdieping ${customer.delivery_floor}` : null,
+                    customer.delivery_has_elevator ? "Lift aanwezig" : customer.delivery_has_elevator === false ? "Geen lift" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
