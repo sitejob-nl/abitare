@@ -57,7 +57,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
                           !roles.includes("admin") && 
                           !roles.includes("manager");
   
-  if (isOnlyInstaller && location.pathname === "/") {
+  // Monteurs mogen ALLEEN de /monteur/* routes gebruiken
+  if (isOnlyInstaller && !location.pathname.startsWith("/monteur")) {
     return <Navigate to="/monteur" replace />;
   }
 
