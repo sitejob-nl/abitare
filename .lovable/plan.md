@@ -1,106 +1,104 @@
 
-# Plan: Klant Formulier Uitbreiden + Klant Toevoegen vanuit Offerte
+
+# Plan: Factuur Detail Pagina (/invoices/:id)
 
 ## Samenvatting
 
-Twee verbeteringen aan het klantbeheer:
-1. **Apart factuur- en bezorgadres** bij het aanmaken/bewerken van een klant
-2. **Nieuwe klant aanmaken** direct vanuit het offerte-formulier
+Een nieuwe factuurdetailpagina maken met focus op betalingsinformatie en Exact Online synchronisatie. De huidige links naar `/orders/{id}` worden aangepast naar `/invoices/{id}`.
 
 ---
 
-## Onderdeel 1: Gescheiden Factuur- en Bezorgadres
+## Wat de pagina toont
 
-### Huidige situatie
-De database heeft al velden voor een apart bezorgadres:
-- `delivery_street_address`
-- `delivery_postal_code`  
-- `delivery_city`
-- `delivery_floor`
-- `delivery_has_elevator`
+De factuurdetailpagina geeft een overzichtelijke weergave van facturatiegegevens:
 
-Deze worden alleen nog niet gebruikt in het klantformulier.
-
-### Aanpassingen
-
-**CustomerFormDialog.tsx:**
-- Checkbox toevoegen: "Bezorgadres wijkt af van factuuradres"
-- Bij aanvinken verschijnt een tweede adresblok voor bezorgadres
-- Extra velden: verdieping en lift aanwezig (handig voor monteurs)
-
-```text
-┌─────────────────────────────────────────────────────┐
-│ Factuuradres                                        │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ Straat + huisnummer: [____________________]    │ │
-│ │ Postcode: [______]    Plaats: [____________]   │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ [✓] Bezorgadres wijkt af van factuuradres           │
-│                                                     │
-│ Bezorgadres                                         │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ Straat + huisnummer: [____________________]    │ │
-│ │ Postcode: [______]    Plaats: [____________]   │ │
-│ │ Verdieping: [__]      [✓] Lift aanwezig        │ │
-│ └─────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-```
-
-**CustomerInfoCard.tsx:**
-- Beide adressen tonen indien verschillend
-- Labels: "Factuuradres" en "Bezorgadres"
+| Sectie | Inhoud |
+|--------|--------|
+| **Header** | Factuurnummer, klantnaam, betalingsstatus badge |
+| **Betalingsoverzicht** | Totaal, betaald, openstaand met voortgangsbalk |
+| **Factuurregels** | Alle orderlijnen met prijzen (alleen lezen) |
+| **Klantgegevens** | Naam, adres, contactinfo |
+| **Exact Online info** | Exact Invoice ID, link naar order |
+| **Acties** | Betaling registreren |
 
 ---
 
-## Onderdeel 2: Klant Toevoegen vanuit Offerte
+## Exact Online Synchronisatie
 
-### Aanpassingen
+De synchronisatie met Exact Online werkt al correct:
 
-**QuoteFormDialog.tsx:**
-- Knop "+ Nieuwe klant" toevoegen naast de klant-zoekbalk
-- Bij klik opent CustomerFormDialog als nested dialog
-- Na succesvol aanmaken wordt de nieuwe klant automatisch geselecteerd
+**PUSH (Orders → Exact):**
+- Orders zonder `exact_invoice_id` worden als SalesInvoice naar Exact gepusht
+- Gebruikt endpoint: `/api/v1/{division}/salesinvoice/SalesInvoices` (POST)
+- Na succes wordt het Exact Invoice nummer opgeslagen
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ Klant *                                             │
-│ [Zoek een klant...              ▼] [+ Nieuwe klant] │
-└─────────────────────────────────────────────────────┘
-```
+**PULL (Betalingen ← Exact):**  
+- Haalt betalingsstatus op via `/api/v1/{division}/salesinvoice/SalesInvoices` en `/api/v1/{division}/read/financial/Receivables`
+- Berekent betaald bedrag en update `payment_status` (open → deels_betaald → betaald)
 
-**CustomerFormDialog.tsx:**
-- Nieuwe prop: `onCustomerCreated?: (customer) => void`
-- Na succesvol aanmaken wordt deze callback aangeroepen
-- Maakt het mogelijk om de klant direct te selecteren in het offerte-formulier
+**Vereisten voor sync:**
+- Klant moet gekoppeld zijn aan Exact (`exact_account_id`)
+- Actieve Exact Online connectie voor de divisie
 
 ---
 
-## Technische Details
+## Technische Aanpak
 
-### Schema Uitbreiding (CustomerFormDialog)
-
-```typescript
-const customerSchema = z.object({
-  // ... bestaande velden ...
-  
-  // Bezorgadres velden
-  different_delivery_address: z.boolean().default(false),
-  delivery_street_address: z.string().max(255).optional(),
-  delivery_postal_code: z.string().max(10).optional(),
-  delivery_city: z.string().max(100).optional(),
-  delivery_floor: z.string().max(10).optional(),
-  delivery_has_elevator: z.boolean().default(false),
-});
-```
-
-### Te Wijzigen Bestanden
+### Bestanden
 
 | Bestand | Actie |
 |---------|-------|
-| `src/components/customers/CustomerFormDialog.tsx` | Update - Bezorgadres velden + callback prop |
-| `src/components/customers/CustomerInfoCard.tsx` | Update - Beide adressen tonen |
-| `src/components/quotes/QuoteFormDialog.tsx` | Update - Nieuwe klant knop toevoegen |
+| `src/pages/InvoiceDetail.tsx` | **Nieuw** - Factuurdetailpagina |
+| `src/hooks/useInvoices.ts` | **Update** - `useInvoice(id)` hook toevoegen |
+| `src/pages/Invoices.tsx` | **Update** - Links naar `/invoices/:id` |
+| `src/App.tsx` | **Update** - Route `/invoices/:id` toevoegen |
 
-### Geen Database Wijzigingen Nodig
-Alle benodigde velden bestaan al in de `customers` tabel.
+### Nieuwe useInvoice Hook
+
+```typescript
+export function useInvoice(id: string | undefined) {
+  return useQuery({
+    queryKey: ["invoice", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select(`
+          id, order_number, order_date, customer_id, division_id,
+          total_incl_vat, total_excl_vat, total_vat,
+          payment_status, amount_paid, exact_invoice_id,
+          customers(id, first_name, last_name, company_name, email, phone, 
+            street_address, postal_code, city),
+          divisions(name),
+          order_lines(id, description, quantity, unit_price, vat_rate, line_total),
+          order_sections(id, title, position)
+        `)
+        .eq("id", id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+```
+
+### InvoiceDetail Pagina Layout
+
+De pagina hergebruikt bestaande componenten:
+- `PaymentCard` - Betalingsregistratie (ongewijzigd)
+- `OrderLinesTable` - Factuurregels (readonly, ongewijzigd)
+- Nieuwe `InvoiceInfoCard` geïntegreerd in de pagina - Klant + factuurgegevens
+
+---
+
+## Navigatie
+
+```text
+Facturenoverzicht (/invoices)
+    │
+    ├── Klik op factuur → Factuurdetail (/invoices/:id)
+    │                           │
+    │                           └── Link "Bekijk order" → Order (/orders/:id)
+    │
+    └── Exact Online sync knoppen blijven werken
+```
+
