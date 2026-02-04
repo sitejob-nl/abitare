@@ -1,111 +1,64 @@
 
-# Plan: Automatische Redirect voor Monteurs
+# Plan: Strikte Monteur-Omgeving Afdwingen
 
 ## Probleem
 
-Wanneer `info@sitejob.nl` (rol: monteur) inlogt:
-1. Login redirect naar `/` (standaard)
-2. De `ProtectedRoute` laat de user door (alleen check op authenticatie)
-3. User ziet volledige admin Dashboard in plaats van monteur-omgeving
+De monteur (`info@sitejob.nl`) kan nog steeds alle admin-pagina's bezoeken door direct naar een URL te gaan (bijv. `/service`). De huidige fix redirect alleen van `/` naar `/monteur`, maar blokkeert geen andere pagina's.
 
-De gebruiker heeft WEL de juiste rol in de database, maar de app stuurt ze niet naar de juiste omgeving.
-
-## Oplossing
-
-### Optie A: Redirect in Login component (Aanbevolen)
-
-Na succesvolle login, check de gebruikersrollen en redirect naar de juiste pagina:
-
+**Huidige logica in `ProtectedRoute.tsx`:**
 ```typescript
-// src/pages/Login.tsx
-const { signIn, roles, isInstaller } = useAuth();
-
-// Na login:
-if (isInstaller && !roles.includes('admin') && !roles.includes('manager')) {
-  navigate('/monteur', { replace: true });
-} else {
-  navigate(from, { replace: true });
-}
-```
-
-**Probleem**: De rollen worden async geladen NA de login, dus we moeten wachten tot ze beschikbaar zijn.
-
-### Optie B: Redirect in ProtectedRoute (Eenvoudiger)
-
-Voeg rol-check toe aan ProtectedRoute die monteurs automatisch redirect:
-
-```typescript
-// src/components/auth/ProtectedRoute.tsx
-const { user, isLoading, roles, isInstaller, isAdmin, isAdminOrManager } = useAuth();
-
-// Na user check:
-if (isInstaller && !isAdminOrManager) {
+if (isOnlyInstaller && location.pathname === "/") {
   return <Navigate to="/monteur" replace />;
 }
 ```
 
-### Optie C: Aparte Redirect Component (Beste UX)
+Dit werkt alleen voor de homepage, niet voor `/service`, `/orders`, `/customers`, etc.
 
-Maak een `RoleBasedRedirect` component die na login de juiste route bepaalt:
+## Oplossing
 
-```typescript
-// Nieuwe route: /redirect-after-login
-// Deze analyseert rollen en redirect naar /monteur of /
-```
+Breid de check uit zodat monteurs (zonder admin/manager rol) worden omgeleid naar `/monteur` voor ALLE routes die niet beginnen met `/monteur`.
 
-## Aanbevolen Aanpak: Optie B
+## Code Wijziging
 
-Dit is de eenvoudigste oplossing met minimale code wijzigingen:
-
-1. Update `ProtectedRoute.tsx` om monteurs te detecteren
-2. Redirect monteurs naar `/monteur` als ze `/` proberen te bezoeken
-3. Andere routes blijven toegankelijk voor admins/managers
-
-## Bestandswijzigingen
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/components/auth/ProtectedRoute.tsx` | Voeg rol-based redirect toe voor monteurs |
-
-## Code Implementatie
+**Bestand:** `src/components/auth/ProtectedRoute.tsx`
 
 ```typescript
-// src/components/auth/ProtectedRoute.tsx
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isLoading, authInitError, retryAuthInit, signOut, roles } = useAuth();
-  const location = useLocation();
+// Huidige code (regel 54-62):
+const isOnlyInstaller = roles.includes("monteur") && 
+                        !roles.includes("admin") && 
+                        !roles.includes("manager");
 
-  // ... bestaande loading/error checks ...
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // NIEUW: Redirect monteurs naar hun eigen omgeving
-  const isOnlyInstaller = roles.includes("monteur") && 
-                          !roles.includes("admin") && 
-                          !roles.includes("manager");
-  
-  if (isOnlyInstaller && location.pathname === "/") {
-    return <Navigate to="/monteur" replace />;
-  }
-
-  return <>{children}</>;
+if (isOnlyInstaller && location.pathname === "/") {
+  return <Navigate to="/monteur" replace />;
 }
-```
 
-## Extra Overweging
+// Nieuwe code:
+const isOnlyInstaller = roles.includes("monteur") && 
+                        !roles.includes("admin") && 
+                        !roles.includes("manager");
 
-Wil je dat monteurs ALLEEN toegang hebben tot `/monteur/*` routes, of mogen ze ook andere pagina's zien (bijv. `/orders/:id` voor order details)?
-
-**Huidige situatie**: Monteurs kunnen technisch gezien alle ProtectedRoutes bezoeken, maar de data is beperkt via RLS.
-
-**Optie voor strikte toegang**: Voeg een check toe die monteurs blokkeert voor alle niet-monteur routes:
-
-```typescript
+// Monteurs mogen ALLEEN de /monteur/* routes gebruiken
 if (isOnlyInstaller && !location.pathname.startsWith("/monteur")) {
   return <Navigate to="/monteur" replace />;
 }
 ```
 
-Dit is optioneel en kan later worden toegevoegd.
+## Resultaat
+
+Na deze wijziging:
+
+| Route | Admin/Manager | Monteur |
+|-------|---------------|---------|
+| `/` | Dashboard | → Redirect naar `/monteur` |
+| `/service` | Service pagina | → Redirect naar `/monteur` |
+| `/orders` | Orders pagina | → Redirect naar `/monteur` |
+| `/customers` | Klanten pagina | → Redirect naar `/monteur` |
+| `/monteur` | Monteur dashboard | Monteur dashboard |
+| `/monteur/opdracht/:id` | Order detail | Order detail |
+| `/monteur/werkbon/:id` | Werkbon formulier | Werkbon formulier |
+
+## Technische Details
+
+- De `InstallerRoute` component staat al toe dat admins/managers ook de monteur-routes kunnen bezoeken (handig voor testing)
+- Data-niveau beveiliging blijft intact via RLS policies
+- Geen wijzigingen nodig in routing (`App.tsx`) of andere componenten
