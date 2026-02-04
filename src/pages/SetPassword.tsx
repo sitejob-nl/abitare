@@ -18,33 +18,36 @@ export default function SetPassword() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check if user has a valid recovery session
+  // Check if user has a valid recovery or invite session
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Check if this is a recovery session by looking at the URL hash
+      // Check if this is a recovery/invite session by looking at the URL hash
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const type = hashParams.get("type");
       const accessToken = hashParams.get("access_token");
       
-      if (type === "recovery" && accessToken) {
-        // Set the session from the recovery token
+      // Handle recovery OR invite tokens
+      if ((type === "recovery" || type === "invite") && accessToken) {
+        // Set the session from the token
         const { error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: hashParams.get("refresh_token") || "",
         });
         
         if (error) {
+          console.error("Session error:", error);
           setIsValidSession(false);
         } else {
           setIsValidSession(true);
         }
-      } else if (session) {
-        // User might have a valid session from invite link
-        setIsValidSession(true);
       } else {
-        setIsValidSession(false);
+        // Check for existing session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setIsValidSession(true);
+        } else {
+          setIsValidSession(false);
+        }
       }
     };
 
@@ -76,7 +79,7 @@ export default function SetPassword() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
+    const { data: userData, error } = await supabase.auth.updateUser({
       password: password,
     });
 
@@ -93,9 +96,26 @@ export default function SetPassword() {
         description: "Je wachtwoord is succesvol gewijzigd. Je wordt nu doorgestuurd.",
       });
       
+      // Fetch user roles to determine redirect
+      let redirectPath = "/";
+      
+      if (userData.user) {
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userData.user.id);
+        
+        const roles = rolesData?.map(r => r.role) || [];
+        
+        // Monteurs (without admin/manager role) go to /monteur
+        if (roles.includes("monteur") && !roles.includes("admin") && !roles.includes("manager")) {
+          redirectPath = "/monteur";
+        }
+      }
+      
       // Small delay to show success message
       setTimeout(() => {
-        navigate("/", { replace: true });
+        navigate(redirectPath, { replace: true });
       }, 1500);
     }
   };
