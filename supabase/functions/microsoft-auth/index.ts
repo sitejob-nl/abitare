@@ -13,13 +13,18 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 
-    // Debug logging
+    // Debug logging - show actual URL prefix to verify format
     console.log("Environment check:", {
       MICROSOFT_CLIENT_ID_present: !!MICROSOFT_CLIENT_ID,
       MICROSOFT_TENANT_ID: MICROSOFT_TENANT_ID,
-      SUPABASE_URL_present: !!SUPABASE_URL,
-      SUPABASE_ANON_KEY_present: !!SUPABASE_ANON_KEY,
+      SUPABASE_URL: SUPABASE_URL ? SUPABASE_URL.substring(0, 40) + "..." : "NOT SET",
+      SUPABASE_ANON_KEY_length: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
     });
+
+    // Validate SUPABASE_URL format
+    if (!SUPABASE_URL || !SUPABASE_URL.startsWith("https://")) {
+      throw new Error(`SUPABASE_URL is invalid or missing. Got: ${SUPABASE_URL?.substring(0, 50)}`);
+    }
 
     if (!MICROSOFT_CLIENT_ID) {
       throw new Error("MICROSOFT_CLIENT_ID is not configured");
