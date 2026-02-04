@@ -259,7 +259,7 @@ export default function ServiceTicketDetail() {
 
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Main content */}
-          <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
+          <div className="lg:col-span-2 space-y-4">
             {/* Description */}
             <Card>
               <CardHeader className="pb-2">
@@ -397,8 +397,8 @@ export default function ServiceTicketDetail() {
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-4">
+          {/* Sidebar - on mobile this goes below main content */}
+          <div className="space-y-4 order-first lg:order-none">
             {/* Ticket info */}
             <Card>
               <CardHeader className="pb-2">
