@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,8 +20,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
-import { useCreateCustomer } from "@/hooks/useCustomers";
+import { useCreateCustomer, type Customer } from "@/hooks/useCustomers";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -37,6 +38,13 @@ const customerSchema = z.object({
   street_address: z.string().max(255).optional(),
   postal_code: z.string().max(10).optional(),
   city: z.string().max(100).optional(),
+  // Delivery address fields
+  different_delivery_address: z.boolean().default(false),
+  delivery_street_address: z.string().max(255).optional(),
+  delivery_postal_code: z.string().max(10).optional(),
+  delivery_city: z.string().max(100).optional(),
+  delivery_floor: z.string().max(10).optional(),
+  delivery_has_elevator: z.boolean().default(false),
 });
 
 type CustomerFormData = z.infer<typeof customerSchema>;
@@ -44,6 +52,7 @@ type CustomerFormData = z.infer<typeof customerSchema>;
 interface CustomerFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCustomerCreated?: (customer: Customer) => void;
   customer?: {
     id: string;
     customer_type: "particulier" | "zakelijk";
@@ -57,13 +66,25 @@ interface CustomerFormDialogProps {
     street_address?: string | null;
     postal_code?: string | null;
     city?: string | null;
+    delivery_street_address?: string | null;
+    delivery_postal_code?: string | null;
+    delivery_city?: string | null;
+    delivery_floor?: string | null;
+    delivery_has_elevator?: boolean | null;
   };
 }
 
-export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFormDialogProps) {
+export function CustomerFormDialog({ open, onOpenChange, onCustomerCreated, customer }: CustomerFormDialogProps) {
   const { user, profile } = useAuth();
   const createCustomer = useCreateCustomer();
   const isEditMode = !!customer;
+
+  // Check if customer has a different delivery address
+  const hasDifferentDeliveryAddress = customer ? !!(
+    customer.delivery_street_address ||
+    customer.delivery_postal_code ||
+    customer.delivery_city
+  ) : false;
 
   const {
     register,
@@ -86,18 +107,25 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
       street_address: customer?.street_address || "",
       postal_code: customer?.postal_code || "",
       city: customer?.city || "",
+      different_delivery_address: hasDifferentDeliveryAddress,
+      delivery_street_address: customer?.delivery_street_address || "",
+      delivery_postal_code: customer?.delivery_postal_code || "",
+      delivery_city: customer?.delivery_city || "",
+      delivery_floor: customer?.delivery_floor || "",
+      delivery_has_elevator: customer?.delivery_has_elevator || false,
     },
   });
 
   const customerType = watch("customer_type");
+  const differentDeliveryAddress = watch("different_delivery_address");
 
   const onSubmit = async (data: CustomerFormData) => {
     try {
-      await createCustomer.mutateAsync({
+      const newCustomer = await createCustomer.mutateAsync({
         customer_type: data.customer_type,
         salutation: data.salutation || null,
         first_name: data.first_name || null,
-        last_name: data.last_name, // Required field
+        last_name: data.last_name,
         company_name: data.company_name || null,
         email: data.email || null,
         phone: data.phone || null,
@@ -105,6 +133,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
         street_address: data.street_address || null,
         postal_code: data.postal_code || null,
         city: data.city || null,
+        // Delivery address fields - only save if different
+        delivery_street_address: data.different_delivery_address ? data.delivery_street_address || null : null,
+        delivery_postal_code: data.different_delivery_address ? data.delivery_postal_code || null : null,
+        delivery_city: data.different_delivery_address ? data.delivery_city || null : null,
+        delivery_floor: data.different_delivery_address ? data.delivery_floor || null : null,
+        delivery_has_elevator: data.different_delivery_address ? data.delivery_has_elevator : null,
         salesperson_id: user?.id || null,
         division_id: profile?.division_id || null,
       });
@@ -113,6 +147,11 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
         title: "Klant aangemaakt",
         description: `${data.first_name || ""} ${data.last_name} is toegevoegd.`,
       });
+
+      // Call callback with the new customer if provided
+      if (onCustomerCreated && newCustomer) {
+        onCustomerCreated(newCustomer);
+      }
 
       reset();
       onOpenChange(false);
@@ -133,7 +172,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Klant bewerken" : "Nieuwe klant"}</DialogTitle>
         </DialogHeader>
@@ -143,7 +182,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
           <div className="space-y-2">
             <Label>Type</Label>
             <RadioGroup
-              defaultValue="particulier"
+              defaultValue={customer?.customer_type || "particulier"}
               onValueChange={(value) => setValue("customer_type", value as "particulier" | "zakelijk")}
               className="flex gap-4"
             >
@@ -162,7 +201,10 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label htmlFor="salutation">Aanhef</Label>
-              <Select onValueChange={(value) => setValue("salutation", value)}>
+              <Select 
+                defaultValue={customer?.salutation || undefined}
+                onValueChange={(value) => setValue("salutation", value)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecteer" />
                 </SelectTrigger>
@@ -214,22 +256,76 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: CustomerFor
             <Input id="mobile" type="tel" {...register("mobile")} />
           </div>
 
-          {/* Address Fields */}
-          <div className="space-y-2">
-            <Label htmlFor="street_address">Straat + huisnummer</Label>
-            <Input id="street_address" {...register("street_address")} />
+          {/* Billing Address */}
+          <div className="space-y-3 pt-2 border-t">
+            <Label className="text-sm font-medium">Factuuradres</Label>
+            <div className="space-y-2">
+              <Label htmlFor="street_address" className="text-xs text-muted-foreground">Straat + huisnummer</Label>
+              <Input id="street_address" {...register("street_address")} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="postal_code" className="text-xs text-muted-foreground">Postcode</Label>
+                <Input id="postal_code" {...register("postal_code")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city" className="text-xs text-muted-foreground">Plaats</Label>
+                <Input id="city" {...register("city")} />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="postal_code">Postcode</Label>
-              <Input id="postal_code" {...register("postal_code")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">Plaats</Label>
-              <Input id="city" {...register("city")} />
-            </div>
+          {/* Different Delivery Address Checkbox */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="different_delivery_address"
+              checked={differentDeliveryAddress}
+              onCheckedChange={(checked) => setValue("different_delivery_address", !!checked)}
+            />
+            <Label htmlFor="different_delivery_address" className="font-normal cursor-pointer">
+              Bezorgadres wijkt af van factuuradres
+            </Label>
           </div>
+
+          {/* Delivery Address (conditional) */}
+          {differentDeliveryAddress && (
+            <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
+              <Label className="text-sm font-medium">Bezorgadres</Label>
+              <div className="space-y-2">
+                <Label htmlFor="delivery_street_address" className="text-xs text-muted-foreground">Straat + huisnummer</Label>
+                <Input id="delivery_street_address" {...register("delivery_street_address")} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="delivery_postal_code" className="text-xs text-muted-foreground">Postcode</Label>
+                  <Input id="delivery_postal_code" {...register("delivery_postal_code")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="delivery_city" className="text-xs text-muted-foreground">Plaats</Label>
+                  <Input id="delivery_city" {...register("delivery_city")} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="delivery_floor" className="text-xs text-muted-foreground">Verdieping</Label>
+                  <Input id="delivery_floor" placeholder="bijv. 3" {...register("delivery_floor")} />
+                </div>
+                <div className="flex items-center space-x-2 pt-6">
+                  <Checkbox
+                    id="delivery_has_elevator"
+                    checked={watch("delivery_has_elevator")}
+                    onCheckedChange={(checked) => setValue("delivery_has_elevator", !!checked)}
+                  />
+                  <Label htmlFor="delivery_has_elevator" className="font-normal cursor-pointer text-sm">
+                    Lift aanwezig
+                  </Label>
+                </div>
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={handleClose}>

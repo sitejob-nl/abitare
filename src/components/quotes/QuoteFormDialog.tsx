@@ -29,12 +29,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCustomers } from "@/hooks/useCustomers";
+import { useCustomers, type Customer } from "@/hooks/useCustomers";
 import { useCreateQuote } from "@/hooks/useQuotes";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 
 const quoteSchema = z.object({
   customer_id: z.string().min(1, "Selecteer een klant"),
@@ -56,8 +57,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [newCustomerDialogOpen, setNewCustomerDialogOpen] = useState(false);
 
-  const { data: customers, isLoading: customersLoading } = useCustomers({
+  const { data: customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers({
     search: customerSearch || undefined,
     enabled: open,
   });
@@ -90,6 +92,14 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const getCustomerDisplayName = (customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null }) => {
     if (customer.company_name) return customer.company_name;
     return [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Onbekend";
+  };
+
+  const handleCustomerCreated = async (newCustomer: Customer) => {
+    // Refetch customers to include the new one
+    await refetchCustomers();
+    // Select the newly created customer
+    setValue("customer_id", newCustomer.id);
+    setNewCustomerDialogOpen(false);
   };
 
   const onSubmit = async (data: QuoteFormData) => {
@@ -131,144 +141,166 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[450px]">
-        <DialogHeader>
-          <DialogTitle>Nieuwe offerte</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Nieuwe offerte</DialogTitle>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Customer Selection */}
-          <div className="space-y-2">
-            <Label>Klant *</Label>
-            <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={customerOpen}
-                  className="w-full justify-between font-normal"
-                  disabled={isCustomerPrefilled}
-                >
-                  {selectedCustomer
-                    ? getCustomerDisplayName(selectedCustomer)
-                    : "Zoek een klant..."}
-                  {!isCustomerPrefilled && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Zoek op naam, email..."
-                    value={customerSearch}
-                    onValueChange={setCustomerSearch}
-                  />
-                  <CommandList>
-                    {customersLoading ? (
-                      <div className="flex items-center justify-center py-6">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <>
-                        <CommandEmpty>Geen klanten gevonden.</CommandEmpty>
-                        <CommandGroup>
-                          {customers?.slice(0, 20).map((customer) => (
-                            <CommandItem
-                              key={customer.id}
-                              value={customer.id}
-                              onSelect={() => {
-                                setValue("customer_id", customer.id);
-                                setCustomerOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedCustomerId === customer.id
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
-                                <span>{getCustomerDisplayName(customer)}</span>
-                                {customer.email && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {customer.email}
-                                  </span>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </>
-                    )}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {errors.customer_id && (
-              <p className="text-xs text-destructive">{errors.customer_id.message}</p>
-            )}
-          </div>
-
-          {/* Valid Until Date */}
-          <div className="space-y-2">
-            <Label>Geldig tot</Label>
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !validUntil && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {validUntil ? format(validUntil, "d MMMM yyyy", { locale: nl }) : "Selecteer datum"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={validUntil}
-                  onSelect={(date) => {
-                    if (date) {
-                      setValue("valid_until", date);
-                      setCalendarOpen(false);
-                    }
-                  }}
-                  disabled={(date) => date < new Date()}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Internal Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="internal_notes">Interne notities</Label>
-            <Textarea
-              id="internal_notes"
-              placeholder="Optionele notities voor intern gebruik..."
-              className="resize-none"
-              rows={3}
-              onChange={(e) => setValue("internal_notes", e.target.value)}
-            />
-          </div>
-
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Annuleren
-            </Button>
-            <Button type="submit" disabled={isSubmitting || createQuote.isPending}>
-              {(isSubmitting || createQuote.isPending) && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Customer Selection */}
+            <div className="space-y-2">
+              <Label>Klant *</Label>
+              <div className="flex gap-2">
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={customerOpen}
+                      className="flex-1 justify-between font-normal"
+                      disabled={isCustomerPrefilled}
+                    >
+                      {selectedCustomer
+                        ? getCustomerDisplayName(selectedCustomer)
+                        : "Zoek een klant..."}
+                      {!isCustomerPrefilled && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[350px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Zoek op naam, email..."
+                        value={customerSearch}
+                        onValueChange={setCustomerSearch}
+                      />
+                      <CommandList>
+                        {customersLoading ? (
+                          <div className="flex items-center justify-center py-6">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : (
+                          <>
+                            <CommandEmpty>Geen klanten gevonden.</CommandEmpty>
+                            <CommandGroup>
+                              {customers?.slice(0, 20).map((customer) => (
+                                <CommandItem
+                                  key={customer.id}
+                                  value={customer.id}
+                                  onSelect={() => {
+                                    setValue("customer_id", customer.id);
+                                    setCustomerOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      selectedCustomerId === customer.id
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span>{getCustomerDisplayName(customer)}</span>
+                                    {customer.email && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {customer.email}
+                                      </span>
+                                    )}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {!isCustomerPrefilled && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setNewCustomerDialogOpen(true)}
+                    title="Nieuwe klant toevoegen"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {errors.customer_id && (
+                <p className="text-xs text-destructive">{errors.customer_id.message}</p>
               )}
-              Aanmaken
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            </div>
+
+            {/* Valid Until Date */}
+            <div className="space-y-2">
+              <Label>Geldig tot</Label>
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !validUntil && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {validUntil ? format(validUntil, "d MMMM yyyy", { locale: nl }) : "Selecteer datum"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={validUntil}
+                    onSelect={(date) => {
+                      if (date) {
+                        setValue("valid_until", date);
+                        setCalendarOpen(false);
+                      }
+                    }}
+                    disabled={(date) => date < new Date()}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Internal Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="internal_notes">Interne notities</Label>
+              <Textarea
+                id="internal_notes"
+                placeholder="Optionele notities voor intern gebruik..."
+                className="resize-none"
+                rows={3}
+                onChange={(e) => setValue("internal_notes", e.target.value)}
+              />
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Annuleren
+              </Button>
+              <Button type="submit" disabled={isSubmitting || createQuote.isPending}>
+                {(isSubmitting || createQuote.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Aanmaken
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Customer Dialog */}
+      <CustomerFormDialog
+        open={newCustomerDialogOpen}
+        onOpenChange={setNewCustomerDialogOpen}
+        onCustomerCreated={handleCustomerCreated}
+      />
+    </>
   );
 }
