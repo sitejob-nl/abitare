@@ -41,15 +41,15 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card p-6 card-hover",
+        "rounded-xl border border-border bg-card p-4 sm:p-6 card-hover",
         delayClasses[animationDelay as keyof typeof delayClasses] || "animate-fade-in",
         className
       )}
     >
-      <div className="mb-4 flex items-start justify-between">
+      <div className="mb-2 sm:mb-4 flex items-start justify-between">
         <div
           className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-xl text-xl",
+            "flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl text-lg sm:text-xl",
             iconClasses[iconVariant]
           )}
         >
@@ -58,23 +58,23 @@ export function StatCard({
         {trend && (
           <div
             className={cn(
-              "flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold",
+              "flex items-center gap-1 rounded-md px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold",
               trend.direction === "up" ? "trend-up" : "trend-down"
             )}
           >
             {trend.direction === "up" ? (
-              <TrendingUp className="h-3 w-3" />
+              <TrendingUp className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
             ) : (
-              <TrendingDown className="h-3 w-3" />
+              <TrendingDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
             )}
             {trend.value}
           </div>
         )}
       </div>
-      <div className="text-[32px] font-bold leading-none tracking-tight text-foreground">
+      <div className="text-xl sm:text-[32px] font-bold leading-none tracking-tight text-foreground">
         {value}
       </div>
-      <div className="mt-1 text-[13px] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-[11px] sm:text-[13px] text-muted-foreground line-clamp-1">{label}</div>
     </div>
   );
 }

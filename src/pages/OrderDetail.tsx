@@ -254,14 +254,14 @@ const OrderDetail = () => {
       breadcrumb={`Orders / #${order.order_number}`}
     >
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/orders")}>
+      <div className="mb-4 sm:mb-6 flex flex-col gap-4">
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/orders")} className="flex-shrink-0">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="font-display text-2xl font-semibold text-foreground">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="font-display text-xl sm:text-2xl font-semibold text-foreground">
                 Order #{order.order_number}
               </h1>
               <OrderStatusSelect
@@ -270,7 +270,7 @@ const OrderDetail = () => {
                 isUpdating={updateStatus.isPending}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground truncate">
               {getCustomerName(customer)}
               {quote && (
                 <>
@@ -285,13 +285,13 @@ const OrderDetail = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 pl-0 sm:pl-14">
           <PortalTokenGenerator
             customerId={order.customer_id}
             orderId={order.id}
             customerName={getCustomerName(customer)}
           />
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <p className="text-xs text-muted-foreground">Totaal incl. BTW</p>
             <p className="text-xl font-semibold text-foreground">
               {formatCurrency(order.total_incl_vat)}

@@ -16,33 +16,36 @@ export function CalendarViewToggle({ view, onViewChange }: CalendarViewTogglePro
         size="sm"
         onClick={() => onViewChange("month")}
         className={cn(
-          "h-7 px-3 text-xs font-medium",
+          "h-7 px-2 sm:px-3 text-xs font-medium",
           view === "month" && "bg-background shadow-sm"
         )}
       >
-        Maand
+        <span className="hidden sm:inline">Maand</span>
+        <span className="sm:hidden">M</span>
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => onViewChange("week")}
         className={cn(
-          "h-7 px-3 text-xs font-medium",
+          "h-7 px-2 sm:px-3 text-xs font-medium",
           view === "week" && "bg-background shadow-sm"
         )}
       >
-        Week
+        <span className="hidden sm:inline">Week</span>
+        <span className="sm:hidden">W</span>
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => onViewChange("day")}
         className={cn(
-          "h-7 px-3 text-xs font-medium",
+          "h-7 px-2 sm:px-3 text-xs font-medium",
           view === "day" && "bg-background shadow-sm"
         )}
       >
-        Dag
+        <span className="hidden sm:inline">Dag</span>
+        <span className="sm:hidden">D</span>
       </Button>
     </div>
   );

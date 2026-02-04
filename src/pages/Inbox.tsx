@@ -14,6 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Mail,
   MailOpen,
   Send,
@@ -24,7 +30,6 @@ import {
   ArrowLeft,
   ExternalLink,
   RefreshCw,
-  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -38,6 +43,7 @@ import {
 } from "@/hooks/useMicrosoftMail";
 import { useStartMicrosoftAuth } from "@/hooks/useMicrosoftConnection";
 import { useQueryClient } from "@tanstack/react-query";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function EmailListItem({
   email,
@@ -55,12 +61,12 @@ function EmailListItem({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-3 border-b border-border transition-colors hover:bg-muted/50",
+        "w-full text-left px-3 sm:px-4 py-3 border-b border-border transition-colors hover:bg-muted/50",
         isSelected && "bg-muted",
         !email.isRead && "bg-primary/5"
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2 sm:gap-3">
         <div className="flex-shrink-0 mt-1">
           {email.isRead ? (
             <MailOpen className="h-4 w-4 text-muted-foreground" />
@@ -90,7 +96,7 @@ function EmailListItem({
           >
             {email.subject || "(Geen onderwerp)"}
           </p>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
+          <p className="text-xs text-muted-foreground truncate mt-0.5 hidden sm:block">
             {email.bodyPreview}
           </p>
         </div>
@@ -140,20 +146,21 @@ function EmailDetail({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 p-4 border-b border-border">
+      <div className="flex items-center gap-2 p-3 sm:p-4 border-b border-border">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={() => onReply(email)}>
-          <Reply className="h-4 w-4 mr-2" />
-          Beantwoorden
+          <Reply className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Beantwoorden</span>
         </Button>
         {email.webLink && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => window.open(email.webLink, "_blank")}
+            className="hidden sm:flex"
           >
             <ExternalLink className="h-4 w-4 mr-2" />
             Outlook
@@ -162,13 +169,13 @@ function EmailDetail({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-4">
+        <div className="p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">
             {email.subject || "(Geen onderwerp)"}
           </h2>
 
-        <div className="flex items-start gap-3 mb-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground font-semibold">
+        <div className="flex items-start gap-2 sm:gap-3 mb-4 sm:mb-6">
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-muted text-foreground font-semibold text-sm sm:text-base">
               {senderName.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1">
@@ -307,9 +314,10 @@ function ComposeDialog({
 
 const Inbox = () => {
   const { data: connection, isLoading: connectionLoading } = useMicrosoftConnection();
-  const { data: emails, isLoading: emailsLoading, refetch } = useMicrosoftEmails();
+  const { data: emails, isLoading: emailsLoading } = useMicrosoftEmails();
   const startAuth = useStartMicrosoftAuth();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -329,12 +337,20 @@ const Inbox = () => {
     setComposeOpen(true);
   };
 
+  const handleSelectEmail = (emailId: string) => {
+    setSelectedEmailId(emailId);
+  };
+
+  const handleBackToList = () => {
+    setSelectedEmailId(null);
+  };
+
   // Not connected state
   if (!connectionLoading && !connection?.is_active) {
     return (
       <AppLayout title="Inbox" breadcrumb="Inbox">
         <div className="mb-6">
-          <h1 className="font-display text-[28px] font-semibold text-foreground">
+          <h1 className="font-display text-xl sm:text-[28px] font-semibold text-foreground">
             Inbox
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -343,12 +359,12 @@ const Inbox = () => {
         </div>
 
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 mb-6">
-              <Mail className="h-7 w-7 text-primary" />
+          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 px-4">
+            <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-primary/10 mb-4 sm:mb-6">
+              <Mail className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
             </div>
 
-            <h2 className="text-xl font-semibold text-foreground">
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center">
               Verbind je Microsoft account
             </h2>
             <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">
@@ -357,7 +373,7 @@ const Inbox = () => {
             </p>
 
             <Button
-              className="mt-6"
+              className="mt-6 w-full sm:w-auto"
               onClick={() => startAuth.mutate()}
               disabled={startAuth.isPending}
             >
@@ -376,30 +392,82 @@ const Inbox = () => {
 
   const isLoading = connectionLoading || emailsLoading;
 
+  // Mobile: Show email detail in Sheet
+  const renderMobileEmailDetail = () => {
+    if (!selectedEmailId) return null;
+
+    return (
+      <Sheet open={!!selectedEmailId} onOpenChange={(open) => !open && handleBackToList()}>
+        <SheetContent side="right" className="w-full sm:max-w-lg p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Email Details</SheetTitle>
+          </SheetHeader>
+          <EmailDetail
+            emailId={selectedEmailId}
+            onBack={handleBackToList}
+            onReply={handleReply}
+          />
+        </SheetContent>
+      </Sheet>
+    );
+  };
+
   return (
     <AppLayout title="Inbox" breadcrumb="Inbox">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-[28px] font-semibold text-foreground">
+          <h1 className="font-display text-xl sm:text-[28px] font-semibold text-foreground">
             Inbox
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground truncate max-w-[200px] sm:max-w-none">
             {connection?.microsoft_email || "Microsoft emails"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Vernieuwen
+          <Button variant="outline" size="sm" onClick={handleRefresh} className="flex-1 sm:flex-none">
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Vernieuwen</span>
           </Button>
-          <Button size="sm" onClick={handleCompose}>
-            <Send className="h-4 w-4 mr-2" />
-            Nieuw
+          <Button size="sm" onClick={handleCompose} className="flex-1 sm:flex-none">
+            <Send className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Nieuw</span>
           </Button>
         </div>
       </div>
 
-      <Card className="overflow-hidden">
+      {/* Mobile Layout */}
+      <div className="md:hidden">
+        <Card className="overflow-hidden">
+          <div className="p-3 border-b border-border bg-muted/30">
+            <Input placeholder="Zoeken in emails..." className="h-9" />
+          </div>
+          <ScrollArea className="h-[calc(100vh-280px)] min-h-[400px]">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : emails && emails.length > 0 ? (
+              emails.map((email) => (
+                <EmailListItem
+                  key={email.id}
+                  email={email}
+                  isSelected={selectedEmailId === email.id}
+                  onClick={() => handleSelectEmail(email.id)}
+                />
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Mail className="h-8 w-8 mb-2" />
+                <p className="text-sm">Geen emails gevonden</p>
+              </div>
+            )}
+          </ScrollArea>
+        </Card>
+        {renderMobileEmailDetail()}
+      </div>
+
+      {/* Desktop Layout */}
+      <Card className="overflow-hidden hidden md:block">
         <div className="flex h-[calc(100vh-220px)] min-h-[500px]">
           {/* Email List */}
           <div className="w-full max-w-md border-r border-border flex flex-col">
@@ -417,7 +485,7 @@ const Inbox = () => {
                     key={email.id}
                     email={email}
                     isSelected={selectedEmailId === email.id}
-                    onClick={() => setSelectedEmailId(email.id)}
+                    onClick={() => handleSelectEmail(email.id)}
                   />
                 ))
               ) : (
@@ -429,12 +497,12 @@ const Inbox = () => {
             </ScrollArea>
           </div>
 
-          {/* Email Detail */}
+          {/* Email Detail - Desktop */}
           <div className="flex-1 bg-background">
             {selectedEmailId ? (
               <EmailDetail
                 emailId={selectedEmailId}
-                onBack={() => setSelectedEmailId(null)}
+                onBack={handleBackToList}
                 onReply={handleReply}
               />
             ) : (
