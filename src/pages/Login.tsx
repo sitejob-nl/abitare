@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/logo.svg";
+import loginBg from "@/assets/login-bg.jpg";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -44,15 +45,19 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
-      <Card className="w-full max-w-[400px] border-border/50 bg-card shadow-xl">
+    <div 
+      className="flex min-h-screen items-center justify-center p-4 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url(${loginBg})` }}
+    >
+      <div className="absolute inset-0 bg-black/40" />
+      <Card className="relative w-full max-w-[400px] border-border/20 bg-black/90 text-white shadow-2xl backdrop-blur-sm">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto rounded-lg bg-sidebar px-4 py-2">
+          <div className="mx-auto">
             <img src={logo} alt="Abitare" className="h-8" />
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-xl font-semibold">Inloggen</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-xl font-semibold text-white">Inloggen</CardTitle>
+            <CardDescription className="text-gray-400">
               Voer je gegevens in om toegang te krijgen
             </CardDescription>
           </div>
@@ -60,7 +65,7 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-gray-300">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -69,14 +74,15 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                className="border-gray-700 bg-gray-900/50 text-white placeholder:text-gray-500"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Wachtwoord</Label>
+                <Label htmlFor="password" className="text-gray-300">Wachtwoord</Label>
                 <Link 
                   to="/reset-password" 
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-xs text-gray-400 hover:text-white transition-colors"
                 >
                   Vergeten?
                 </Link>
@@ -89,16 +95,17 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
+                className="border-gray-700 bg-gray-900/50 text-white placeholder:text-gray-500"
               />
             </div>
             <Button
               type="submit" 
-              className="w-full" 
+              className="w-full bg-white text-black hover:bg-gray-200" 
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
                   Inloggen...
                 </>
               ) : (
