@@ -32,7 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upload, Download, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 function formatCurrency(amount: number | null): string {
   if (amount === null) return "€ 0";
@@ -50,6 +50,7 @@ const paymentStatusConfig = {
 };
 
 const Invoices = () => {
+  const navigate = useNavigate();
   const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   
   // Local division filter synced with global state
@@ -296,7 +297,7 @@ const Invoices = () => {
                         <TableRow 
                           key={invoice.id} 
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => window.location.href = `/invoices/${invoice.id}`}
+                          onClick={() => navigate(`/invoices/${invoice.id}`)}
                         >
                           <TableCell>
                             <Link
