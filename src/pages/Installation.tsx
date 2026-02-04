@@ -24,13 +24,13 @@ function useInstallationOrders(statusFilter: string | null) {
   return useQuery({
     queryKey: ["installation-orders", statusFilter],
     queryFn: async () => {
+      // Stap 1: Haal orders op zonder installer join
       let query = supabase
         .from("orders")
         .select(`
           id, order_number, expected_installation_date, actual_installation_date,
-          status, requires_elevator,
-          customer:customers(id, first_name, last_name, company_name, city, delivery_floor),
-          installer:profiles!orders_installer_id_fkey(id, full_name)
+          status, requires_elevator, installer_id,
+          customer:customers(id, first_name, last_name, company_name, city, delivery_floor)
         `)
         .in("status", ["montage_gepland", "gemonteerd", "geleverd"])
         .order("expected_installation_date", { ascending: true });
@@ -39,9 +39,34 @@ function useInstallationOrders(statusFilter: string | null) {
         query = query.eq("status", statusFilter as "montage_gepland" | "gemonteerd" | "geleverd");
       }
 
-      const { data, error } = await query;
+      const { data: orders, error } = await query;
       if (error) throw error;
-      return data;
+
+      // Stap 2: Haal unieke installer IDs op
+      const installerIds = [...new Set(
+        orders
+          ?.filter(o => o.installer_id)
+          .map(o => o.installer_id) || []
+      )] as string[];
+
+      // Stap 3: Haal profiles op voor alle installers
+      let profilesMap: Record<string, { full_name: string }> = {};
+      if (installerIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", installerIds);
+        
+        profiles?.forEach(p => {
+          profilesMap[p.id] = { full_name: p.full_name || "" };
+        });
+      }
+
+      // Stap 4: Combineer data
+      return orders?.map(order => ({
+        ...order,
+        installer: order.installer_id ? profilesMap[order.installer_id] : null
+      })) || [];
     },
   });
 }
