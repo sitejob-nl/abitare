@@ -1,67 +1,58 @@
 
-# Fix Microsoft Auth: SUPABASE_URL Heeft Verkeerd Formaat
+# Fix Microsoft Auth: Gebruik Correcte Authenticatie Pattern
 
-## Probleem Gevonden
+## Probleem
 
-De logs tonen:
-```
-AuthUnknownError: Unexpected token '<', "<html><h"... is not valid JSON
-```
+De huidige implementatie gebruikt een verkeerde aanpak voor token validatie:
 
-Dit betekent dat de Supabase auth client een **HTML pagina** terugkrijgt in plaats van JSON. Dit gebeurt wanneer:
-- De `SUPABASE_URL` secret een verkeerde waarde heeft
-- Of de URL geen `https://` prefix heeft
-- Of de URL verwijst naar een endpoint dat HTML teruggeeft
-
-De environment check zegt `SUPABASE_URL_present: true`, maar dat betekent alleen dat er **iets** is ingevuld - niet dat het correct is.
-
-## Oorzaak
-
-In Supabase Edge Functions zijn `SUPABASE_URL` en `SUPABASE_ANON_KEY` **automatisch beschikbaar** als built-in environment variables. Door ze handmatig als secrets toe te voegen kunnen ze overschreven worden met verkeerde waarden.
+| Aspect | Huidig (fout) | Werkend voorbeeld |
+|--------|---------------|-------------------|
+| Client key | `SUPABASE_ANON_KEY` | `SUPABASE_SERVICE_ROLE_KEY` |
+| Token validatie | `getUser()` zonder token | `getUser(token)` met token |
+| Headers | Global headers config | Niet nodig |
 
 ## Oplossing
 
-### Stap 1: Verwijder handmatige SUPABASE secrets
-De secrets `SUPABASE_URL` en `SUPABASE_ANON_KEY` moeten **niet** handmatig worden toegevoegd - Supabase stelt deze automatisch beschikbaar in Edge Functions.
+### Stap 1: Update `supabase/functions/microsoft-auth/index.ts`
 
-Deze secrets kunnen verwijderd worden via:
-- Supabase Dashboard → Project Settings → Edge Functions → Secrets
-- Of door de juiste Supabase secrets te verwijderen
-
-### Stap 2: Update de edge function code
-Pas de code aan zodat deze de correcte automatische waarden gebruikt en betere foutmeldingen geeft als ze toch ontbreken.
-
-**Wijzigingen in `supabase/functions/microsoft-auth/index.ts`:**
-
-```typescript
-// Regel 13-14: Log de werkelijke URL (gemaskeerd) voor debugging
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
-
-// Debug logging - toon begin van URL om te verifiëren dat het correct is
-console.log("Environment check:", {
-  MICROSOFT_CLIENT_ID_present: !!MICROSOFT_CLIENT_ID,
-  MICROSOFT_TENANT_ID: MICROSOFT_TENANT_ID,
-  SUPABASE_URL: SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + "..." : "NOT SET",
-  SUPABASE_ANON_KEY_present: !!SUPABASE_ANON_KEY,
-});
-
-// Valideer dat SUPABASE_URL correct formaat heeft
-if (!SUPABASE_URL || !SUPABASE_URL.startsWith("https://")) {
-  throw new Error(`SUPABASE_URL is invalid: ${SUPABASE_URL}`);
-}
+```text
+Wijzigingen:
+├── Vervang SUPABASE_ANON_KEY → SUPABASE_SERVICE_ROLE_KEY
+├── Extract token uit Authorization header
+├── Geef token direct mee aan getUser(token)
+└── Verwijder onnodige global headers config
 ```
 
-### Stap 3: Zelfde fix voor microsoft-api
-Dezelfde aanpassing toepassen in `microsoft-api/index.ts`.
+Nieuwe code pattern:
+```typescript
+const supabaseClient = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
+
+const token = authHeader.replace("Bearer ", "");
+const { data: { user } } = await supabaseClient.auth.getUser(token);
+```
+
+### Stap 2: Update `supabase/functions/microsoft-api/index.ts`
+
+Zelfde fix toepassen - deze functie heeft exact hetzelfde probleem.
+
+### Stap 3: Deploy en test
+
+Na deployment zou de "Koppel Microsoft Account" knop direct moeten werken.
+
+## Waarom dit werkt
+
+- `SERVICE_ROLE_KEY` heeft admin rechten om elke token te valideren
+- `getUser(token)` valideert de meegegeven JWT direct
+- Geen afhankelijkheid van global headers die verkeerd kunnen worden geïnterpreteerd
 
 ## Technische Details
 
-| Component | Probleem | Oplossing |
-|-----------|----------|-----------|
-| SUPABASE_URL secret | Overschrijft automatische waarde met verkeerde | Verwijder handmatige secret |
-| SUPABASE_ANON_KEY secret | Mogelijk ook verkeerd | Verwijder handmatige secret |
-| Edge Function | Krijgt HTML terug i.p.v. JSON | Gebruikt nu automatische Supabase waarden |
+| Bestand | Actie |
+|---------|-------|
+| `supabase/functions/microsoft-auth/index.ts` | Vervang auth pattern |
+| `supabase/functions/microsoft-api/index.ts` | Zelfde fix |
 
-## Verwacht Resultaat
-Na het verwijderen van de handmatig toegevoegde secrets gebruikt de Edge Function de correcte automatische Supabase environment variables en kan de authenticatie succesvol verlopen.
+Geen database wijzigingen nodig. Secrets zijn al aanwezig (`SUPABASE_SERVICE_ROLE_KEY` bestaat al).
