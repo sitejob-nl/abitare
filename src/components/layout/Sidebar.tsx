@@ -19,6 +19,7 @@ import {
   X,
   Check,
   Ticket,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -237,11 +238,7 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
 
       {/* User Card */}
       <div className="border-t border-white/[0.08] p-4">
-        <div 
-          className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors hover:bg-white/[0.06]"
-          onClick={signOut}
-          title="Klik om uit te loggen"
-        >
+        <div className="flex items-center gap-3 rounded-lg p-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-dark text-sm font-semibold text-white">
             {initials}
           </div>
@@ -249,6 +246,15 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
             <div className="text-[13px] font-semibold text-white">{displayName}</div>
             <div className="text-[11px] text-sidebar-muted">{roleDisplay}</div>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-sidebar-muted hover:text-white hover:bg-white/10"
+            onClick={signOut}
+            title="Uitloggen"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </aside>
