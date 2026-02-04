@@ -16,6 +16,7 @@ import OrderDetail from "./pages/OrderDetail";
 import Invoices from "./pages/Invoices";
 import Calendar from "./pages/Calendar";
 import Installation from "./pages/Installation";
+import InstallationDetail from "./pages/InstallationDetail";
 import Inbox from "./pages/Inbox";
 import Products from "./pages/Products";
 import ProductImport from "./pages/ProductImport";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/installation" element={<ProtectedRoute><Installation /></ProtectedRoute>} />
+            <Route path="/installation/:orderId" element={<ProtectedRoute><InstallationDetail /></ProtectedRoute>} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/products/import" element={<ProtectedRoute><ProductImport /></ProtectedRoute>} />
