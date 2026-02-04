@@ -330,6 +330,13 @@ export type Database = {
             foreignKeyName: "order_documents_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_documents_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -425,6 +432,13 @@ export type Database = {
             foreignKeyName: "order_lines_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -484,6 +498,13 @@ export type Database = {
           order_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "order_notes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_notes_order_id_fkey"
             columns: ["order_id"]
@@ -596,6 +617,13 @@ export type Database = {
             foreignKeyName: "order_sections_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -644,6 +672,13 @@ export type Database = {
           to_status?: Database["public"]["Enums"]["order_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "order_status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_status_history_order_id_fkey"
             columns: ["order_id"]
@@ -1459,6 +1494,13 @@ export type Database = {
             foreignKeyName: "referral_rewards_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_rewards_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -1782,6 +1824,13 @@ export type Database = {
             foreignKeyName: "service_tickets_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -1838,6 +1887,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
             referencedColumns: ["id"]
           },
           {
@@ -1910,6 +1966,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractor_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
             referencedColumns: ["id"]
           },
           {
@@ -2015,6 +2078,13 @@ export type Database = {
             foreignKeyName: "supplier_order_lines_order_line_id_fkey"
             columns: ["order_line_id"]
             isOneToOne: false
+            referencedRelation: "installer_order_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_order_lines_order_line_id_fkey"
+            columns: ["order_line_id"]
+            isOneToOne: false
             referencedRelation: "order_lines"
             referencedColumns: ["id"]
           },
@@ -2084,6 +2154,13 @@ export type Database = {
           xml_response?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplier_orders_order_id_fkey"
             columns: ["order_id"]
@@ -2352,6 +2429,13 @@ export type Database = {
             foreignKeyName: "work_reports_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_reports_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -2359,7 +2443,212 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      installer_order_lines: {
+        Row: {
+          article_code: string | null
+          configuration: Json | null
+          delivered_at: string | null
+          description: string | null
+          expected_delivery: string | null
+          group_title: string | null
+          id: string | null
+          is_delivered: boolean | null
+          is_group_header: boolean | null
+          is_ordered: boolean | null
+          order_id: string | null
+          ordered_at: string | null
+          product_id: string | null
+          quantity: number | null
+          quote_line_id: string | null
+          section_id: string | null
+          section_type: string | null
+          sort_order: number | null
+          supplier_id: string | null
+          unit: string | null
+        }
+        Insert: {
+          article_code?: string | null
+          configuration?: Json | null
+          delivered_at?: string | null
+          description?: string | null
+          expected_delivery?: string | null
+          group_title?: string | null
+          id?: string | null
+          is_delivered?: boolean | null
+          is_group_header?: boolean | null
+          is_ordered?: boolean | null
+          order_id?: string | null
+          ordered_at?: string | null
+          product_id?: string | null
+          quantity?: number | null
+          quote_line_id?: string | null
+          section_id?: string | null
+          section_type?: string | null
+          sort_order?: number | null
+          supplier_id?: string | null
+          unit?: string | null
+        }
+        Update: {
+          article_code?: string | null
+          configuration?: Json | null
+          delivered_at?: string | null
+          description?: string | null
+          expected_delivery?: string | null
+          group_title?: string | null
+          id?: string | null
+          is_delivered?: boolean | null
+          is_group_header?: boolean | null
+          is_ordered?: boolean | null
+          order_id?: string | null
+          ordered_at?: string | null
+          product_id?: string | null
+          quantity?: number | null
+          quote_line_id?: string | null
+          section_id?: string | null
+          section_type?: string | null
+          sort_order?: number | null
+          supplier_id?: string | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_quote_line_id_fkey"
+            columns: ["quote_line_id"]
+            isOneToOne: false
+            referencedRelation: "quote_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "order_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      installer_orders: {
+        Row: {
+          actual_delivery_date: string | null
+          actual_installation_date: string | null
+          assistant_id: string | null
+          created_at: string | null
+          created_by: string | null
+          customer_id: string | null
+          customer_notes: string | null
+          delivery_method: string | null
+          delivery_notes: string | null
+          division_id: string | null
+          expected_delivery_date: string | null
+          expected_installation_date: string | null
+          id: string | null
+          installer_id: string | null
+          order_date: string | null
+          order_number: number | null
+          quote_id: string | null
+          requires_elevator: boolean | null
+          salesperson_id: string | null
+          status: Database["public"]["Enums"]["order_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_delivery_date?: string | null
+          actual_installation_date?: string | null
+          assistant_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          customer_notes?: string | null
+          delivery_method?: string | null
+          delivery_notes?: string | null
+          division_id?: string | null
+          expected_delivery_date?: string | null
+          expected_installation_date?: string | null
+          id?: string | null
+          installer_id?: string | null
+          order_date?: string | null
+          order_number?: number | null
+          quote_id?: string | null
+          requires_elevator?: boolean | null
+          salesperson_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_delivery_date?: string | null
+          actual_installation_date?: string | null
+          assistant_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          customer_notes?: string | null
+          delivery_method?: string | null
+          delivery_notes?: string | null
+          division_id?: string | null
+          expected_delivery_date?: string | null
+          expected_installation_date?: string | null
+          id?: string | null
+          installer_id?: string | null
+          order_date?: string | null
+          order_number?: number | null
+          quote_id?: string | null
+          requires_elevator?: boolean | null
+          salesperson_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_user_division_id: { Args: { _user_id: string }; Returns: string }
