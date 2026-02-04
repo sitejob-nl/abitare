@@ -1,144 +1,99 @@
 
-# Plan: Fase 3 - Monteur View Verbeteren
 
-## Huidige Situatie
+# Plan: Fix Login Timeout voor info@sitejob.nl
 
-Goed nieuws: er is al een **complete monteur-omgeving** gebouwd binnen dit project. Je hoeft geen apart project te maken!
+## Probleem Analyse
 
-### Wat al werkt:
-- `/monteur` - Dashboard met opdrachten (gefilterd op `installer_id`)
-- `/monteur/opdracht/:id` - Order detail zonder prijzen
-- `/monteur/werkbon/:id` - Werkbon formulier met foto's en taken
-- `/monteur/werkbonnen` - Overzicht van eigen werkbonnen
-- Mobiel-vriendelijk design met eigen layout
-- RLS policies op work_reports tabellen
+De console logs tonen het exacte probleem:
 
-### Wat verbeterd moet worden:
-
-**Probleem**: De huidige implementatie verbergt financiële data alleen op frontend-niveau. Een technisch onderlegde monteur kan via browser DevTools of API-calls nog steeds toegang krijgen tot prijzen, marges en betalingsstatus.
-
-## Oplossing: Database-niveau Beveiliging
-
-### Stap 1: Database VIEW voor Orders (zonder financiële data)
-
-Maak een Postgres VIEW die financiële kolommen uitsluit:
-
-```sql
-CREATE VIEW installer_orders AS
-SELECT 
-  id, order_number, customer_id, quote_id, division_id,
-  status, order_date, 
-  expected_delivery_date, actual_delivery_date,
-  expected_installation_date, actual_installation_date,
-  delivery_method, requires_elevator, delivery_notes,
-  salesperson_id, assistant_id, installer_id,
-  -- UITGESLOTEN: payment_condition, payment_status, amount_paid
-  -- UITGESLOTEN: subtotal_products, subtotal_montage, discount_amount
-  -- UITGESLOTEN: total_excl_vat, total_vat, total_incl_vat
-  -- UITGESLOTEN: total_cost_price, margin_amount, margin_percentage
-  internal_notes, customer_notes,
-  created_by, created_at, updated_at
-FROM orders
-WHERE installer_id = auth.uid()
-  AND status IN ('montage_gepland', 'geleverd');
+```
+Auth state change fetchUserData timeout/error: Timeout: fetchUserData(SIGNED_IN)
 ```
 
-### Stap 2: Database VIEW voor Order Lines (zonder prijzen)
+Dit gebeurt **3 keer**, wat aangeeft dat:
+1. De `onAuthStateChange` listener meerdere `SIGNED_IN` events ontvangt
+2. Elke keer wordt `fetchUserData` met een 6s timeout gestart
+3. Deze timeout raakt, ook al zijn de network requests succesvol (200 OK)
 
-```sql
-CREATE VIEW installer_order_lines AS
-SELECT 
-  id, order_id, product_id, supplier_id,
-  article_code, description, quantity, unit,
-  -- UITGESLOTEN: unit_price, cost_price, discount_percentage, line_total, vat_rate
-  is_ordered, ordered_at, expected_delivery,
-  is_delivered, delivered_at,
-  configuration, section_type, is_group_header, group_title, sort_order
-FROM order_lines ol
-WHERE EXISTS (
-  SELECT 1 FROM orders o 
-  WHERE o.id = ol.order_id 
-    AND o.installer_id = auth.uid()
-);
-```
+De paradox: de network logs tonen dat `profiles` en `user_roles` queries **wel slagen**. Dit wijst op een timing/race condition probleem.
 
-### Stap 3: RLS op de Views
+---
 
-```sql
--- Enable RLS op de views
-ALTER VIEW installer_orders OWNER TO authenticated;
-CREATE POLICY "installer_orders_select" ON installer_orders
-  FOR SELECT TO authenticated
-  USING (installer_id = auth.uid());
-```
+## Root Cause
 
-### Stap 4: Frontend Hooks Aanpassen
-
-Update `useInstallerOrders.ts` om de views te gebruiken:
+In `AuthContext.tsx` regel 128-136:
 
 ```typescript
-// Van: .from("orders")
-// Naar: .from("installer_orders")
-const { data, error } = await supabase
-  .from("installer_orders")
-  .select(`...`)
+if (event === 'SIGNED_IN') {
+  try {
+    await withTimeout(fetchUserData(currentSession.user.id), 6000, "fetchUserData(SIGNED_IN)");
+  } catch (e) {
+    console.error("Auth state change fetchUserData timeout/error:", e);
+    setAuthInitError("Gebruikersgegevens ophalen duurt te lang...");
+  }
+}
 ```
 
-### Stap 5: Handtekening Functionaliteit (Optioneel)
+**Probleem 1**: Bij **elke** `SIGNED_IN` event wordt dezelfde timeout-error gezet, zelfs als de initiële load al geslaagd is.
 
-Voeg canvas-gebaseerde handtekening capture toe aan werkbonnen:
-- Signature pad component
-- Opslag als base64 of image file
-- Veld `customer_signature` aan work_reports tabel
+**Probleem 2**: De `onAuthStateChange` listener en `initializeAuth` runnen **parallel** en kunnen elkaar in de weg zitten.
 
 ---
 
-## Technische Details
+## Oplossing
 
-### Bestandswijzigingen
+### Strategie: Scheiding van Initiële Load vs Ongoing Changes
 
-| Bestand | Actie |
-|---------|-------|
-| **Migratie** | VIEW `installer_orders` aanmaken |
-| **Migratie** | VIEW `installer_order_lines` aanmaken |
-| `src/hooks/useInstallerOrders.ts` | Query's aanpassen naar views |
-| `src/integrations/supabase/types.ts` | Types voor views (auto-generated) |
+1. **Initiële load** (`initializeAuth`) → controleert `isLoading`, mag `authInitError` zetten
+2. **Ongoing auth changes** (`onAuthStateChange`) → update state, maar zet **geen** errors die de UI blokkeren
 
-### Velden die Monteurs WEL zien:
+### Code Wijzigingen
 
-| Orders | Order Lines |
-|--------|-------------|
-| order_number | description |
-| status | quantity |
-| expected_installation_date | article_code |
-| delivery_notes | is_delivered |
-| customer_id (→ adres, telefoon) | expected_delivery |
+**`src/contexts/AuthContext.tsx`**:
 
-### Velden die Monteurs NIET zien:
+```typescript
+// Voeg een ref toe om te tracken of initiële load klaar is
+const initCompleteRef = useRef(false);
 
-| Orders | Order Lines |
-|--------|-------------|
-| payment_status | unit_price |
-| amount_paid | cost_price |
-| total_incl_vat | line_total |
-| margin_percentage | discount_percentage |
-| subtotal_products | vat_rate |
+// In onAuthStateChange - ALLEEN errors loggen, niet de UI blokkeren
+if (event === 'SIGNED_IN') {
+  if (!initCompleteRef.current) {
+    // Tijdens initiële load: wacht met timeout, maar error handling in initializeAuth
+    // Doe hier NIETS anders - laat initializeAuth het afhandelen
+  } else {
+    // Na initiële load: fire and forget, geen timeout
+    fetchUserData(currentSession.user.id).catch(err => {
+      console.error("Background fetchUserData error:", err);
+    });
+  }
+}
+
+// In initializeAuth finally block:
+initCompleteRef.current = true;
+setIsLoading(false);
+```
+
+### Extra Robuustheid
+
+- Verhoog timeout van 6s naar 10s voor `fetchUserData`
+- Voeg een `abortController` toe om dubbele fetches te cancellen
+- Log warnings i.p.v. errors voor non-blocking issues
 
 ---
 
-## Alternatief: RLS met Column-level Security
+## Bestandswijzigingen
 
-Postgres ondersteunt ook column-level permissions, maar dit is complexer en minder flexibel. De VIEW-aanpak is standaard en beproefd.
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/contexts/AuthContext.tsx` | Fix race condition tussen initializeAuth en onAuthStateChange |
 
 ---
 
-## Samenvatting
+## Verwacht Resultaat
 
-De monteur-omgeving bestaat al en werkt goed. De hoofdverbetering is het toevoegen van **database-niveau beveiliging** zodat financiële data niet alleen verborgen is in de UI, maar ook ontoegankelijk via directe API-calls.
+Na deze fix:
+- Login voor `info@sitejob.nl` werkt direct
+- Geen timeout errors meer in de console
+- De "Kan niet laden" foutmelding verschijnt alleen bij echte netwerk problemen
+- Token refresh events verstoren de UI niet meer
 
-Dit vereist:
-1. Twee database migraties (views)
-2. Kleine aanpassing in de installer hooks
-3. Optioneel: handtekening functionaliteit
-
-Totale geschatte tijd: **4-6 uur**
