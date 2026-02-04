@@ -1,163 +1,106 @@
 
-# Communicatie Tab voor Klantdetailpagina
+# Plan: Klant Formulier Uitbreiden + Klant Toevoegen vanuit Offerte
 
-## Overzicht
+## Samenvatting
 
-Toevoegen van een nieuwe "Communicatie" tab op de klantdetailpagina waar je:
-1. Je emailgeschiedenis met die specifieke klant ziet (gefilterd op het email-adres van de klant)
-2. Direct een email kan sturen naar de klant
-3. Een bestand (zoals een offerte PDF) als bijlage kan meesturen
+Twee verbeteringen aan het klantbeheer:
+1. **Apart factuur- en bezorgadres** bij het aanmaken/bewerken van een klant
+2. **Nieuwe klant aanmaken** direct vanuit het offerte-formulier
 
-## Architectuur
+---
 
-```text
-CustomerDetail.tsx
-├── Tabs: Offertes | Orders | Communicatie (nieuw)
-│   └── CustomerCommunicationTab (nieuw component)
-│       ├── Email Lijst (gefilterd op klant email)
-│       ├── Email Detail View
-│       ├── Compose Dialog met bijlagen
-│       └── Quote Selector voor PDF bijlage
-```
+## Onderdeel 1: Gescheiden Factuur- en Bezorgadres
 
-## Implementatie Stappen
+### Huidige situatie
+De database heeft al velden voor een apart bezorgadres:
+- `delivery_street_address`
+- `delivery_postal_code`  
+- `delivery_city`
+- `delivery_floor`
+- `delivery_has_elevator`
 
-### Stap 1: Nieuwe Hook voor Klant-specifieke Emails
+Deze worden alleen nog niet gebruikt in het klantformulier.
 
-Maak `src/hooks/useCustomerEmails.ts`:
+### Aanpassingen
 
-- Zoekt in Microsoft emails op het email-adres van de klant
-- Filtert zowel verzonden als ontvangen berichten
-- Gebruikt de Graph API search functionaliteit: `$search="from:{email} OR to:{email}"`
-
-### Stap 2: Uitbreiden Email Verzend Functionaliteit
-
-Werk `src/hooks/useMicrosoftMail.ts` bij:
-
-- Voeg ondersteuning toe voor bijlagen via `attachments` array
-- Gebruik Microsoft Graph API fileAttachment type:
-```typescript
-{
-  '@odata.type': '#microsoft.graph.fileAttachment',
-  name: 'Offerte_123.pdf',
-  contentType: 'application/pdf',
-  contentBytes: 'base64EncodedPdfContent'
-}
-```
-
-### Stap 3: PDF naar Base64 Helper
-
-Maak `src/lib/pdfToBase64.ts`:
-
-- Functie om de bestaande `generateQuotePdf` aan te passen zodat het een base64 string teruggeeft i.p.v. direct downloaden
-- Nieuwe functie `generateQuotePdfBase64()` die de PDF als base64 data URL retourneert
-
-### Stap 4: CustomerCommunicationTab Component
-
-Maak `src/components/customers/CustomerCommunicationTab.tsx`:
-
-- Email lijst gefilterd op klant email (van/aan)
-- Email detail weergave (hergebruik design van Inbox)
-- "Nieuwe email" knop met pre-filled ontvanger (klant email)
-- Compose dialog met:
-  - Aan veld (pre-filled met klant email)
-  - Onderwerp
-  - Bericht
-  - Bijlagen sectie met:
-    - Dropdown om offerte te selecteren uit klant's offertes
-    - "Genereer PDF" knop om offerte toe te voegen
-    - Lijst van toegevoegde bijlagen
-
-### Stap 5: Update CustomerDetail.tsx
-
-- Importeer nieuwe CustomerCommunicationTab component
-- Voeg "Communicatie" tab toe aan de TabsList
-- Toon badge met aantal ongelezen emails indien beschikbaar
-- Check of Microsoft account gekoppeld is, zo niet toon connect prompt
-
-## Component Structuur
-
-### CustomerCommunicationTab
+**CustomerFormDialog.tsx:**
+- Checkbox toevoegen: "Bezorgadres wijkt af van factuuradres"
+- Bij aanvinken verschijnt een tweede adresblok voor bezorgadres
+- Extra velden: verdieping en lift aanwezig (handig voor monteurs)
 
 ```text
 ┌─────────────────────────────────────────────────────┐
-│ Communicatie                     [📧 Nieuwe Email]  │
-├─────────────────────────────────────────────────────┤
-│ ┌─────────────────┐ ┌─────────────────────────────┐ │
-│ │ Email Lijst     │ │ Email Detail                │ │
-│ │ (Mobile: full)  │ │ (Mobile: Sheet)             │ │
-│ │                 │ │                             │ │
-│ │ [Van: Klant]    │ │ Subject: Offerte 2024-001  │ │
-│ │ Onderwerp...    │ │ Van: klant@email.nl        │ │
-│ │ 2 feb 2024      │ │ Datum: 2 feb 2024          │ │
-│ │                 │ │                             │ │
-│ │ [Aan: Klant]    │ │ Beste heer/mevrouw,        │ │
-│ │ Re: Offerte...  │ │ ...email inhoud...         │ │
-│ │ 1 feb 2024      │ │                             │ │
-│ └─────────────────┘ │           [↩ Beantwoorden]  │ │
-│                     └─────────────────────────────┘ │
+│ Factuuradres                                        │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ Straat + huisnummer: [____________________]    │ │
+│ │ Postcode: [______]    Plaats: [____________]   │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                     │
+│ [✓] Bezorgadres wijkt af van factuuradres           │
+│                                                     │
+│ Bezorgadres                                         │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ Straat + huisnummer: [____________________]    │ │
+│ │ Postcode: [______]    Plaats: [____________]   │ │
+│ │ Verdieping: [__]      [✓] Lift aanwezig        │ │
+│ └─────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
 
-### Compose Dialog met Bijlagen
+**CustomerInfoCard.tsx:**
+- Beide adressen tonen indien verschillend
+- Labels: "Factuuradres" en "Bezorgadres"
+
+---
+
+## Onderdeel 2: Klant Toevoegen vanuit Offerte
+
+### Aanpassingen
+
+**QuoteFormDialog.tsx:**
+- Knop "+ Nieuwe klant" toevoegen naast de klant-zoekbalk
+- Bij klik opent CustomerFormDialog als nested dialog
+- Na succesvol aanmaken wordt de nieuwe klant automatisch geselecteerd
 
 ```text
 ┌─────────────────────────────────────────────────────┐
-│ Nieuwe Email                                    [X] │
-├─────────────────────────────────────────────────────┤
-│ Aan: [klant@email.nl                           ]    │
-│ Onderwerp: [                                   ]    │
-│                                                     │
-│ Bericht:                                            │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │                                                 │ │
-│ │                                                 │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ Bijlagen:                                           │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ [Selecteer offerte ▼] [📎 Voeg PDF toe]         │ │
-│ │                                                 │ │
-│ │ • Offerte_2024-001_Klant.pdf         [🗑]       │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│                   [Annuleren] [📤 Verzenden]        │
+│ Klant *                                             │
+│ [Zoek een klant...              ▼] [+ Nieuwe klant] │
 └─────────────────────────────────────────────────────┘
 ```
+
+**CustomerFormDialog.tsx:**
+- Nieuwe prop: `onCustomerCreated?: (customer) => void`
+- Na succesvol aanmaken wordt deze callback aangeroepen
+- Maakt het mogelijk om de klant direct te selecteren in het offerte-formulier
+
+---
 
 ## Technische Details
 
-### Microsoft Graph API Search
-
-Voor het zoeken naar emails met een specifiek email-adres:
-```typescript
-endpoint: `/me/messages?$search="from:${customerEmail} OR to:${customerEmail}"&$top=50&$orderby=receivedDateTime desc`
-```
-
-### Bijlage Structuur (Graph API)
+### Schema Uitbreiding (CustomerFormDialog)
 
 ```typescript
-interface EmailAttachment {
-  '@odata.type': '#microsoft.graph.fileAttachment';
-  name: string;
-  contentType: string;
-  contentBytes: string; // base64 encoded
-}
+const customerSchema = z.object({
+  // ... bestaande velden ...
+  
+  // Bezorgadres velden
+  different_delivery_address: z.boolean().default(false),
+  delivery_street_address: z.string().max(255).optional(),
+  delivery_postal_code: z.string().max(10).optional(),
+  delivery_city: z.string().max(100).optional(),
+  delivery_floor: z.string().max(10).optional(),
+  delivery_has_elevator: z.boolean().default(false),
+});
 ```
 
 ### Te Wijzigen Bestanden
 
 | Bestand | Actie |
 |---------|-------|
-| `src/hooks/useCustomerEmails.ts` | Nieuw - Hook voor klant emails |
-| `src/hooks/useMicrosoftMail.ts` | Update - Bijlagen ondersteuning |
-| `src/lib/generateQuotePdf.ts` | Update - Base64 export optie |
-| `src/components/customers/CustomerCommunicationTab.tsx` | Nieuw - Main component |
-| `src/components/customers/ComposeEmailDialog.tsx` | Nieuw - Email compose met bijlagen |
-| `src/pages/CustomerDetail.tsx` | Update - Tab toevoegen |
+| `src/components/customers/CustomerFormDialog.tsx` | Update - Bezorgadres velden + callback prop |
+| `src/components/customers/CustomerInfoCard.tsx` | Update - Beide adressen tonen |
+| `src/components/quotes/QuoteFormDialog.tsx` | Update - Nieuwe klant knop toevoegen |
 
-### Mobile Optimalisatie
-
-- Op mobile: email lijst full-width, detail in Sheet (zoals Inbox)
-- Compose dialog responsive met stacked layout op small screens
-- Touch-friendly quote selector dropdown
+### Geen Database Wijzigingen Nodig
+Alle benodigde velden bestaan al in de `customers` tabel.
