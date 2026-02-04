@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Input } from "@/components/ui/input";
 import {
@@ -87,6 +88,7 @@ function getCustomerName(customer: { first_name?: string | null; last_name?: str
 }
 
 const Installation = () => {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -156,6 +158,7 @@ const Installation = () => {
             return (
               <div
                 key={order.id}
+                onClick={() => navigate(`/orders/${order.id}`)}
                 className="animate-fade-in cursor-pointer rounded-xl border border-border bg-card p-4 sm:p-5 transition-colors hover:bg-muted/30"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
