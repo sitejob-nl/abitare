@@ -69,38 +69,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Set up auth state listener BEFORE checking session
+    let isMounted = true;
+
+    // Listener voor ONGOING auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        if (!isMounted) return;
+        
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-          // Use setTimeout to avoid potential deadlocks with Supabase client
-          setTimeout(() => {
+          // Bij SIGN_IN altijd wachten op rollen
+          if (event === 'SIGNED_IN') {
+            await fetchUserData(currentSession.user.id);
+          } else {
+            // Voor andere events (TOKEN_REFRESH) fire and forget
             fetchUserData(currentSession.user.id);
-          }, 0);
+          }
         } else {
           setProfile(null);
           setRoles([]);
           setActiveDivisionId(null);
         }
-        setIsLoading(false);
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      setUser(existingSession?.user ?? null);
+    // INITIËLE load - wacht op alles voordat isLoading false wordt
+    const initializeAuth = async () => {
+      try {
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
+        if (!isMounted) return;
 
-      if (existingSession?.user) {
-        fetchUserData(existingSession.user.id);
+        setSession(existingSession);
+        setUser(existingSession?.user ?? null);
+
+        if (existingSession?.user) {
+          await fetchUserData(existingSession.user.id);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-      setIsLoading(false);
-    });
+    };
+
+    initializeAuth();
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
