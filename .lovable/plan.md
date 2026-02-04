@@ -1,166 +1,238 @@
 
-# Plan: Automatische Klant-Sync bij Factuur Push
+# Plan: Reparatie Exact Online Factuur Push
 
-## Huidige Situatie
+## Probleem
 
-Wanneer een factuur naar Exact Online wordt gepusht:
-1. Het systeem controleert of de klant een `exact_account_id` heeft
-2. Zo niet: de factuur wordt **overgeslagen** met de melding "Klant niet gekoppeld"
-3. De gebruiker moet handmatig eerst klanten synchroniseren
+De Exact Online API geeft deze foutmelding:
+```
+"Verplicht: Grootboekrekening"
+"Verplicht: Artikel"
+```
 
-## Nieuwe Situatie
+**Oorzaak**: Het huidige systeem gebruikt het `SalesInvoices` endpoint (logistiek), maar stuurt geen `Item` of `GLAccount` mee per factuurregel.
 
-Wanneer een factuur naar Exact Online wordt gepusht:
-1. Het systeem controleert of de klant een `exact_account_id` heeft
-2. **Zo niet: automatisch de klant aanmaken in Exact Online**
-3. De `exact_account_id` wordt opgeslagen
-4. De factuur wordt gepusht met de nieuwe account ID
+## Oplossing
+
+Wijzig naar het **SalesEntries** endpoint (financiële boekingen) - dit is geschikter voor diensten en facturen zonder artikelkoppeling.
 
 ---
 
 ## Technische Wijzigingen
 
-### 1. Update `exact-sync-invoices/index.ts`
+### 1. Nieuw Endpoint
 
-Voeg een helper functie toe die een klant naar Exact pusht als deze nog niet gekoppeld is:
+| Huidig | Nieuw |
+|--------|-------|
+| `POST /salesinvoice/SalesInvoices` | `POST /salesentry/SalesEntries` |
 
-```text
-+----------------------------------------+
-|  pushInvoicesInternal                  |
-+----------------------------------------+
-|  Voor elke order:                      |
-|  1. Heeft klant exact_account_id?      |
-|     - Ja: doorgaan                     |
-|     - Nee: ensureCustomerInExact()     |
-|       -> Push klant naar Exact         |
-|       -> Sla exact_account_id op       |
-|  2. Maak SalesInvoice aan              |
-+----------------------------------------+
+### 2. Nieuw Request Format
+
+**Huidige structuur (werkt niet):**
+```json
+{
+  "OrderedBy": "guid",
+  "InvoiceTo": "guid",
+  "SalesInvoiceLines": [
+    { "Description": "...", "Quantity": 1, "UnitPrice": 100 }
+  ]
+}
 ```
 
-**Nieuwe functie `ensureCustomerInExact()`:**
-- Haalt klantgegevens op
-- Controleert eerst of klant al bestaat in Exact (op basis van Code/klantnummer)
-- Bestaat niet? Maakt klant aan
-- Slaat `exact_account_id` op in database
-- Retourneert de account ID
+**Nieuwe structuur (SalesEntries):**
+```json
+{
+  "Customer": "guid-van-klant",
+  "EntryDate": "2026-02-04",
+  "Journal": "70",
+  "Description": "Factuur order #1",
+  "YourRef": "ORD-1",
+  "Currency": "EUR",
+  "SalesEntryLines": [
+    {
+      "GLAccount": "guid-van-omzet-grootboek",
+      "Description": "Bakoven met magnetron",
+      "AmountFC": 2304.96,
+      "VATCode": "2"
+    }
+  ]
+}
+```
 
-### 2. Verbeterde Foutafhandeling
+### 3. Grootboekrekening Ophalen
 
-| Situatie | Actie |
-|----------|-------|
-| Klant pushen lukt | Doorgaan met factuur |
-| Klant pushen mislukt | Factuur overslaan met duidelijke foutmelding |
-| Factuur pushen mislukt | Fout loggen, klant blijft gekoppeld |
+We moeten een standaard omzet-grootboekrekening uit Exact halen. Dit kan via:
+
+```
+GET /api/v1/{division}/financial/GLAccounts?$filter=
+  Type eq 32 and IsSales eq true
+&$select=ID,Code,Description
+&$top=1
+```
+
+Of: configureerbaar maken in `exact_online_connections` tabel.
+
+### 4. BTW-code Mapping
+
+| Abitare VAT Rate | Exact VATCode |
+|------------------|---------------|
+| 0% | `"1"` |
+| 9% | `"4"` |
+| 21% | `"2"` |
 
 ---
 
-## Code Wijzigingen
-
-### `supabase/functions/exact-sync-invoices/index.ts`
-
-```typescript
-// Nieuwe functie toevoegen
-async function ensureCustomerInExact(
-  supabase: any,
-  accessToken: string,
-  exactDivision: number,
-  customerId: string
-): Promise<string | null> {
-  // 1. Haal klant op uit database
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("*")
-    .eq("id", customerId)
-    .single();
-  
-  if (!customer) return null;
-  
-  // 2. Al gekoppeld? Return bestaande ID
-  if (customer.exact_account_id) {
-    return customer.exact_account_id;
-  }
-  
-  // 3. Check of klant al bestaat in Exact (op klantnummer)
-  const existingAccount = await findExactAccountByCode(
-    accessToken, 
-    exactDivision, 
-    customer.customer_number
-  );
-  
-  if (existingAccount) {
-    // Koppel bestaande account
-    await supabase
-      .from("customers")
-      .update({ exact_account_id: existingAccount })
-      .eq("id", customerId);
-    return existingAccount;
-  }
-  
-  // 4. Maak nieuwe account aan in Exact
-  const newAccountId = await createExactAccount(
-    accessToken, 
-    exactDivision, 
-    customer
-  );
-  
-  if (newAccountId) {
-    await supabase
-      .from("customers")
-      .update({ exact_account_id: newAccountId })
-      .eq("id", customerId);
-  }
-  
-  return newAccountId;
-}
-```
-
-### Aanpassing in `pushInvoicesInternal`:
-
-```typescript
-// Huidige code:
-if (!customer?.exact_account_id) {
-  results.skipped++;
-  results.errors.push(`Order #${order.order_number}: Klant niet gekoppeld`);
-  continue;
-}
-
-// Nieuwe code:
-let accountId = customer?.exact_account_id;
-
-if (!accountId) {
-  // Probeer klant automatisch te synchroniseren
-  accountId = await ensureCustomerInExact(
-    supabase,
-    accessToken,
-    exactDivision,
-    order.customer_id
-  );
-  
-  if (!accountId) {
-    results.skipped++;
-    results.errors.push(
-      `Order #${order.order_number}: Kon klant niet aanmaken in Exact`
-    );
-    continue;
-  }
-}
-
-// Gebruik accountId voor factuur
-const exactInvoice = mapToExactInvoice(order, accountId);
-```
-
----
-
-## Samenvatting Wijzigingen
+## Gewijzigde Bestanden
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `supabase/functions/exact-sync-invoices/index.ts` | Voeg `ensureCustomerInExact()`, `findExactAccountByCode()`, en `createExactAccount()` functies toe. Pas `pushInvoicesInternal` aan om automatisch klanten te synchroniseren. |
+| `supabase/functions/exact-sync-invoices/index.ts` | Wijzig endpoint en request format |
+
+### Code Wijzigingen
+
+**1. Nieuwe interface voor SalesEntry:**
+```typescript
+interface ExactSalesEntry {
+  Customer: string;
+  EntryDate?: string;
+  Journal: string;
+  Description?: string;
+  YourRef?: string;
+  Currency: string;
+  SalesEntryLines: ExactSalesEntryLine[];
+}
+
+interface ExactSalesEntryLine {
+  GLAccount: string;
+  Description: string;
+  AmountFC: number;
+  VATCode: string;
+}
+```
+
+**2. Helper functie voor standaard grootboekrekening:**
+```typescript
+async function getDefaultRevenueGLAccount(
+  accessToken: string,
+  exactDivision: number
+): Promise<string | null> {
+  const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?` +
+    `$filter=Type eq 32&$select=ID,Code&$top=1`;
+  
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  
+  if (!response.ok) return null;
+  
+  const data = await response.json();
+  const accounts = data.d?.results || [];
+  return accounts[0]?.ID || null;
+}
+```
+
+**3. Aangepaste map functie:**
+```typescript
+function mapToExactSalesEntry(
+  order: AbitareOrder, 
+  accountId: string,
+  glAccountId: string
+): ExactSalesEntry {
+  const lines: ExactSalesEntryLine[] = [];
+  
+  for (const line of order.order_lines || []) {
+    if ((line as any).is_group_header) continue;
+    
+    lines.push({
+      GLAccount: glAccountId,
+      Description: line.description,
+      AmountFC: line.line_total || (line.unit_price * (line.quantity || 1)),
+      VATCode: mapVatRateToCode(line.vat_rate || 21),
+    });
+  }
+  
+  if (lines.length === 0) {
+    lines.push({
+      GLAccount: glAccountId,
+      Description: `Order #${order.order_number}`,
+      AmountFC: order.total_excl_vat || 0,
+      VATCode: "2",
+    });
+  }
+  
+  return {
+    Customer: accountId,
+    EntryDate: order.order_date || new Date().toISOString().split("T")[0],
+    Journal: "70",  // Standaard verkoopboek
+    Description: `Factuur order #${order.order_number}`,
+    YourRef: `ORD-${order.order_number}`,
+    Currency: "EUR",
+    SalesEntryLines: lines,
+  };
+}
+
+function mapVatRateToCode(vatRate: number): string {
+  if (vatRate === 0) return "1";
+  if (vatRate === 9) return "4";
+  return "2"; // 21%
+}
+```
+
+**4. Aangepaste push functie:**
+```typescript
+// In pushInvoicesInternal:
+
+// Haal standaard grootboekrekening op (eenmalig)
+const glAccountId = await getDefaultRevenueGLAccount(accessToken, exactDivision);
+if (!glAccountId) {
+  throw new Error("Kon geen standaard omzet-grootboekrekening vinden in Exact");
+}
+
+// Build sales entry
+const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId);
+
+// Create sales entry in Exact
+const response = await fetch(
+  `${EXACT_API_URL}/api/v1/${exactDivision}/salesentry/SalesEntries`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(exactEntry),
+  }
+);
+```
+
+---
+
+## Database Update (optioneel)
+
+Voor configureerbare grootboekrekening per divisie:
+
+```sql
+ALTER TABLE exact_online_connections 
+ADD COLUMN default_gl_account_id text;
+```
+
+---
 
 ## Resultaat
 
-- Facturen kunnen direct worden gepusht zonder handmatige klant-sync
-- Klanten worden automatisch aangemaakt in Exact als ze nog niet bestaan
-- Bestaande klanten in Exact worden automatisch gekoppeld op basis van klantnummer
-- Duidelijke foutmeldingen als klant niet kan worden aangemaakt
+- Facturen worden correct naar Exact Online gepusht als financiële boekingen
+- BTW-codes worden juist gemapt (0%, 9%, 21%)
+- Geen artikel-koppeling nodig
+- Standaard grootboekrekening wordt automatisch opgehaald uit Exact
+
+## Alternatief
+
+Als jullie wél artikelen uit Exact willen gebruiken:
+1. Synchroniseer producten tussen systemen
+2. Sla `exact_item_id` op bij producten
+3. Gebruik `SalesInvoices` endpoint met `Item` veld
+
+Dit is complexer en alleen nodig bij voorraadmutaties.
