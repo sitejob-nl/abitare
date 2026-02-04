@@ -1,238 +1,101 @@
 
-# Plan: Reparatie Exact Online Factuur Push
+# Plan: Fix GL Account Type Filter
 
 ## Probleem
 
-De Exact Online API geeft deze foutmelding:
-```
-"Verplicht: Grootboekrekening"
-"Verplicht: Artikel"
-```
+De huidige code zoekt naar grootboekrekeningen met `Type eq 32`, maar:
+- **Type 32** = Herwaarderingsrekeningen (bijv. "Herwaarderingen bedrijfsinventaris")
+- **Type 110** = Omzetrekeningen (bijv. "Omzet handelsgoederen")
 
-**Oorzaak**: Het huidige systeem gebruikt het `SalesInvoices` endpoint (logistiek), maar stuurt geen `Item` of `GLAccount` mee per factuurregel.
+De filter retourneert dus geen geschikte omzetrekening.
 
 ## Oplossing
 
-Wijzig naar het **SalesEntries** endpoint (financiële boekingen) - dit is geschikter voor diensten en facturen zonder artikelkoppeling.
+Wijzig de `getDefaultRevenueGLAccount()` functie om te zoeken naar **Type 110** (Revenue) en specifiek een standaard omzetrekening te vinden (zoals code 80002 "Omzet handelsgoederen").
 
 ---
 
 ## Technische Wijzigingen
 
-### 1. Nieuw Endpoint
-
-| Huidig | Nieuw |
-|--------|-------|
-| `POST /salesinvoice/SalesInvoices` | `POST /salesentry/SalesEntries` |
-
-### 2. Nieuw Request Format
-
-**Huidige structuur (werkt niet):**
-```json
-{
-  "OrderedBy": "guid",
-  "InvoiceTo": "guid",
-  "SalesInvoiceLines": [
-    { "Description": "...", "Quantity": 1, "UnitPrice": 100 }
-  ]
-}
-```
-
-**Nieuwe structuur (SalesEntries):**
-```json
-{
-  "Customer": "guid-van-klant",
-  "EntryDate": "2026-02-04",
-  "Journal": "70",
-  "Description": "Factuur order #1",
-  "YourRef": "ORD-1",
-  "Currency": "EUR",
-  "SalesEntryLines": [
-    {
-      "GLAccount": "guid-van-omzet-grootboek",
-      "Description": "Bakoven met magnetron",
-      "AmountFC": 2304.96,
-      "VATCode": "2"
-    }
-  ]
-}
-```
-
-### 3. Grootboekrekening Ophalen
-
-We moeten een standaard omzet-grootboekrekening uit Exact halen. Dit kan via:
-
-```
-GET /api/v1/{division}/financial/GLAccounts?$filter=
-  Type eq 32 and IsSales eq true
-&$select=ID,Code,Description
-&$top=1
-```
-
-Of: configureerbaar maken in `exact_online_connections` tabel.
-
-### 4. BTW-code Mapping
-
-| Abitare VAT Rate | Exact VATCode |
-|------------------|---------------|
-| 0% | `"1"` |
-| 9% | `"4"` |
-| 21% | `"2"` |
-
----
-
-## Gewijzigde Bestanden
-
 | Bestand | Wijziging |
 |---------|-----------|
-| `supabase/functions/exact-sync-invoices/index.ts` | Wijzig endpoint en request format |
+| `supabase/functions/exact-sync-invoices/index.ts` | Wijzig filter van `Type eq 32` naar `Type eq 110` + zoek naar beste match |
 
-### Code Wijzigingen
+### Code Wijziging
 
-**1. Nieuwe interface voor SalesEntry:**
+**Huidige code (regel 431):**
 ```typescript
-interface ExactSalesEntry {
-  Customer: string;
-  EntryDate?: string;
-  Journal: string;
-  Description?: string;
-  YourRef?: string;
-  Currency: string;
-  SalesEntryLines: ExactSalesEntryLine[];
-}
-
-interface ExactSalesEntryLine {
-  GLAccount: string;
-  Description: string;
-  AmountFC: number;
-  VATCode: string;
-}
+const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 32&$select=ID,Code,Description&$top=1`;
 ```
 
-**2. Helper functie voor standaard grootboekrekening:**
+**Nieuwe code:**
 ```typescript
 async function getDefaultRevenueGLAccount(
   accessToken: string,
   exactDivision: number
 ): Promise<string | null> {
-  const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?` +
-    `$filter=Type eq 32&$select=ID,Code&$top=1`;
-  
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-    },
-  });
-  
-  if (!response.ok) return null;
-  
-  const data = await response.json();
-  const accounts = data.d?.results || [];
-  return accounts[0]?.ID || null;
-}
-```
-
-**3. Aangepaste map functie:**
-```typescript
-function mapToExactSalesEntry(
-  order: AbitareOrder, 
-  accountId: string,
-  glAccountId: string
-): ExactSalesEntry {
-  const lines: ExactSalesEntryLine[] = [];
-  
-  for (const line of order.order_lines || []) {
-    if ((line as any).is_group_header) continue;
+  try {
+    // Type 110 = Revenue accounts in Exact Online
+    // Prefer accounts starting with "80" (standard sales/revenue accounts)
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 110&$select=ID,Code,Description&$orderby=Code`;
     
-    lines.push({
-      GLAccount: glAccountId,
-      Description: line.description,
-      AmountFC: line.line_total || (line.unit_price * (line.quantity || 1)),
-      VATCode: mapVatRateToCode(line.vat_rate || 21),
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
     });
+    
+    if (!response.ok) {
+      console.error("Failed to fetch GL accounts:", await response.text());
+      return null;
+    }
+    
+    const data = await response.json();
+    const accounts = data.d?.results || [];
+    
+    if (accounts.length === 0) {
+      console.error("No revenue GL accounts (Type 110) found");
+      return null;
+    }
+    
+    // Prefer accounts starting with "80" (standard sales/revenue)
+    const preferredAccount = accounts.find((acc: any) => 
+      acc.Code?.startsWith("80") || 
+      acc.Description?.toLowerCase().includes("omzet")
+    );
+    
+    const selectedAccount = preferredAccount || accounts[0];
+    console.log(`Using GL Account: ${selectedAccount.Code} - ${selectedAccount.Description}`);
+    
+    return selectedAccount.ID;
+  } catch (err) {
+    console.error("Error fetching GL accounts:", err);
+    return null;
   }
-  
-  if (lines.length === 0) {
-    lines.push({
-      GLAccount: glAccountId,
-      Description: `Order #${order.order_number}`,
-      AmountFC: order.total_excl_vat || 0,
-      VATCode: "2",
-    });
-  }
-  
-  return {
-    Customer: accountId,
-    EntryDate: order.order_date || new Date().toISOString().split("T")[0],
-    Journal: "70",  // Standaard verkoopboek
-    Description: `Factuur order #${order.order_number}`,
-    YourRef: `ORD-${order.order_number}`,
-    Currency: "EUR",
-    SalesEntryLines: lines,
-  };
 }
-
-function mapVatRateToCode(vatRate: number): string {
-  if (vatRate === 0) return "1";
-  if (vatRate === 9) return "4";
-  return "2"; // 21%
-}
-```
-
-**4. Aangepaste push functie:**
-```typescript
-// In pushInvoicesInternal:
-
-// Haal standaard grootboekrekening op (eenmalig)
-const glAccountId = await getDefaultRevenueGLAccount(accessToken, exactDivision);
-if (!glAccountId) {
-  throw new Error("Kon geen standaard omzet-grootboekrekening vinden in Exact");
-}
-
-// Build sales entry
-const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId);
-
-// Create sales entry in Exact
-const response = await fetch(
-  `${EXACT_API_URL}/api/v1/${exactDivision}/salesentry/SalesEntries`,
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(exactEntry),
-  }
-);
 ```
 
 ---
 
-## Database Update (optioneel)
+## Exact Online GLAccount Types Reference
 
-Voor configureerbare grootboekrekening per divisie:
-
-```sql
-ALTER TABLE exact_online_connections 
-ADD COLUMN default_gl_account_id text;
-```
+| Type | Beschrijving |
+|------|-------------|
+| 12 | Bankrekeningen |
+| 20 | Debiteuren |
+| 22 | Crediteuren |
+| 24 | BTW-rekeningen |
+| 32 | Herwaardering |
+| **110** | **Omzet (Revenue)** |
+| 111 | Inkoopwaarde |
+| 122 | Afschrijvingen |
+| 130 | Lasten |
 
 ---
 
 ## Resultaat
 
-- Facturen worden correct naar Exact Online gepusht als financiële boekingen
-- BTW-codes worden juist gemapt (0%, 9%, 21%)
-- Geen artikel-koppeling nodig
-- Standaard grootboekrekening wordt automatisch opgehaald uit Exact
-
-## Alternatief
-
-Als jullie wél artikelen uit Exact willen gebruiken:
-1. Synchroniseer producten tussen systemen
-2. Sla `exact_item_id` op bij producten
-3. Gebruik `SalesInvoices` endpoint met `Item` veld
-
-Dit is complexer en alleen nodig bij voorraadmutaties.
+- Facturen kunnen naar Exact worden gepusht met de juiste omzetrekening
+- De functie zoekt eerst naar een standaard omzetrekening (code 80xxx)
+- Als fallback wordt de eerste beschikbare Type 110 rekening gebruikt
