@@ -2190,6 +2190,173 @@ export type Database = {
         }
         Relationships: []
       }
+      work_report_photos: {
+        Row: {
+          caption: string | null
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          photo_type: Database["public"]["Enums"]["work_report_photo_type"]
+          uploaded_by: string | null
+          work_report_id: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          photo_type?: Database["public"]["Enums"]["work_report_photo_type"]
+          uploaded_by?: string | null
+          work_report_id: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          photo_type?: Database["public"]["Enums"]["work_report_photo_type"]
+          uploaded_by?: string | null
+          work_report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_report_photos_work_report_id_fkey"
+            columns: ["work_report_id"]
+            isOneToOne: false
+            referencedRelation: "work_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_report_tasks: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_completed: boolean
+          sort_order: number
+          work_report_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          is_completed?: boolean
+          sort_order?: number
+          work_report_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_completed?: boolean
+          sort_order?: number
+          work_report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_report_tasks_work_report_id_fkey"
+            columns: ["work_report_id"]
+            isOneToOne: false
+            referencedRelation: "work_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_reports: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          customer_name_signed: string | null
+          customer_signature: string | null
+          division_id: string | null
+          end_time: string | null
+          id: string
+          installer_id: string
+          internal_notes: string | null
+          materials_used: string | null
+          order_id: string | null
+          report_number: number
+          signed_at: string | null
+          start_time: string | null
+          status: Database["public"]["Enums"]["work_report_status"]
+          total_hours: number | null
+          updated_at: string
+          work_date: string
+          work_description: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name_signed?: string | null
+          customer_signature?: string | null
+          division_id?: string | null
+          end_time?: string | null
+          id?: string
+          installer_id: string
+          internal_notes?: string | null
+          materials_used?: string | null
+          order_id?: string | null
+          report_number?: number
+          signed_at?: string | null
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["work_report_status"]
+          total_hours?: number | null
+          updated_at?: string
+          work_date?: string
+          work_description?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name_signed?: string | null
+          customer_signature?: string | null
+          division_id?: string | null
+          end_time?: string | null
+          id?: string
+          installer_id?: string
+          internal_notes?: string | null
+          materials_used?: string | null
+          order_id?: string | null
+          report_number?: number
+          signed_at?: string | null
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["work_report_status"]
+          total_hours?: number | null
+          updated_at?: string
+          work_date?: string
+          work_description?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_reports_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_reports_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_reports_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2253,6 +2420,8 @@ export type Database = {
         | "ingepland"
         | "afgerond"
         | "geannuleerd"
+      work_report_photo_type: "voor" | "tijdens" | "na" | "schade"
+      work_report_status: "concept" | "ingediend" | "goedgekeurd"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2422,6 +2591,8 @@ export const Constants = {
         "afgerond",
         "geannuleerd",
       ],
+      work_report_photo_type: ["voor", "tijdens", "na", "schade"],
+      work_report_status: ["concept", "ingediend", "goedgekeurd"],
     },
   },
 } as const

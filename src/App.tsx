@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { InstallerRoute } from "@/components/auth/InstallerRoute";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
@@ -29,6 +30,10 @@ import ServiceTicketDetail from "./pages/ServiceTicketDetail";
 import ServiceTicketPublicForm from "./pages/ServiceTicketPublicForm";
 import ResetPassword from "./pages/ResetPassword";
 import SetPassword from "./pages/SetPassword";
+import InstallerDashboard from "./pages/installer/InstallerDashboard";
+import InstallerOrderDetail from "./pages/installer/InstallerOrderDetail";
+import WorkReportForm from "./pages/installer/WorkReportForm";
+import WorkReports from "./pages/installer/WorkReports";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +71,12 @@ const App = () => (
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
             <Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
+            
+            {/* Installer routes */}
+            <Route path="/monteur" element={<InstallerRoute><InstallerDashboard /></InstallerRoute>} />
+            <Route path="/monteur/opdracht/:orderId" element={<InstallerRoute><InstallerOrderDetail /></InstallerRoute>} />
+            <Route path="/monteur/werkbon/:id" element={<InstallerRoute><WorkReportForm /></InstallerRoute>} />
+            <Route path="/monteur/werkbonnen" element={<InstallerRoute><WorkReports /></InstallerRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
