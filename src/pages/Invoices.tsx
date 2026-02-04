@@ -293,11 +293,16 @@ const Invoices = () => {
                       const outstanding = (invoice.total_incl_vat || 0) - (invoice.amount_paid || 0);
 
                       return (
-                        <TableRow key={invoice.id}>
+                        <TableRow 
+                          key={invoice.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => window.location.href = `/orders/${invoice.id}`}
+                        >
                           <TableCell>
                             <Link
-                              to={`/orders`}
+                              to={`/orders/${invoice.id}`}
                               className="font-medium text-primary hover:underline"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               #{invoice.order_number}
                             </Link>
@@ -355,15 +360,16 @@ const Invoices = () => {
                   const outstanding = (invoice.total_incl_vat || 0) - (invoice.amount_paid || 0);
 
                   return (
-                    <div key={invoice.id} className="p-4">
+                    <Link 
+                      key={invoice.id} 
+                      to={`/orders/${invoice.id}`}
+                      className="block p-4 hover:bg-muted/50 transition-colors"
+                    >
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <Link
-                            to={`/orders`}
-                            className="font-medium text-primary hover:underline"
-                          >
+                          <span className="font-medium text-primary">
                             Order #{invoice.order_number}
-                          </Link>
+                          </span>
                           <div className="text-sm font-medium text-foreground mt-0.5">
                             {invoice.customer_name}
                           </div>
@@ -395,7 +401,7 @@ const Invoices = () => {
                           : "-"}
                         {invoice.division_name && ` • ${invoice.division_name}`}
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

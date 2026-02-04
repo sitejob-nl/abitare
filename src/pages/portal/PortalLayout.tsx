@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, useParams, Link, useLocation, Navigate } from "react-router-dom";
-import { Package, FileText, Files, Calendar, Home, Loader2, ChevronRight } from "lucide-react";
+import { Package, FileText, Files, Calendar, Home, Loader2, ChevronRight, Euro } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortalData } from "@/hooks/usePortalToken";
 import logoSvg from "@/assets/logo.svg";
@@ -16,6 +16,10 @@ const navItems = [{
   path: "quotes",
   label: "Offertes",
   icon: FileText
+}, {
+  path: "invoices",
+  label: "Facturen",
+  icon: Euro
 }, {
   path: "documents",
   label: "Documenten",
