@@ -18,26 +18,56 @@ export function useDashboardStats() {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      // Get this month's orders revenue
-      const { data: thisMonthOrders } = await supabase
-        .from("orders")
-        .select("total_incl_vat")
-        .gte("order_date", startOfMonth.toISOString().split("T")[0]);
+      // Run all queries in parallel for better performance
+      const [
+        thisMonthOrdersResult,
+        lastMonthOrdersResult,
+        openQuotesResult,
+        inProgressOrdersResult,
+        recentQuotesResult,
+      ] = await Promise.all([
+        // This month's orders revenue
+        supabase
+          .from("orders")
+          .select("total_incl_vat")
+          .gte("order_date", startOfMonth.toISOString().split("T")[0]),
+        
+        // Last month's orders revenue for comparison
+        supabase
+          .from("orders")
+          .select("total_incl_vat")
+          .gte("order_date", startOfLastMonth.toISOString().split("T")[0])
+          .lte("order_date", endOfLastMonth.toISOString().split("T")[0]),
+        
+        // Open quotes (concept + verstuurd + bekeken)
+        supabase
+          .from("quotes")
+          .select("total_incl_vat")
+          .in("status", ["concept", "verstuurd", "bekeken"]),
+        
+        // Orders in progress (not afgerond)
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .not("status", "eq", "afgerond"),
+        
+        // Recent quotes for conversion rate (last 90 days, excluding concept)
+        supabase
+          .from("quotes")
+          .select("status")
+          .gte("quote_date", ninetyDaysAgo.toISOString().split("T")[0])
+          .not("status", "eq", "concept"),
+      ]);
 
-      const monthlyRevenue = thisMonthOrders?.reduce(
+      const monthlyRevenue = thisMonthOrdersResult.data?.reduce(
         (sum, order) => sum + (order.total_incl_vat || 0),
         0
       ) || 0;
 
-      // Get last month's orders revenue for comparison
-      const { data: lastMonthOrders } = await supabase
-        .from("orders")
-        .select("total_incl_vat")
-        .gte("order_date", startOfLastMonth.toISOString().split("T")[0])
-        .lte("order_date", endOfLastMonth.toISOString().split("T")[0]);
-
-      const lastMonthRevenue = lastMonthOrders?.reduce(
+      const lastMonthRevenue = lastMonthOrdersResult.data?.reduce(
         (sum, order) => sum + (order.total_incl_vat || 0),
         0
       ) || 0;
@@ -46,36 +76,16 @@ export function useDashboardStats() {
         ? Math.round(((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
         : 0;
 
-      // Get open quotes (concept + verstuurd + bekeken)
-      const { data: openQuotes } = await supabase
-        .from("quotes")
-        .select("total_incl_vat")
-        .in("status", ["concept", "verstuurd", "bekeken"]);
-
-      const openQuotesValue = openQuotes?.reduce(
+      const openQuotesValue = openQuotesResult.data?.reduce(
         (sum, quote) => sum + (quote.total_incl_vat || 0),
         0
       ) || 0;
-      const openQuotesCount = openQuotes?.length || 0;
+      const openQuotesCount = openQuotesResult.data?.length || 0;
 
-      // Get orders in progress (not afgerond)
-      const { data: inProgressOrders, count: ordersInProgress } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .not("status", "eq", "afgerond");
+      const ordersInProgress = inProgressOrdersResult.count || 0;
 
-      // Calculate conversion rate (accepted quotes / total quotes in last 90 days)
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-      const { data: recentQuotes } = await supabase
-        .from("quotes")
-        .select("status")
-        .gte("quote_date", ninetyDaysAgo.toISOString().split("T")[0])
-        .not("status", "eq", "concept");
-
-      const totalQuotes = recentQuotes?.length || 0;
-      const acceptedQuotes = recentQuotes?.filter(q => q.status === "geaccepteerd").length || 0;
+      const totalQuotes = recentQuotesResult.data?.length || 0;
+      const acceptedQuotes = recentQuotesResult.data?.filter(q => q.status === "geaccepteerd").length || 0;
       const conversionRate = totalQuotes > 0 ? Math.round((acceptedQuotes / totalQuotes) * 100) : 0;
 
       return {
@@ -83,9 +93,10 @@ export function useDashboardStats() {
         monthlyRevenueChange,
         openQuotesValue,
         openQuotesCount,
-        ordersInProgress: ordersInProgress || 0,
+        ordersInProgress,
         conversionRate,
       };
     },
+    staleTime: 30000, // 30 seconds - dashboard stats don't need to refresh too often
   });
 }
