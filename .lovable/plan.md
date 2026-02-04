@@ -1,104 +1,166 @@
 
+# Plan: Automatische Klant-Sync bij Factuur Push
 
-# Plan: Factuur Detail Pagina (/invoices/:id)
+## Huidige Situatie
 
-## Samenvatting
+Wanneer een factuur naar Exact Online wordt gepusht:
+1. Het systeem controleert of de klant een `exact_account_id` heeft
+2. Zo niet: de factuur wordt **overgeslagen** met de melding "Klant niet gekoppeld"
+3. De gebruiker moet handmatig eerst klanten synchroniseren
 
-Een nieuwe factuurdetailpagina maken met focus op betalingsinformatie en Exact Online synchronisatie. De huidige links naar `/orders/{id}` worden aangepast naar `/invoices/{id}`.
+## Nieuwe Situatie
 
----
-
-## Wat de pagina toont
-
-De factuurdetailpagina geeft een overzichtelijke weergave van facturatiegegevens:
-
-| Sectie | Inhoud |
-|--------|--------|
-| **Header** | Factuurnummer, klantnaam, betalingsstatus badge |
-| **Betalingsoverzicht** | Totaal, betaald, openstaand met voortgangsbalk |
-| **Factuurregels** | Alle orderlijnen met prijzen (alleen lezen) |
-| **Klantgegevens** | Naam, adres, contactinfo |
-| **Exact Online info** | Exact Invoice ID, link naar order |
-| **Acties** | Betaling registreren |
+Wanneer een factuur naar Exact Online wordt gepusht:
+1. Het systeem controleert of de klant een `exact_account_id` heeft
+2. **Zo niet: automatisch de klant aanmaken in Exact Online**
+3. De `exact_account_id` wordt opgeslagen
+4. De factuur wordt gepusht met de nieuwe account ID
 
 ---
 
-## Exact Online Synchronisatie
+## Technische Wijzigingen
 
-De synchronisatie met Exact Online werkt al correct:
+### 1. Update `exact-sync-invoices/index.ts`
 
-**PUSH (Orders → Exact):**
-- Orders zonder `exact_invoice_id` worden als SalesInvoice naar Exact gepusht
-- Gebruikt endpoint: `/api/v1/{division}/salesinvoice/SalesInvoices` (POST)
-- Na succes wordt het Exact Invoice nummer opgeslagen
+Voeg een helper functie toe die een klant naar Exact pusht als deze nog niet gekoppeld is:
 
-**PULL (Betalingen ← Exact):**  
-- Haalt betalingsstatus op via `/api/v1/{division}/salesinvoice/SalesInvoices` en `/api/v1/{division}/read/financial/Receivables`
-- Berekent betaald bedrag en update `payment_status` (open → deels_betaald → betaald)
+```text
++----------------------------------------+
+|  pushInvoicesInternal                  |
++----------------------------------------+
+|  Voor elke order:                      |
+|  1. Heeft klant exact_account_id?      |
+|     - Ja: doorgaan                     |
+|     - Nee: ensureCustomerInExact()     |
+|       -> Push klant naar Exact         |
+|       -> Sla exact_account_id op       |
+|  2. Maak SalesInvoice aan              |
++----------------------------------------+
+```
 
-**Vereisten voor sync:**
-- Klant moet gekoppeld zijn aan Exact (`exact_account_id`)
-- Actieve Exact Online connectie voor de divisie
+**Nieuwe functie `ensureCustomerInExact()`:**
+- Haalt klantgegevens op
+- Controleert eerst of klant al bestaat in Exact (op basis van Code/klantnummer)
+- Bestaat niet? Maakt klant aan
+- Slaat `exact_account_id` op in database
+- Retourneert de account ID
+
+### 2. Verbeterde Foutafhandeling
+
+| Situatie | Actie |
+|----------|-------|
+| Klant pushen lukt | Doorgaan met factuur |
+| Klant pushen mislukt | Factuur overslaan met duidelijke foutmelding |
+| Factuur pushen mislukt | Fout loggen, klant blijft gekoppeld |
 
 ---
 
-## Technische Aanpak
+## Code Wijzigingen
 
-### Bestanden
-
-| Bestand | Actie |
-|---------|-------|
-| `src/pages/InvoiceDetail.tsx` | **Nieuw** - Factuurdetailpagina |
-| `src/hooks/useInvoices.ts` | **Update** - `useInvoice(id)` hook toevoegen |
-| `src/pages/Invoices.tsx` | **Update** - Links naar `/invoices/:id` |
-| `src/App.tsx` | **Update** - Route `/invoices/:id` toevoegen |
-
-### Nieuwe useInvoice Hook
+### `supabase/functions/exact-sync-invoices/index.ts`
 
 ```typescript
-export function useInvoice(id: string | undefined) {
-  return useQuery({
-    queryKey: ["invoice", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select(`
-          id, order_number, order_date, customer_id, division_id,
-          total_incl_vat, total_excl_vat, total_vat,
-          payment_status, amount_paid, exact_invoice_id,
-          customers(id, first_name, last_name, company_name, email, phone, 
-            street_address, postal_code, city),
-          divisions(name),
-          order_lines(id, description, quantity, unit_price, vat_rate, line_total),
-          order_sections(id, title, position)
-        `)
-        .eq("id", id)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!id,
-  });
+// Nieuwe functie toevoegen
+async function ensureCustomerInExact(
+  supabase: any,
+  accessToken: string,
+  exactDivision: number,
+  customerId: string
+): Promise<string | null> {
+  // 1. Haal klant op uit database
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .single();
+  
+  if (!customer) return null;
+  
+  // 2. Al gekoppeld? Return bestaande ID
+  if (customer.exact_account_id) {
+    return customer.exact_account_id;
+  }
+  
+  // 3. Check of klant al bestaat in Exact (op klantnummer)
+  const existingAccount = await findExactAccountByCode(
+    accessToken, 
+    exactDivision, 
+    customer.customer_number
+  );
+  
+  if (existingAccount) {
+    // Koppel bestaande account
+    await supabase
+      .from("customers")
+      .update({ exact_account_id: existingAccount })
+      .eq("id", customerId);
+    return existingAccount;
+  }
+  
+  // 4. Maak nieuwe account aan in Exact
+  const newAccountId = await createExactAccount(
+    accessToken, 
+    exactDivision, 
+    customer
+  );
+  
+  if (newAccountId) {
+    await supabase
+      .from("customers")
+      .update({ exact_account_id: newAccountId })
+      .eq("id", customerId);
+  }
+  
+  return newAccountId;
 }
 ```
 
-### InvoiceDetail Pagina Layout
+### Aanpassing in `pushInvoicesInternal`:
 
-De pagina hergebruikt bestaande componenten:
-- `PaymentCard` - Betalingsregistratie (ongewijzigd)
-- `OrderLinesTable` - Factuurregels (readonly, ongewijzigd)
-- Nieuwe `InvoiceInfoCard` geïntegreerd in de pagina - Klant + factuurgegevens
+```typescript
+// Huidige code:
+if (!customer?.exact_account_id) {
+  results.skipped++;
+  results.errors.push(`Order #${order.order_number}: Klant niet gekoppeld`);
+  continue;
+}
+
+// Nieuwe code:
+let accountId = customer?.exact_account_id;
+
+if (!accountId) {
+  // Probeer klant automatisch te synchroniseren
+  accountId = await ensureCustomerInExact(
+    supabase,
+    accessToken,
+    exactDivision,
+    order.customer_id
+  );
+  
+  if (!accountId) {
+    results.skipped++;
+    results.errors.push(
+      `Order #${order.order_number}: Kon klant niet aanmaken in Exact`
+    );
+    continue;
+  }
+}
+
+// Gebruik accountId voor factuur
+const exactInvoice = mapToExactInvoice(order, accountId);
+```
 
 ---
 
-## Navigatie
+## Samenvatting Wijzigingen
 
-```text
-Facturenoverzicht (/invoices)
-    │
-    ├── Klik op factuur → Factuurdetail (/invoices/:id)
-    │                           │
-    │                           └── Link "Bekijk order" → Order (/orders/:id)
-    │
-    └── Exact Online sync knoppen blijven werken
-```
+| Bestand | Wijziging |
+|---------|-----------|
+| `supabase/functions/exact-sync-invoices/index.ts` | Voeg `ensureCustomerInExact()`, `findExactAccountByCode()`, en `createExactAccount()` functies toe. Pas `pushInvoicesInternal` aan om automatisch klanten te synchroniseren. |
 
+## Resultaat
+
+- Facturen kunnen direct worden gepusht zonder handmatige klant-sync
+- Klanten worden automatisch aangemaakt in Exact als ze nog niet bestaan
+- Bestaande klanten in Exact worden automatisch gekoppeld op basis van klantnummer
+- Duidelijke foutmeldingen als klant niet kan worden aangemaakt
