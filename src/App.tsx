@@ -36,6 +36,16 @@ import InstallerOrderDetail from "./pages/installer/InstallerOrderDetail";
 import WorkReportForm from "./pages/installer/WorkReportForm";
 import WorkReports from "./pages/installer/WorkReports";
 
+// Portal pages
+import PortalLayout from "./pages/portal/PortalLayout";
+import PortalDashboard from "./pages/portal/PortalDashboard";
+import PortalOrders from "./pages/portal/PortalOrders";
+import PortalOrderDetail from "./pages/portal/PortalOrderDetail";
+import PortalQuotes from "./pages/portal/PortalQuotes";
+import PortalQuoteDetail from "./pages/portal/PortalQuoteDetail";
+import PortalDocuments from "./pages/portal/PortalDocuments";
+import PortalPlanning from "./pages/portal/PortalPlanning";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -53,6 +63,16 @@ const App = () => (
             <Route path="/set-password" element={<SetPassword />} />
             <Route path="/service/new" element={<ServiceTicketPublicForm />} />
             
+            {/* Customer Portal routes (public with token) */}
+            <Route path="/portal/:token" element={<PortalLayout />}>
+              <Route index element={<PortalDashboard />} />
+              <Route path="orders" element={<PortalOrders />} />
+              <Route path="orders/:orderId" element={<PortalOrderDetail />} />
+              <Route path="quotes" element={<PortalQuotes />} />
+              <Route path="quotes/:quoteId" element={<PortalQuoteDetail />} />
+              <Route path="documents" element={<PortalDocuments />} />
+              <Route path="planning" element={<PortalPlanning />} />
+            </Route>
             {/* Protected routes */}
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />

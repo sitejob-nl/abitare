@@ -13,6 +13,7 @@ import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
 import { NotesCard } from "@/components/orders/NotesCard";
 import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
 import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
+import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -285,6 +286,11 @@ const OrderDetail = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <PortalTokenGenerator
+            customerId={order.customer_id}
+            orderId={order.id}
+            customerName={getCustomerName(customer)}
+          />
           <div className="text-right">
             <p className="text-xs text-muted-foreground">Totaal incl. BTW</p>
             <p className="text-xl font-semibold text-foreground">

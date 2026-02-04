@@ -14,6 +14,135 @@ export type Database = {
   }
   public: {
     Tables: {
+      customer_planning_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          preferred_date_1: string | null
+          preferred_date_2: string | null
+          preferred_date_3: string | null
+          remarks: string | null
+          submitted_at: string
+          time_preference: string | null
+          token_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          preferred_date_1?: string | null
+          preferred_date_2?: string | null
+          preferred_date_3?: string | null
+          remarks?: string | null
+          submitted_at?: string
+          time_preference?: string | null
+          token_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          preferred_date_1?: string | null
+          preferred_date_2?: string | null
+          preferred_date_3?: string | null
+          remarks?: string | null
+          submitted_at?: string
+          time_preference?: string | null
+          token_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_planning_preferences_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_planning_preferences_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_planning_preferences_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "customer_portal_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_portal_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          last_accessed_at: string | null
+          order_id: string | null
+          quote_id: string | null
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          last_accessed_at?: string | null
+          order_id?: string | null
+          quote_id?: string | null
+          token: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          last_accessed_at?: string | null
+          order_id?: string | null
+          quote_id?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_portal_tokens_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_portal_tokens_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_portal_tokens_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_portal_tokens_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           accepts_marketing: boolean | null
