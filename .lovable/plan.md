@@ -1,88 +1,157 @@
 
+# Plan: Fix Race Condition in AuthContext
 
-# Plan: Fix Admin Rol & Maak Monteur Account
+## Probleem
 
-## Probleem Analyse
+De `/monteur` route redirect naar het dashboard omdat de rollen nog niet geladen zijn wanneer de route-check plaatsvindt. Dit is een **race condition**:
 
-Na onderzoek blijkt dat:
-1. **demo@sitejob.nl heeft GEEN rollen** - De eerdere migratie is mislukt door RLS policies
-2. De `user_roles` tabel heeft RLS policies die INSERT blokkeren als je geen admin bent
-3. Migraties lopen als `supabase_admin` maar de RLS policies evalueren nog steeds `auth.uid()`
+1. Sessie wordt opgehaald ✓
+2. `isLoading` wordt `false` gezet
+3. Rollen worden **asynchroon** opgehaald (niet afgewacht!)
+4. Route check ziet lege `roles` array → redirect
 
 ## Oplossing
 
-### Stap 1: Fix de Migratie voor Rollen
+De `isLoading` status mag pas op `false` gezet worden **nadat** de rollen zijn opgehaald.
 
-Een nieuwe migratie die RLS tijdelijk uitschakelt om de rollen toe te voegen:
+---
 
-```sql
--- Tijdelijk RLS uitschakelen voor deze operatie
-ALTER TABLE public.user_roles DISABLE ROW LEVEL SECURITY;
+## Technische Wijzigingen
 
--- Admin rol voor demo@sitejob.nl
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('94f1ad4d-2cf1-4978-bb6b-f61c820b2fa9', 'admin')
-ON CONFLICT (user_id, role) DO NOTHING;
+### Bestand: `src/contexts/AuthContext.tsx`
 
--- RLS weer inschakelen
-ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+**Huidige code (probleem):**
+```typescript
+supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+  setSession(existingSession);
+  setUser(existingSession?.user ?? null);
+
+  if (existingSession?.user) {
+    fetchUserData(existingSession.user.id);  // ❌ Niet afgewacht!
+  }
+  setIsLoading(false);  // ❌ Te vroeg!
+});
 ```
 
-### Stap 2: Monteur Account Aanmaken
+**Nieuwe code (fix):**
+```typescript
+const initializeAuth = async () => {
+  try {
+    const { data: { session: existingSession } } = await supabase.auth.getSession();
+    
+    setSession(existingSession);
+    setUser(existingSession?.user ?? null);
 
-Na het fixen van de admin rol kan je via de UI (Instellingen → Gebruikers) een nieuwe monteur uitnodigen:
-- Klik op "Nieuwe gebruiker"
-- Vul email en naam in
-- Selecteer "Monteur" als rol
-- Kies vestiging
+    if (existingSession?.user) {
+      await fetchUserData(existingSession.user.id);  // ✓ Wacht op rollen
+    }
+  } finally {
+    setIsLoading(false);  // ✓ Pas na rollen laden
+  }
+};
 
-**Of** we maken direct een monteur account aan via dezelfde migratie als er al een account bestaat.
+initializeAuth();
+```
 
----
+**Aanpassing `onAuthStateChange`:**
+```typescript
+supabase.auth.onAuthStateChange(async (event, currentSession) => {
+  setSession(currentSession);
+  setUser(currentSession?.user ?? null);
 
-## Technische Details
-
-### Bestandswijzigingen
-
-| Bestand | Actie |
-|---------|-------|
-| `supabase/migrations/XXXXXX_fix_user_roles.sql` | Nieuw - Fix admin rol + optioneel monteur |
-
-### Migratie SQL
-
-```sql
--- Fix: RLS tijdelijk uitschakelen voor rol-toewijzing
--- Dit is nodig omdat migraties als service role draaien maar
--- RLS policies auth.uid() gebruiken die null is in deze context
-
-ALTER TABLE public.user_roles DISABLE ROW LEVEL SECURITY;
-
--- Admin rol voor demo@sitejob.nl (was niet toegevoegd door RLS blokkade)
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('94f1ad4d-2cf1-4978-bb6b-f61c820b2fa9', 'admin')
-ON CONFLICT (user_id, role) DO NOTHING;
-
--- Voeg ook monteur rol toe aan demo@sitejob.nl zodat je kan testen
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('94f1ad4d-2cf1-4978-bb6b-f61c820b2fa9', 'monteur')
-ON CONFLICT (user_id, role) DO NOTHING;
-
--- RLS weer inschakelen
-ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+  if (currentSession?.user) {
+    // Fire and forget - alleen bij SIGN_IN event wachten we
+    if (event === 'SIGNED_IN') {
+      await fetchUserData(currentSession.user.id);
+    } else {
+      fetchUserData(currentSession.user.id);
+    }
+  } else {
+    setProfile(null);
+    setRoles([]);
+    setActiveDivisionId(null);
+  }
+  // isLoading wordt alleen door initializeAuth beheerd
+});
 ```
 
 ---
 
-## Stappen na Implementatie
+## Volledige Herziene `useEffect`
 
-1. **Refresh de pagina** na de migratie
-2. **Inloggen als demo@sitejob.nl** - Nu zou je toegang moeten hebben tot Instellingen
-3. **Navigeer naar /monteur** - Je hebt nu ook de monteur rol om te testen
-4. **Nieuwe monteur uitnodigen** via Instellingen → Gebruikers → Nieuwe gebruiker
+```typescript
+useEffect(() => {
+  let isMounted = true;
+
+  // Listener voor ONGOING auth changes
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, currentSession) => {
+      if (!isMounted) return;
+      
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        // Bij SIGN_IN altijd wachten op rollen
+        if (event === 'SIGNED_IN') {
+          await fetchUserData(currentSession.user.id);
+        } else {
+          // Voor andere events (TOKEN_REFRESH) fire and forget
+          fetchUserData(currentSession.user.id);
+        }
+      } else {
+        setProfile(null);
+        setRoles([]);
+        setActiveDivisionId(null);
+      }
+    }
+  );
+
+  // INITIËLE load - wacht op alles voordat isLoading false wordt
+  const initializeAuth = async () => {
+    try {
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      
+      if (!isMounted) return;
+
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+
+      if (existingSession?.user) {
+        await fetchUserData(existingSession.user.id);
+      }
+    } finally {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  initializeAuth();
+
+  return () => {
+    isMounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
+```
 
 ---
 
-## Alternatief: Dedicated Monteur Account
+## Samenvatting
 
-Als je een apart monteur account wilt (niet demo@sitejob.nl), kan ik na deze fix via de invite-user edge function een nieuwe gebruiker aanmaken. Dat vereist dat je eerst inlogt als admin (demo of kas).
+| Aspect | Oud | Nieuw |
+|--------|-----|-------|
+| `getSession()` | Promise met `.then()` | `async/await` |
+| `fetchUserData()` | Fire and forget | Afgewacht met `await` |
+| `setIsLoading(false)` | Direct na session | Pas na rollen geladen |
+| Cleanup | Geen | `isMounted` flag |
 
+---
+
+## Resultaat
+
+Na deze fix:
+1. De app toont een loading spinner tot de rollen zijn geladen
+2. De `InstallerRoute` ontvangt de correcte `roles` array
+3. Navigatie naar `/monteur` werkt correct voor gebruikers met de monteur rol
