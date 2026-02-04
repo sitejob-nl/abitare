@@ -19,17 +19,46 @@ export function useActionItems(limit = 10) {
       const today = new Date().toISOString().split('T')[0];
       const actions: ActionItem[] = [];
 
-      // 1. Expired quotes (high priority)
-      const { data: expiredQuotes } = await supabase
-        .from("quotes")
-        .select(`
-          id, quote_number, valid_until,
-          customer:customers(first_name, last_name, company_name)
-        `)
-        .eq("status", "verstuurd")
-        .lt("valid_until", today)
-        .order("valid_until", { ascending: true })
-        .limit(5);
+      // Run all queries in parallel
+      const [expiredQuotesResult, pendingOrdersResult, readyOrdersResult] = await Promise.all([
+        // Expired quotes (high priority)
+        supabase
+          .from("quotes")
+          .select(`
+            id, quote_number, valid_until,
+            customer:customers(first_name, last_name, company_name)
+          `)
+          .eq("status", "verstuurd")
+          .lt("valid_until", today)
+          .order("valid_until", { ascending: true })
+          .limit(5),
+        
+        // Orders needing attention (status = nieuw or controle)
+        supabase
+          .from("orders")
+          .select(`
+            id, order_number, status,
+            customer:customers(first_name, last_name, company_name)
+          `)
+          .in("status", ["nieuw", "controle"])
+          .order("created_at", { ascending: true })
+          .limit(5),
+        
+        // Orders awaiting confirmation (bestel_klaar)
+        supabase
+          .from("orders")
+          .select(`
+            id, order_number,
+            customer:customers(first_name, last_name, company_name)
+          `)
+          .eq("status", "bestel_klaar")
+          .order("created_at", { ascending: true })
+          .limit(3),
+      ]);
+
+      const expiredQuotes = expiredQuotesResult.data;
+      const pendingOrders = pendingOrdersResult.data;
+      const readyOrders = readyOrdersResult.data;
 
       if (expiredQuotes) {
         expiredQuotes.forEach((quote) => {
@@ -52,17 +81,6 @@ export function useActionItems(limit = 10) {
         });
       }
 
-      // 2. Orders needing attention (status = nieuw or controle)
-      const { data: pendingOrders } = await supabase
-        .from("orders")
-        .select(`
-          id, order_number, status,
-          customer:customers(first_name, last_name, company_name)
-        `)
-        .in("status", ["nieuw", "controle"])
-        .order("created_at", { ascending: true })
-        .limit(5);
-
       if (pendingOrders) {
         pendingOrders.forEach((order) => {
           const customer = order.customer as { first_name?: string; last_name?: string; company_name?: string } | null;
@@ -84,17 +102,6 @@ export function useActionItems(limit = 10) {
           });
         });
       }
-
-      // 3. Orders awaiting confirmation (bestel_klaar)
-      const { data: readyOrders } = await supabase
-        .from("orders")
-        .select(`
-          id, order_number,
-          customer:customers(first_name, last_name, company_name)
-        `)
-        .eq("status", "bestel_klaar")
-        .order("created_at", { ascending: true })
-        .limit(3);
 
       if (readyOrders) {
         readyOrders.forEach((order) => {
@@ -120,5 +127,6 @@ export function useActionItems(limit = 10) {
         .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
         .slice(0, limit);
     },
+    staleTime: 30000, // 30 seconds
   });
 }
