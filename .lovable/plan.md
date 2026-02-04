@@ -1,99 +1,111 @@
 
+# Plan: Automatische Redirect voor Monteurs
 
-# Plan: Fix Login Timeout voor info@sitejob.nl
+## Probleem
 
-## Probleem Analyse
+Wanneer `info@sitejob.nl` (rol: monteur) inlogt:
+1. Login redirect naar `/` (standaard)
+2. De `ProtectedRoute` laat de user door (alleen check op authenticatie)
+3. User ziet volledige admin Dashboard in plaats van monteur-omgeving
 
-De console logs tonen het exacte probleem:
-
-```
-Auth state change fetchUserData timeout/error: Timeout: fetchUserData(SIGNED_IN)
-```
-
-Dit gebeurt **3 keer**, wat aangeeft dat:
-1. De `onAuthStateChange` listener meerdere `SIGNED_IN` events ontvangt
-2. Elke keer wordt `fetchUserData` met een 6s timeout gestart
-3. Deze timeout raakt, ook al zijn de network requests succesvol (200 OK)
-
-De paradox: de network logs tonen dat `profiles` en `user_roles` queries **wel slagen**. Dit wijst op een timing/race condition probleem.
-
----
-
-## Root Cause
-
-In `AuthContext.tsx` regel 128-136:
-
-```typescript
-if (event === 'SIGNED_IN') {
-  try {
-    await withTimeout(fetchUserData(currentSession.user.id), 6000, "fetchUserData(SIGNED_IN)");
-  } catch (e) {
-    console.error("Auth state change fetchUserData timeout/error:", e);
-    setAuthInitError("Gebruikersgegevens ophalen duurt te lang...");
-  }
-}
-```
-
-**Probleem 1**: Bij **elke** `SIGNED_IN` event wordt dezelfde timeout-error gezet, zelfs als de initiële load al geslaagd is.
-
-**Probleem 2**: De `onAuthStateChange` listener en `initializeAuth` runnen **parallel** en kunnen elkaar in de weg zitten.
-
----
+De gebruiker heeft WEL de juiste rol in de database, maar de app stuurt ze niet naar de juiste omgeving.
 
 ## Oplossing
 
-### Strategie: Scheiding van Initiële Load vs Ongoing Changes
+### Optie A: Redirect in Login component (Aanbevolen)
 
-1. **Initiële load** (`initializeAuth`) → controleert `isLoading`, mag `authInitError` zetten
-2. **Ongoing auth changes** (`onAuthStateChange`) → update state, maar zet **geen** errors die de UI blokkeren
-
-### Code Wijzigingen
-
-**`src/contexts/AuthContext.tsx`**:
+Na succesvolle login, check de gebruikersrollen en redirect naar de juiste pagina:
 
 ```typescript
-// Voeg een ref toe om te tracken of initiële load klaar is
-const initCompleteRef = useRef(false);
+// src/pages/Login.tsx
+const { signIn, roles, isInstaller } = useAuth();
 
-// In onAuthStateChange - ALLEEN errors loggen, niet de UI blokkeren
-if (event === 'SIGNED_IN') {
-  if (!initCompleteRef.current) {
-    // Tijdens initiële load: wacht met timeout, maar error handling in initializeAuth
-    // Doe hier NIETS anders - laat initializeAuth het afhandelen
-  } else {
-    // Na initiële load: fire and forget, geen timeout
-    fetchUserData(currentSession.user.id).catch(err => {
-      console.error("Background fetchUserData error:", err);
-    });
-  }
+// Na login:
+if (isInstaller && !roles.includes('admin') && !roles.includes('manager')) {
+  navigate('/monteur', { replace: true });
+} else {
+  navigate(from, { replace: true });
 }
-
-// In initializeAuth finally block:
-initCompleteRef.current = true;
-setIsLoading(false);
 ```
 
-### Extra Robuustheid
+**Probleem**: De rollen worden async geladen NA de login, dus we moeten wachten tot ze beschikbaar zijn.
 
-- Verhoog timeout van 6s naar 10s voor `fetchUserData`
-- Voeg een `abortController` toe om dubbele fetches te cancellen
-- Log warnings i.p.v. errors voor non-blocking issues
+### Optie B: Redirect in ProtectedRoute (Eenvoudiger)
 
----
+Voeg rol-check toe aan ProtectedRoute die monteurs automatisch redirect:
+
+```typescript
+// src/components/auth/ProtectedRoute.tsx
+const { user, isLoading, roles, isInstaller, isAdmin, isAdminOrManager } = useAuth();
+
+// Na user check:
+if (isInstaller && !isAdminOrManager) {
+  return <Navigate to="/monteur" replace />;
+}
+```
+
+### Optie C: Aparte Redirect Component (Beste UX)
+
+Maak een `RoleBasedRedirect` component die na login de juiste route bepaalt:
+
+```typescript
+// Nieuwe route: /redirect-after-login
+// Deze analyseert rollen en redirect naar /monteur of /
+```
+
+## Aanbevolen Aanpak: Optie B
+
+Dit is de eenvoudigste oplossing met minimale code wijzigingen:
+
+1. Update `ProtectedRoute.tsx` om monteurs te detecteren
+2. Redirect monteurs naar `/monteur` als ze `/` proberen te bezoeken
+3. Andere routes blijven toegankelijk voor admins/managers
 
 ## Bestandswijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/contexts/AuthContext.tsx` | Fix race condition tussen initializeAuth en onAuthStateChange |
+| `src/components/auth/ProtectedRoute.tsx` | Voeg rol-based redirect toe voor monteurs |
 
----
+## Code Implementatie
 
-## Verwacht Resultaat
+```typescript
+// src/components/auth/ProtectedRoute.tsx
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { user, isLoading, authInitError, retryAuthInit, signOut, roles } = useAuth();
+  const location = useLocation();
 
-Na deze fix:
-- Login voor `info@sitejob.nl` werkt direct
-- Geen timeout errors meer in de console
-- De "Kan niet laden" foutmelding verschijnt alleen bij echte netwerk problemen
-- Token refresh events verstoren de UI niet meer
+  // ... bestaande loading/error checks ...
 
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // NIEUW: Redirect monteurs naar hun eigen omgeving
+  const isOnlyInstaller = roles.includes("monteur") && 
+                          !roles.includes("admin") && 
+                          !roles.includes("manager");
+  
+  if (isOnlyInstaller && location.pathname === "/") {
+    return <Navigate to="/monteur" replace />;
+  }
+
+  return <>{children}</>;
+}
+```
+
+## Extra Overweging
+
+Wil je dat monteurs ALLEEN toegang hebben tot `/monteur/*` routes, of mogen ze ook andere pagina's zien (bijv. `/orders/:id` voor order details)?
+
+**Huidige situatie**: Monteurs kunnen technisch gezien alle ProtectedRoutes bezoeken, maar de data is beperkt via RLS.
+
+**Optie voor strikte toegang**: Voeg een check toe die monteurs blokkeert voor alle niet-monteur routes:
+
+```typescript
+if (isOnlyInstaller && !location.pathname.startsWith("/monteur")) {
+  return <Navigate to="/monteur" replace />;
+}
+```
+
+Dit is optioneel en kan later worden toegevoegd.
