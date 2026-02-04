@@ -4,6 +4,7 @@ import { useInvoices, useInvoiceStats } from "@/hooks/useInvoices";
 import { useSyncInvoices, useExactOnlineConnections } from "@/hooks/useExactOnline";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useAuth } from "@/contexts/AuthContext";
+import { CreateInvoiceDialog } from "@/components/invoices/CreateInvoiceDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upload, Download, ChevronDown } from "lucide-react";
+import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upload, Download, ChevronDown, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link, useNavigate } from "react-router-dom";
@@ -67,6 +68,7 @@ const Invoices = () => {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Get active connection's division
   const activeConnection = connections?.find(c => c.is_active);
@@ -224,6 +226,11 @@ const Invoices = () => {
             </SelectContent>
           </Select>
 
+          <Button onClick={() => setShowCreateDialog(true)} className="shrink-0">
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Factuur</span>
+          </Button>
+
           {hasExactConnection && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -255,6 +262,8 @@ const Invoices = () => {
           )}
         </div>
       </div>
+
+      <CreateInvoiceDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
 
       {/* Content */}
       <Card>

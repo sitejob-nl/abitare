@@ -884,6 +884,7 @@ export type Database = {
           id: string
           installer_id: string | null
           internal_notes: string | null
+          is_standalone_invoice: boolean | null
           margin_amount: number | null
           margin_percentage: number | null
           order_confirmation_sent_at: string | null
@@ -925,6 +926,7 @@ export type Database = {
           id?: string
           installer_id?: string | null
           internal_notes?: string | null
+          is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null
           order_confirmation_sent_at?: string | null
@@ -966,6 +968,7 @@ export type Database = {
           id?: string
           installer_id?: string | null
           internal_notes?: string | null
+          is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null
           order_confirmation_sent_at?: string | null
