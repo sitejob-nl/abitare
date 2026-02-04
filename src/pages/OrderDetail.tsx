@@ -301,9 +301,9 @@ const OrderDetail = () => {
       </div>
 
       {/* Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 overflow-hidden">
         {/* Main content - Order lines and Supplier orders */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 min-w-0">
           <OrderLinesTable 
             lines={orderLines} 
             sections={(order as any).order_sections || []}
