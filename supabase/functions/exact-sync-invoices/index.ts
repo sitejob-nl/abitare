@@ -421,14 +421,16 @@ function mapVatRateToCode(vatRate: number): string {
 
 /**
  * Get default revenue GL account from Exact Online
- * Type 32 = Revenue account
+ * Type 110 = Revenue accounts (Omzet)
+ * Prefer accounts starting with "80" (standard sales/revenue accounts)
  */
 async function getDefaultRevenueGLAccount(
   accessToken: string,
   exactDivision: number
 ): Promise<string | null> {
   try {
-    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 32&$select=ID,Code,Description&$top=1`;
+    // Type 110 = Revenue accounts in Exact Online
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 110&$select=ID,Code,Description&$orderby=Code`;
     
     const response = await fetch(url, {
       headers: {
@@ -445,12 +447,21 @@ async function getDefaultRevenueGLAccount(
     const data = await response.json();
     const accounts = data.d?.results || [];
     
-    if (accounts.length > 0) {
-      console.log(`Using GL Account: ${accounts[0].Code} - ${accounts[0].Description}`);
-      return accounts[0].ID;
+    if (accounts.length === 0) {
+      console.error("No revenue GL accounts (Type 110) found");
+      return null;
     }
     
-    return null;
+    // Prefer accounts starting with "80" (standard sales/revenue) or containing "omzet"
+    const preferredAccount = accounts.find((acc: any) => 
+      acc.Code?.startsWith("80") || 
+      acc.Description?.toLowerCase().includes("omzet")
+    );
+    
+    const selectedAccount = preferredAccount || accounts[0];
+    console.log(`Using GL Account: ${selectedAccount.Code} - ${selectedAccount.Description}`);
+    
+    return selectedAccount.ID;
   } catch (err) {
     console.error("Error fetching GL accounts:", err);
     return null;
