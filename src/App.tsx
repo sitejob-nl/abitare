@@ -44,6 +44,7 @@ import PortalOrders from "./pages/portal/PortalOrders";
 import PortalOrderDetail from "./pages/portal/PortalOrderDetail";
 import PortalQuotes from "./pages/portal/PortalQuotes";
 import PortalQuoteDetail from "./pages/portal/PortalQuoteDetail";
+import PortalInvoices from "./pages/portal/PortalInvoices";
 import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalPlanning from "./pages/portal/PortalPlanning";
 
@@ -72,6 +73,7 @@ const App = () => (
               <Route path="orders/:orderId" element={<PortalOrderDetail />} />
               <Route path="quotes" element={<PortalQuotes />} />
               <Route path="quotes/:quoteId" element={<PortalQuoteDetail />} />
+              <Route path="invoices" element={<PortalInvoices />} />
               <Route path="documents" element={<PortalDocuments />} />
               <Route path="planning" element={<PortalPlanning />} />
             </Route>
