@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeDivisionId, setActiveDivisionId] = useState<string | null>(null);
 
   const initStartedRef = useRef(false);
+  const initCompleteRef = useRef(false);
   const initTimeoutRef = useRef<number | null>(null);
 
   const clearInitTimeout = () => {
@@ -124,20 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-          // Bij SIGN_IN altijd wachten op rollen
-          if (event === 'SIGNED_IN') {
-            try {
-              await withTimeout(fetchUserData(currentSession.user.id), 6000, "fetchUserData(SIGNED_IN)");
-            } catch (e) {
-              console.error("Auth state change fetchUserData timeout/error:", e);
-              setAuthInitError(
-                "Gebruikersgegevens ophalen duurt te lang. Probeer opnieuw of log uit."
-              );
-            }
-          } else {
-            // Voor andere events (TOKEN_REFRESH) fire and forget
-            fetchUserData(currentSession.user.id);
+          // Na initiële load: fire and forget, geen blocking errors
+          if (initCompleteRef.current) {
+            fetchUserData(currentSession.user.id).catch(err => {
+              console.warn("Background fetchUserData error:", err);
+            });
           }
+          // Tijdens initiële load: laat initializeAuth het afhandelen
         } else {
           resetAuthState();
         }
@@ -154,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const { data: { session: existingSession } } = await withTimeout(
           supabase.auth.getSession(),
-          6000,
+          10000,
           "supabase.auth.getSession"
         );
         
@@ -164,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(existingSession?.user ?? null);
 
         if (existingSession?.user) {
-          await withTimeout(fetchUserData(existingSession.user.id), 6000, "fetchUserData(init)");
+          await withTimeout(fetchUserData(existingSession.user.id), 10000, "fetchUserData(init)");
         }
       } catch (err) {
         console.error("Auth initialize error:", err);
@@ -177,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (isMounted) {
           clearInitTimeout();
+          initCompleteRef.current = true;
           setIsLoading(false);
         }
       }
