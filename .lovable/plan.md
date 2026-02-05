@@ -1,81 +1,307 @@
 
-# Plan: Prijzen Import Fix - Valutasymbolen Verwijderen
+# Plan: Product Import Verbetering - Varianten Herkenning & Mode Detectie
 
-## Probleem
+## Probleemanalyse
 
-De Siemens prijslijst bevat prijzen met Euro-symbolen en speciale formaten:
-- `€ 1,559.45` - normale prijs met € teken
-- `€ -` - geen prijs beschikbaar
-- US-format met komma's als duizendtallen separator
+### Stosa Prijslijst Structuur
 
-De huidige `parsePrice` functie verwijdert geen valutasymbolen, waardoor `parseFloat("€ 1,559.45")` `NaN` oplevert.
+Het Stosa-bestand heeft een unieke structuur:
+
+| Kolom | Betekenis | Voorbeeld |
+|-------|-----------|-----------|
+| `Codice gestionale` | Artikelcode (uniek per variant) | `X0GAA00002` |
+| `Codice listino cartaceo` | Basiscode product | `AA00002` |
+| `Descrizione` | Productnaam | `PAIR OF CONNECTING DOWELS` |
+| `Variabile 1` | Type variabele | `CAM` (kleur accessoires) |
+| `Variante 1` | Variantcode | `X0`, `X1`, `BC` |
+| `Descrizione 1° variabile - 1°Variante` | Variantnaam | `Bolgheri Natural Oak Tint` |
+| `Prezzo Listino` | Prijs per variant | `39.00 €` |
+
+Een product (`AA00002`) komt meerdere keren voor met verschillende varianten (X0, X1, X2), elk met een eigen prijs.
+
+### Huidige Fouten
+
+1. **Verkeerde kolom-detectie**: `Variante 1` wordt gemapped maar `Variabile 1` wordt genegeerd
+2. **Siemens false positive**: Standaard prijslijsten worden verkeerd als "prijsgroepen" gedetecteerd
+3. **Geen validatie**: Er wordt niet gecontroleerd of de data echt meerdere unieke ranges bevat
+
+---
 
 ## Oplossing
 
-De `parsePrice` functie in `src/hooks/useProductImport.ts` uitbreiden met:
+### 1. Verbeterde Auto-Detectie met Validatie
 
-1. **Valutasymbolen verwijderen** (`€`, `$`, `£`, `¥`)
-2. **Speciale waarden herkennen** (`-` betekent geen prijs)
-3. **Auto-detectie verbeteren** voor mixed formats
+De auto-detectie moet controleren of er daadwerkelijk meerdere unieke ranges per product zijn:
+
+```typescript
+// Na kolommen detectie, controleer of het echt een prijsgroep bestand is
+const detectedMapping = autoDetectMapping(columns);
+
+if (detectedMapping.range_code) {
+  // Tel unieke ranges in de eerste 200 rijen
+  const rangeValues = new Set<string>();
+  const productValues = new Set<string>();
+  
+  jsonData.slice(0, 200).forEach(row => {
+    const rangeVal = row[detectedMapping.range_code]?.toString().trim();
+    const productVal = detectedMapping.article_code 
+      ? row[detectedMapping.article_code]?.toString().trim() 
+      : null;
+    
+    if (rangeVal && rangeVal !== '-' && rangeVal !== '') {
+      rangeValues.add(rangeVal);
+    }
+    if (productVal) {
+      productValues.add(productVal);
+    }
+  });
+  
+  // Alleen prijsgroepen modus als:
+  // - Meer dan 2 unieke ranges
+  // - Minder ranges dan producten (anders is het 1:1 mapping)
+  // - Tenminste 3 ranges
+  const isPriceGroupFile = rangeValues.size >= 3 && 
+                           rangeValues.size < productValues.size * 0.5;
+  
+  if (isPriceGroupFile) {
+    setImportMode('price_groups');
+  } else {
+    // Reset range kolom - dit is geen prijsgroep bestand
+    detectedMapping.range_code = '';
+    setImportMode('standard');
+  }
+}
+```
+
+### 2. Strikter Kolom-Patroon Matching
+
+De huidige patronen zijn te breed. Update naar specifiekere patronen:
+
+```typescript
+// HUIDIGE CODE (te breed)
+const rangeCodePatterns = ['variante 1', 'variante', 'range_code', 'prijsgroep_code', 'variant'];
+
+// NIEUWE CODE (strikter)
+const rangeCodePatterns = [
+  'variante 1',      // Stosa: exacte kolom
+  'range_code',      // Generiek
+  'prijsgroep_code', // Nederlands
+  'variant code',    // Met spatie
+];
+
+// Aparte patroon voor range naam
+const rangeNamePatterns = [
+  'descrizione 1° variabile',  // Stosa: exacte kolom
+  'descrizione variante',
+  'range_name',
+  'prijsgroep_naam',
+  'variant naam',
+];
+```
+
+### 3. Gebruiker kan Handmatig Kolommen Selecteren
+
+De huidige UI laat al handmatige selectie toe, maar we moeten:
+1. Preview tonen van gedetecteerde ranges zodat gebruiker kan zien of detectie klopt
+2. Waarschuwing tonen als detectie mogelijk verkeerd is
+
+---
 
 ## Technische Wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/hooks/useProductImport.ts` | `parsePrice` functie verbeteren |
+| `src/pages/ProductImport.tsx` | Verbeterde auto-detectie met validatie, striktere patronen |
 
-## Nieuwe parsePrice Functie
+---
+
+## Gedetailleerde Code Wijzigingen
+
+### ProductImport.tsx - Auto-Detectie Validatie
+
+Na het parsen van het bestand, voeg validatie toe:
 
 ```typescript
-export function parsePrice(value: string | number | undefined | null): number | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value === 'number') return value;
+// In handleFileUpload, na autoDetectMapping:
+const detectedMapping = autoDetectMapping(columns);
+
+// Valideer of dit echt een prijsgroepen bestand is
+let shouldUsePriceGroups = false;
+
+if (detectedMapping.range_code) {
+  const rangeValues = new Set<string>();
+  const articleValues = new Set<string>();
   
-  let str = String(value).trim();
+  jsonData.slice(0, 200).forEach(row => {
+    const rangeVal = row[detectedMapping.range_code]?.toString().trim();
+    const articleVal = detectedMapping.article_code 
+      ? row[detectedMapping.article_code]?.toString().trim() 
+      : null;
+    
+    // Filter lege en speciale waarden
+    if (rangeVal && rangeVal !== '-' && rangeVal !== '' && rangeVal !== '€ -') {
+      rangeValues.add(rangeVal);
+    }
+    if (articleVal && articleVal !== '-' && articleVal !== '') {
+      articleValues.add(articleVal);
+    }
+  });
   
-  // Verwijder valutasymbolen (€, $, £, ¥) en spaties
-  str = str.replace(/[€$£¥\s]/g, '');
+  // Prijsgroepen modus alleen als:
+  // 1. Er tenminste 3 unieke ranges zijn
+  // 2. Het aantal ranges significant minder is dan het aantal artikelen
+  //    (anders is elke regel uniek = standaard import)
+  // 3. Er minder dan 500 ranges zijn (anders is het geen prijsgroep structuur)
+  const hasMultipleRanges = rangeValues.size >= 3;
+  const rangesAreReused = rangeValues.size < articleValues.size * 0.3;
+  const notTooManyRanges = rangeValues.size < 500;
   
-  // Check voor speciale waarden (bijv. "-" betekent geen prijs)
-  if (str === '-' || str === '' || str === '--') return undefined;
+  shouldUsePriceGroups = hasMultipleRanges && rangesAreReused && notTooManyRanges;
   
-  // Auto-detect format
-  const lastComma = str.lastIndexOf(',');
-  const lastDot = str.lastIndexOf('.');
-  
-  // Bepaal of komma of punt de decimaal separator is
-  const isCommaDecimal = lastComma > lastDot;
-  
-  if (isCommaDecimal) {
-    // Europees format: 1.275,00 → 1275.00
-    str = str.replace(/\./g, '');   // Verwijder duizendtallen
-    str = str.replace(',', '.');    // Komma → decimaal
-  } else {
-    // US format: 1,275.00 → 1275.00
-    str = str.replace(/,/g, '');    // Verwijder duizendtallen
+  if (!shouldUsePriceGroups) {
+    // Reset range kolom - dit is geen prijsgroep bestand
+    detectedMapping.range_code = '';
+    detectedMapping.range_name = '';
   }
-  
-  const parsed = parseFloat(str);
-  return isNaN(parsed) ? undefined : parsed;
 }
+
+setColumnMapping(detectedMapping);
+setImportMode(shouldUsePriceGroups ? 'price_groups' : 'standard');
 ```
 
-## Test Cases
+### ProductImport.tsx - Strikter Kolom Patronen
 
-| Input | Verwachte Output |
-|-------|------------------|
-| `€ 1,559.45` | `1559.45` |
-| `€ 1,275.00` | `1275.00` |
-| `€ -` | `undefined` |
-| `€ 2,719.00` | `2719.00` |
-| `1.275,00` | `1275.00` |
-| `1275` | `1275` |
-| `1275.50` | `1275.50` |
+```typescript
+const autoDetectMapping = (columns: string[]): PriceGroupMapping => {
+  const mapping: PriceGroupMapping = {
+    article_code: '',
+    name: '',
+    cost_price: '',
+    base_price: '',
+    range_code: '',
+    range_name: '',
+    dimension_1: '',
+    dimension_2: '',
+    dimension_3: '',
+  };
+
+  // Artikelcode patronen - specifiek naar generiek
+  const articlePatterns = [
+    'codice gestionale',    // Stosa
+    'codice listino',       // Stosa alternatief
+    'artikel',              // NL
+    'article_code',
+    'artikelcode',
+    'artikelnummer',
+    'article',
+    'codice',
+    'code',
+    'sku',
+    'product_code',
+  ];
+  
+  // Naam patronen
+  const namePatterns = [
+    'descrizione',          // IT (maar niet variabile)
+    'omschrijving',         // NL
+    'naam',
+    'name',
+    'description',
+    'product',
+    'title',
+    'productnaam',
+  ];
+  
+  // Inkoopprijs patronen
+  const costPatterns = [
+    'netto factuur',        // Siemens exact
+    'inkoop',
+    'cost',
+    'netto',
+    'inkoopprijs',
+    'cost_price',
+    'costo',
+  ];
+  
+  // Verkoopprijs patronen
+  const pricePatterns = [
+    'prezzo listino',       // Stosa exact
+    'adviesprijs',          // Siemens
+    'verkoop',
+    'advies',
+    'price',
+    'prijs',
+    'base_price',
+    'verkoopprijs',
+    'prezzo',
+    'listino',
+  ];
+  
+  // Prijsgroep code patronen - STRIKTER
+  const rangeCodePatterns = [
+    'variante 1',           // Stosa exact
+    'range_code',
+    'prijsgroep_code',
+  ];
+  
+  // Prijsgroep naam patronen
+  const rangeNamePatterns = [
+    'descrizione 1° variabile',  // Stosa exact
+    'descrizione variante',
+    'range_name',
+    'prijsgroep_naam',
+  ];
+
+  // ... rest van detectie logica
+  
+  columns.forEach(col => {
+    const colLower = col.toLowerCase();
+    
+    // Speciale check: "Descrizione" moet NIET matchen als het "variabile" bevat
+    if (!mapping.name && namePatterns.some(p => colLower.includes(p)) 
+        && !colLower.includes('variabile') && !colLower.includes('variante')) {
+      mapping.name = col;
+    }
+    
+    // ... andere mappings
+  });
+
+  return mapping;
+};
+```
+
+---
+
+## Preview Verbeteringen
+
+Na de wijzigingen toont de import pagina:
+
+**Stap 2 - Import instellingen:**
+- Import type selectie met duidelijke uitleg
+- Als prijsgroepen gedetecteerd: badge met aantal gevonden ranges
+- Waarschuwing als detectie onzeker is
+
+**Stap 3 - Kolommen mappen:**
+- Preview van gedetecteerde ranges (eerste 10)
+- Mogelijkheid om handmatig te corrigeren
+- Duidelijke foutmeldingen als verplichte kolommen missen
+
+---
+
+## Testscenario's
+
+| Bestand | Verwachte Modus | Reden |
+|---------|-----------------|-------|
+| Siemens prijslijst | `standard` | Geen herbruikbare ranges, elke regel uniek |
+| Stosa prijslijst | `price_groups` | ~50 ranges, 69000+ prijzen, ranges hergebruikt |
+| Eenvoudige CSV | `standard` | Geen range kolom gedetecteerd |
+
+---
 
 ## Resultaat
 
-Na deze wijziging zal de import:
-- Siemens prijslijsten correct herkennen
-- Euro-symbolen automatisch verwijderen
-- `€ -` waarden negeren (geen prijs)
-- Zowel US als Europees nummerformaat ondersteunen
+Na deze wijzigingen:
+1. **Siemens** wordt correct als standaard import verwerkt (geen timeout meer)
+2. **Stosa** wordt correct als prijsgroepen verwerkt met juiste kolom mapping
+3. Gebruiker kan handmatig kolommen selecteren als auto-detectie verkeerd is
+4. Duidelijke feedback over wat er gedetecteerd is
