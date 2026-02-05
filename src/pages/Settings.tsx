@@ -3,13 +3,14 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Link2, Pencil, User } from "lucide-react";
+import { Loader2, Building2, Users, Link2, Pencil, User, Percent } from "lucide-react";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
 import { MicrosoftSettings } from "@/components/settings/MicrosoftSettings";
 import { DivisionFormDialog } from "@/components/settings/DivisionFormDialog";
 import { UserFormDialog } from "@/components/settings/UserFormDialog";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
+import { SupplierDiscountsSettings } from "@/components/settings/SupplierDiscountsSettings";
 import { useAllDivisions, type Division } from "@/hooks/useDivisions";
 import { useProfiles, type ProfileWithRoles } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -90,6 +91,11 @@ const Settings = () => {
                   <Link2 className="h-4 w-4" />
                   <span className="hidden sm:inline">Koppelingen</span>
                   <span className="sm:hidden">Kopp.</span>
+                </TabsTrigger>
+                <TabsTrigger value="discounts" className="gap-2 text-xs sm:text-sm">
+                  <Percent className="h-4 w-4" />
+                  <span className="hidden sm:inline">Kortingen</span>
+                  <span className="sm:hidden">Kort.</span>
                 </TabsTrigger>
               </>
             )}
@@ -292,6 +298,13 @@ const Settings = () => {
             <TabsContent value="integrations" className="space-y-6">
               <TradeplaceSettings />
               <ExactOnlineSettings />
+            </TabsContent>
+          )}
+
+          {/* Discounts Tab - Admin only */}
+          {isAdmin && (
+            <TabsContent value="discounts" className="space-y-6">
+              <SupplierDiscountsSettings />
             </TabsContent>
           )}
         </Tabs>

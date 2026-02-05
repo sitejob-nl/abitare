@@ -58,7 +58,14 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
   // Fetch data
   const { data: suppliers = [] } = useSuppliers();
   const { data: allRanges = [] } = useProductRanges();
-  const { data: colors = [] } = useProductColors(formData.range_id || null);
+  const { data: allColors = [] } = useProductColors(formData.range_id || null);
+
+  // Filter colors by type
+  const frontColors = allColors.filter((c) => (c as any).color_type === "front" || !(c as any).color_type);
+  const corpusColors = allColors.filter((c) => (c as any).color_type === "corpus");
+  const hingeColors = allColors.filter((c) => (c as any).color_type === "hinge");
+  const drawerColors = allColors.filter((c) => (c as any).color_type === "drawer");
+  const plinthColors = allColors.filter((c) => (c as any).color_type === "plinth");
 
   // Filter ranges by selected supplier
   const filteredRanges = selectedSupplierId
@@ -120,12 +127,44 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
   };
 
   const handleColorChange = (colorId: string) => {
-    const selectedColor = colors.find((c) => c.id === colorId);
+    const selectedColor = frontColors.find((c) => c.id === colorId);
     setFormData((prev) => ({
       ...prev,
       color_id: colorId,
       // Auto-fill front_color from color name
       front_color: selectedColor?.name || prev.front_color,
+    }));
+  };
+
+  const handleCorpusColorChange = (colorId: string) => {
+    const selectedColor = corpusColors.find((c) => c.id === colorId);
+    setFormData((prev) => ({
+      ...prev,
+      corpus_color: selectedColor?.name || "",
+    }));
+  };
+
+  const handleHingeColorChange = (colorId: string) => {
+    const selectedColor = hingeColors.find((c) => c.id === colorId);
+    setFormData((prev) => ({
+      ...prev,
+      hinge_color: selectedColor?.name || "",
+    }));
+  };
+
+  const handleDrawerColorChange = (colorId: string) => {
+    const selectedColor = drawerColors.find((c) => c.id === colorId);
+    setFormData((prev) => ({
+      ...prev,
+      drawer_color: selectedColor?.name || "",
+    }));
+  };
+
+  const handlePlinthColorChange = (colorId: string) => {
+    const selectedColor = plinthColors.find((c) => c.id === colorId);
+    setFormData((prev) => ({
+      ...prev,
+      plinth_color: selectedColor?.name || "",
     }));
   };
 
@@ -246,7 +285,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Geen</SelectItem>
-                      {colors.map((color) => (
+                      {frontColors.map((color) => (
                         <SelectItem key={color.id} value={color.id}>
                           <div className="flex items-center gap-2">
                             {color.hex_color && (
@@ -282,43 +321,146 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                   </div>
                   <div className="space-y-2">
                     <Label>Kleur front</Label>
-                    <Input
-                      placeholder="Rovere Nodato"
-                      value={formData.front_color}
-                      onChange={(e) => handleChange("front_color", e.target.value)}
-                    />
+                    {frontColors.length > 0 ? (
+                      <Select
+                        value={frontColors.find((c) => c.name === formData.front_color)?.id || ""}
+                        onValueChange={(id) => {
+                          const color = frontColors.find((c) => c.id === id);
+                          handleChange("front_color", color?.name || "");
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kleur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Geen</SelectItem>
+                          {frontColors.map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              <div className="flex items-center gap-2">
+                                {color.hex_color && (
+                                  <div className="w-3 h-3 rounded border" style={{ backgroundColor: color.hex_color }} />
+                                )}
+                                {color.code} - {color.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Rovere Nodato"
+                        value={formData.front_color}
+                        onChange={(e) => handleChange("front_color", e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Plintkleur</Label>
-                    <Input
-                      placeholder="Bronze"
-                      value={formData.plinth_color}
-                      onChange={(e) => handleChange("plinth_color", e.target.value)}
-                    />
+                    {plinthColors.length > 0 ? (
+                      <Select
+                        value={plinthColors.find((c) => c.name === formData.plinth_color)?.id || ""}
+                        onValueChange={(id) => handlePlinthColorChange(id)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kleur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Geen</SelectItem>
+                          {plinthColors.map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Bronze"
+                        value={formData.plinth_color}
+                        onChange={(e) => handleChange("plinth_color", e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Corpuskleur</Label>
-                    <Input
-                      placeholder="Rose"
-                      value={formData.corpus_color}
-                      onChange={(e) => handleChange("corpus_color", e.target.value)}
-                    />
+                    {corpusColors.length > 0 ? (
+                      <Select
+                        value={corpusColors.find((c) => c.name === formData.corpus_color)?.id || ""}
+                        onValueChange={(id) => handleCorpusColorChange(id)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kleur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Geen</SelectItem>
+                          {corpusColors.map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Rose"
+                        value={formData.corpus_color}
+                        onChange={(e) => handleChange("corpus_color", e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Scharnier kleur</Label>
-                    <Input
-                      placeholder="Peltro"
-                      value={formData.hinge_color}
-                      onChange={(e) => handleChange("hinge_color", e.target.value)}
-                    />
+                    {hingeColors.length > 0 ? (
+                      <Select
+                        value={hingeColors.find((c) => c.name === formData.hinge_color)?.id || ""}
+                        onValueChange={(id) => handleHingeColorChange(id)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kleur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Geen</SelectItem>
+                          {hingeColors.map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Peltro"
+                        value={formData.hinge_color}
+                        onChange={(e) => handleChange("hinge_color", e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Lade kleur</Label>
-                    <Input
-                      placeholder="Titanium"
-                      value={formData.drawer_color}
-                      onChange={(e) => handleChange("drawer_color", e.target.value)}
-                    />
+                    {drawerColors.length > 0 ? (
+                      <Select
+                        value={drawerColors.find((c) => c.name === formData.drawer_color)?.id || ""}
+                        onValueChange={(id) => handleDrawerColorChange(id)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer kleur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Geen</SelectItem>
+                          {drawerColors.map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Titanium"
+                        value={formData.drawer_color}
+                        onChange={(e) => handleChange("drawer_color", e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Greepnummer</Label>

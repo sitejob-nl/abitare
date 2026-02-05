@@ -411,6 +411,39 @@ export type Database = {
           },
         ]
       }
+      installation_rates: {
+        Row: {
+          code: string
+          created_at: string | null
+          default_price: number | null
+          id: string
+          is_active: boolean | null
+          name: string
+          unit: string | null
+          vat_rate: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          default_price?: number | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          unit?: string | null
+          vat_rate?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          default_price?: number | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          unit?: string | null
+          vat_rate?: number | null
+        }
+        Relationships: []
+      }
       microsoft_connections: {
         Row: {
           access_token: string
@@ -1051,6 +1084,7 @@ export type Database = {
       product_colors: {
         Row: {
           code: string
+          color_type: string | null
           hex_color: string | null
           id: string
           is_active: boolean | null
@@ -1059,6 +1093,7 @@ export type Database = {
         }
         Insert: {
           code: string
+          color_type?: string | null
           hex_color?: string | null
           id?: string
           is_active?: boolean | null
@@ -1067,6 +1102,7 @@ export type Database = {
         }
         Update: {
           code?: string
+          color_type?: string | null
           hex_color?: string | null
           id?: string
           is_active?: boolean | null
@@ -1138,8 +1174,10 @@ export type Database = {
         Row: {
           code: string
           description: string | null
+          door_type: string | null
           id: string
           is_active: boolean | null
+          is_handleless: boolean | null
           name: string | null
           price_group: number | null
           supplier_id: string | null
@@ -1148,8 +1186,10 @@ export type Database = {
         Insert: {
           code: string
           description?: string | null
+          door_type?: string | null
           id?: string
           is_active?: boolean | null
+          is_handleless?: boolean | null
           name?: string | null
           price_group?: number | null
           supplier_id?: string | null
@@ -1158,8 +1198,10 @@ export type Database = {
         Update: {
           code?: string
           description?: string | null
+          door_type?: string | null
           id?: string
           is_active?: boolean | null
+          is_handleless?: boolean | null
           name?: string | null
           price_group?: number | null
           supplier_id?: string | null
@@ -2222,6 +2264,41 @@ export type Database = {
         }
         Relationships: []
       }
+      supplier_discounts: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          discount_group: string
+          discount_percent: number | null
+          id: string
+          supplier_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          discount_group: string
+          discount_percent?: number | null
+          id?: string
+          supplier_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          discount_group?: string
+          discount_percent?: number | null
+          id?: string
+          supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_discounts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_order_lines: {
         Row: {
           availability_checked_at: string | null
@@ -2632,6 +2709,50 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      worktop_operations: {
+        Row: {
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          price: number | null
+          price_type: string | null
+          supplier_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price?: number | null
+          price_type?: string | null
+          supplier_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price?: number | null
+          price_type?: string | null
+          supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worktop_operations_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
