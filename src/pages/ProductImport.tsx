@@ -31,6 +31,7 @@ interface ColumnMapping {
 interface PriceGroupMapping extends ColumnMapping {
   range_code: string;
   range_name: string;
+  range_type: string;  // Type variabele (bijv. "CAM" voor kleur accessoires)
   dimension_1: string;
   dimension_2: string;
   dimension_3: string;
@@ -56,6 +57,7 @@ export default function ProductImport() {
     base_price: '',
     range_code: '',
     range_name: '',
+    range_type: '',
     dimension_1: '',
     dimension_2: '',
     dimension_3: '',
@@ -107,6 +109,7 @@ export default function ProductImport() {
       base_price: '',
       range_code: '',
       range_name: '',
+      range_type: '',
       dimension_1: '',
       dimension_2: '',
       dimension_3: '',
@@ -179,6 +182,14 @@ export default function ProductImport() {
       'prijsgroep_naam',
     ];
     
+    // Type variabele patronen (bijv. "CAM" voor kleur accessoires)
+    const rangeTypePatterns = [
+      'variabile 1',        // Stosa exact
+      'variable type',
+      'variant type',
+      'type variabele',
+    ];
+    
     const dim1Patterns = ['dimensione 1', 'breedte', 'width', 'larghezza', 'dim1'];
     const dim2Patterns = ['dimensione 2', 'hoogte', 'height', 'altezza', 'dim2'];
     const dim3Patterns = ['dimensione 3', 'diepte', 'depth', 'profondità', 'dim3'];
@@ -218,6 +229,11 @@ export default function ProductImport() {
         mapping.range_name = col;
       }
       
+      // Type variabele (bijv. "CAM")
+      if (!mapping.range_type && rangeTypePatterns.some(p => colLower.includes(p))) {
+        mapping.range_type = col;
+      }
+      
       // Dimensies
       if (!mapping.dimension_1 && dim1Patterns.some(p => colLower.includes(p))) {
         mapping.dimension_1 = col;
@@ -247,23 +263,24 @@ export default function ProductImport() {
   const extractedPriceGroups = useMemo(() => {
     if (importMode !== 'price_groups' || !columnMapping.range_code) return [];
     
-    const rangeMap = new Map<string, { code: string; name: string; count: number }>();
+    const rangeMap = new Map<string, { code: string; name: string; type: string; count: number }>();
     
     fileData.forEach(row => {
       const code = row[columnMapping.range_code]?.toString().trim();
       const name = columnMapping.range_name ? row[columnMapping.range_name]?.toString().trim() : code;
+      const type = columnMapping.range_type ? row[columnMapping.range_type]?.toString().trim() : '';
       
       if (code) {
         if (rangeMap.has(code)) {
           rangeMap.get(code)!.count++;
         } else {
-          rangeMap.set(code, { code, name: name || code, count: 1 });
+          rangeMap.set(code, { code, name: name || code, type: type || '', count: 1 });
         }
       }
     });
     
     return Array.from(rangeMap.values()).sort((a, b) => b.count - a.count);
-  }, [fileData, columnMapping.range_code, columnMapping.range_name, importMode]);
+  }, [fileData, columnMapping.range_code, columnMapping.range_name, columnMapping.range_type, importMode]);
 
   // Extract unique products for price_groups mode
   const extractedProducts = useMemo(() => {
@@ -503,6 +520,7 @@ export default function ProductImport() {
       base_price: '',
       range_code: '',
       range_name: '',
+      range_type: '',
       dimension_1: '',
       dimension_2: '',
       dimension_3: '',
@@ -768,10 +786,11 @@ export default function ProductImport() {
                   {/* Price group fields */}
                   <div>
                     <h4 className="font-medium mb-3">Prijsgroep velden</h4>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
                       {[
                         { key: 'range_code', label: 'Prijsgroep code *' },
                         { key: 'range_name', label: 'Prijsgroep naam' },
+                        { key: 'range_type', label: 'Type variabele' },
                       ].map(({ key, label }) => (
                         <div key={key} className="space-y-2">
                           <Label>{label}</Label>
@@ -897,6 +916,7 @@ export default function ProductImport() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              {columnMapping.range_type && <TableHead>Type</TableHead>}
                               <TableHead>Code</TableHead>
                               <TableHead>Naam</TableHead>
                               <TableHead className="text-right">Aantal prijzen</TableHead>
@@ -905,6 +925,15 @@ export default function ProductImport() {
                           <TableBody>
                             {extractedPriceGroups.slice(0, 10).map((group, idx) => (
                               <TableRow key={idx}>
+                                {columnMapping.range_type && (
+                                  <TableCell>
+                                    {group.type && (
+                                      <Badge variant="secondary" className="font-mono">
+                                        {group.type}
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                )}
                                 <TableCell className="font-mono">{group.code}</TableCell>
                                 <TableCell>{group.name}</TableCell>
                                 <TableCell className="text-right">{group.count.toLocaleString()}</TableCell>
@@ -912,7 +941,7 @@ export default function ProductImport() {
                             ))}
                             {extractedPriceGroups.length > 10 && (
                               <TableRow>
-                                <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                <TableCell colSpan={columnMapping.range_type ? 4 : 3} className="text-center text-muted-foreground">
                                   ... en {extractedPriceGroups.length - 10} meer prijsgroepen
                                 </TableCell>
                               </TableRow>
