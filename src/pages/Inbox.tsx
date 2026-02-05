@@ -117,10 +117,12 @@ function EmailDetail({
   emailId,
   onBack,
   onReply,
+  showBackButton = true,
 }: {
   emailId: string;
   onBack: () => void;
   onReply: (email: MicrosoftEmail) => void;
+  showBackButton?: boolean;
 }) {
   const { data: email, isLoading } = useMicrosoftEmail(emailId);
 
@@ -146,11 +148,17 @@ function EmailDetail({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 p-3 sm:p-4 border-b border-border">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1" />
+      <div className="flex items-center gap-2 p-3 sm:p-4 border-b border-border bg-muted/30">
+        {showBackButton && (
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        )}
+        <div className="flex-1 min-w-0">
+          <h2 className="font-semibold truncate">
+            {email.subject || "(Geen onderwerp)"}
+          </h2>
+        </div>
         <Button variant="outline" size="sm" onClick={() => onReply(email)}>
           <Reply className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Beantwoorden</span>
@@ -160,26 +168,21 @@ function EmailDetail({
             variant="outline"
             size="sm"
             onClick={() => window.open(email.webLink, "_blank")}
-            className="hidden sm:flex"
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Outlook
+            <ExternalLink className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Outlook</span>
           </Button>
         )}
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">
-            {email.subject || "(Geen onderwerp)"}
-          </h2>
-
-        <div className="flex items-start gap-2 sm:gap-3 mb-4 sm:mb-6">
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-muted text-foreground font-semibold text-sm sm:text-base">
+          <div className="flex items-start gap-3 mb-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold shrink-0">
               {senderName.charAt(0).toUpperCase()}
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{senderName}</span>
                 {email.importance === "high" && (
                   <Badge variant="destructive" className="text-xs">
@@ -187,7 +190,7 @@ function EmailDetail({
                   </Badge>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{senderEmail}</p>
+              <p className="text-sm text-muted-foreground truncate">{senderEmail}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {format(receivedDate, "EEEE d MMMM yyyy 'om' HH:mm", {
                   locale: nl,
@@ -466,54 +469,53 @@ const Inbox = () => {
         {renderMobileEmailDetail()}
       </div>
 
-      {/* Desktop Layout */}
-      <Card className="overflow-hidden hidden md:block">
-        <div className="flex h-[calc(100vh-220px)] min-h-[500px]">
-          {/* Email List */}
-          <div className="w-full max-w-md border-r border-border flex flex-col">
-            <div className="p-3 border-b border-border bg-muted/30">
-              <Input placeholder="Zoeken in emails..." className="h-9" />
-            </div>
-            <ScrollArea className="flex-1">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : emails && emails.length > 0 ? (
-                emails.map((email) => (
-                  <EmailListItem
-                    key={email.id}
-                    email={email}
-                    isSelected={selectedEmailId === email.id}
-                    onClick={() => handleSelectEmail(email.id)}
-                  />
-                ))
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <Mail className="h-8 w-8 mb-2" />
-                  <p className="text-sm">Geen emails gevonden</p>
-                </div>
-              )}
-            </ScrollArea>
+      {/* Desktop Layout - Email Client Style */}
+      <div className="hidden md:grid md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-180px)] min-h-[500px]">
+        {/* Email List Panel */}
+        <Card className="overflow-hidden flex flex-col">
+          <div className="p-3 border-b border-border bg-muted/30">
+            <Input placeholder="Zoeken in emails..." className="h-9" />
           </div>
-
-          {/* Email Detail - Desktop */}
-          <div className="flex-1 bg-background">
-            {selectedEmailId ? (
-              <EmailDetail
-                emailId={selectedEmailId}
-                onBack={handleBackToList}
-                onReply={handleReply}
-              />
+          <ScrollArea className="flex-1">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : emails && emails.length > 0 ? (
+              emails.map((email) => (
+                <EmailListItem
+                  key={email.id}
+                  email={email}
+                  isSelected={selectedEmailId === email.id}
+                  onClick={() => handleSelectEmail(email.id)}
+                />
+              ))
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <MailOpen className="h-12 w-12 mb-4" />
-                <p className="text-sm">Selecteer een email om te lezen</p>
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Mail className="h-8 w-8 mb-2" />
+                <p className="text-sm">Geen emails gevonden</p>
               </div>
             )}
-          </div>
-        </div>
-      </Card>
+          </ScrollArea>
+        </Card>
+
+        {/* Email Detail Panel */}
+        <Card className="overflow-hidden">
+          {selectedEmailId ? (
+            <EmailDetail
+              emailId={selectedEmailId}
+              onBack={handleBackToList}
+              onReply={handleReply}
+              showBackButton={false}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <MailOpen className="h-12 w-12 mb-4" />
+              <p className="text-sm">Selecteer een email om te lezen</p>
+            </div>
+          )}
+        </Card>
+      </div>
 
       <ComposeDialog
         open={composeOpen}
