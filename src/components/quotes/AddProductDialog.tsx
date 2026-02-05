@@ -80,7 +80,6 @@ export function AddProductDialog({
 
   const { data: products, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
-    limit: 20,
     enabled: open,
   });
 
