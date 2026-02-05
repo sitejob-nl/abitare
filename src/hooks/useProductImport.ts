@@ -25,6 +25,8 @@ interface PriceGroupProduct {
   width_mm?: number;
   height_mm?: number;
   depth_mm?: number;
+  discount_group?: string;
+  catalog_code?: string;
 }
 
 interface PriceGroupRange {
@@ -37,6 +39,8 @@ interface PriceGroupPrice {
   article_code: string;
   range_code: string;
   price: number;
+  variant_2_code?: string;
+  variant_2_name?: string;
 }
 
 interface PriceGroupImportResult {
