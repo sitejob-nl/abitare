@@ -22,6 +22,10 @@ export interface QuoteData {
     email?: string | null;
     phone?: string | null;
     mobile?: string | null;
+    delivery_street_address?: string | null;
+    delivery_postal_code?: string | null;
+    delivery_city?: string | null;
+    delivery_floor?: string | null;
   } | null;
   division?: {
     name?: string | null;
@@ -31,6 +35,9 @@ export interface QuoteData {
     phone?: string | null;
     email?: string | null;
   } | null;
+  // Extra optional fields
+  advisor_name?: string | null;
+  show_prices?: boolean;
 }
 
 export interface SectionWithLines extends QuoteSection {
@@ -47,17 +54,14 @@ export const SECTION_TYPE_LABELS: Record<string, string> = {
   overig: "Overig",
 };
 
-// Colors matching the template
+// Colors matching the exact Abitare template
 export const COLORS = {
-  text: [51, 51, 51] as [number, number, number],
-  subText: [102, 102, 102] as [number, number, number],
-  sectionBg: [240, 240, 240] as [number, number, number],
-  sectionBorder: [51, 51, 51] as [number, number, number],
-  tableHeaderBg: [245, 245, 245] as [number, number, number],
-  tableBorder: [221, 221, 221] as [number, number, number],
+  text: [0, 0, 0] as [number, number, number],
+  subText: [80, 80, 80] as [number, number, number],
+  lightGray: [128, 128, 128] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
-  notesBg: [255, 253, 231] as [number, number, number],
-  notesBorder: [255, 213, 79] as [number, number, number],
+  flagGreen: [0, 140, 69] as [number, number, number],
+  flagRed: [205, 33, 42] as [number, number, number],
 };
 
 // ===== FORMATTERS =====
@@ -99,18 +103,80 @@ export function getCustomerSalutation(customer: QuoteData["customer"]): string {
 }
 
 // ===== DRAWING HELPERS =====
-export function drawHeader(
+
+/**
+ * Draw the Abitare logo text (since we can't embed SVG easily, we use styled text)
+ */
+export function drawLogo(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  align: "left" | "right" = "right"
+): number {
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...COLORS.text);
+  doc.text("ABITARE", x, y, { align });
+  
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.text("keuken en interieurarchitectuur", x, y + 4, { align });
+  doc.text("-meubelen-verlichting-vloeren-sanitair-", x, y + 7, { align });
+  
+  return y + 10;
+}
+
+/**
+ * Draw header for page 1 - full customer info and company details
+ */
+export function drawFirstPageHeader(
   doc: jsPDF,
   quote: QuoteData,
   pageWidth: number,
   margin: number
 ): number {
   let yPos = margin;
+  const rightX = pageWidth - margin;
 
-  // Customer address (left side)
+  // === RIGHT SIDE: Logo + Company Info ===
+  drawLogo(doc, rightX, yPos, "right");
+  let companyY = yPos + 12;
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
   doc.setTextColor(...COLORS.text);
+
+  // Company address
+  doc.text("Jacob Romenweg 5", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("6042 EZ Roermond", rightX, companyY, { align: "right" });
+  companyY += 5;
+
+  // Contact info
+  doc.text("Tel Roermond: 0475 - 46 11 26", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("Tel Geleen: 046 - 474 24 33", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("Email: info@italiaanse-design-keukens.nl", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("www.italiaanse-design-keukens.nl", rightX, companyY, { align: "right" });
+  companyY += 5;
+
+  // Bank details
+  doc.text("BTW: NL860907104B01", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("Bank: ING BANK N.V.", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("IBAN: NL09INGB0005024907", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("BIC: INGBNL2A", rightX, companyY, { align: "right" });
+  companyY += 3.5;
+  doc.text("KvK: 77721799", rightX, companyY, { align: "right" });
+
+  // === LEFT SIDE: Customer address ===
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
+  doc.setTextColor(...COLORS.text);
 
   const customerName = getCustomerSalutation(quote.customer) || getCustomerName(quote.customer);
   doc.text(customerName, margin, yPos);
@@ -130,60 +196,37 @@ export function drawHeader(
     yPos += 5;
   }
 
-  // Company info (right side)
-  const companyX = pageWidth - margin;
-  let companyY = margin;
-
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.text("ABITARE", companyX, companyY, { align: "right" });
-  companyY += 5;
-
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.text("keuken en interieurarchitectuur", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("-meubelen-verlichting-vloeren-sanitair-", companyX, companyY, { align: "right" });
-  companyY += 5;
-
-  // Company address
-  const divisionAddress = quote.division?.address || "Stadsweide 35b";
-  const divisionPostalCity = [
-    quote.division?.postal_code || "6041 TD",
-    quote.division?.city || "Roermond"
-  ].filter(Boolean).join(" ");
-
-  doc.text(divisionAddress, companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text(divisionPostalCity, companyX, companyY, { align: "right" });
-  companyY += 5;
-
-  // Contact info
-  doc.text("Tel Roermond: 0475 - 46 11 26", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("Tel Geleen: 046 - 474 24 33", companyX, companyY, { align: "right" });
-  companyY += 4;
-
-  const email = quote.division?.email || "info@abitare.nl";
-  doc.text(`Email: ${email}`, companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("www.abitare.nl", companyX, companyY, { align: "right" });
-  companyY += 5;
-
-  // Bank details
-  doc.text("BTW: NL807851917B01", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("Bank: ING Bank", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("IBAN: NL59INGB0006623053", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("BIC: INGBNL2A", companyX, companyY, { align: "right" });
-  companyY += 4;
-  doc.text("KvK: 13029988", companyX, companyY, { align: "right" });
-
-  return Math.max(yPos, companyY) + 10;
+  return Math.max(yPos, companyY) + 8;
 }
 
+/**
+ * Draw header for subsequent pages - reference and date left, logo right
+ */
+export function drawSubsequentPageHeader(
+  doc: jsPDF,
+  quote: QuoteData,
+  pageWidth: number,
+  margin: number
+): number {
+  const yPos = margin;
+  const rightX = pageWidth - margin;
+
+  // Left side: Reference and date
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...COLORS.text);
+  doc.text(`Referentie ${quote.quote_number}`, margin, yPos);
+  doc.text(formatDate(quote.quote_date), margin, yPos + 5);
+
+  // Right side: Logo
+  drawLogo(doc, rightX, yPos, "right");
+
+  return yPos + 15;
+}
+
+/**
+ * Draw document title with underline
+ */
 export function drawDocumentTitle(
   doc: jsPDF,
   title: string,
@@ -191,145 +234,126 @@ export function drawDocumentTitle(
   margin: number,
   yPos: number
 ): number {
-  doc.setFontSize(16);
+  doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...COLORS.text);
   doc.text(title, margin, yPos);
 
   // Thick black line under title
-  yPos += 3;
-  doc.setDrawColor(...COLORS.sectionBorder);
+  yPos += 2;
+  doc.setDrawColor(...COLORS.text);
   doc.setLineWidth(0.5);
   doc.line(margin, yPos, pageWidth - margin, yPos);
-
-  return yPos + 10;
-}
-
-export function drawQuoteDetails(
-  doc: jsPDF,
-  quote: QuoteData,
-  margin: number,
-  yPos: number
-): number {
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...COLORS.text);
-
-  const labelX = margin;
-  const valueX = margin + 45;
-  const col2LabelX = margin + 100;
-  const col2ValueX = margin + 145;
-  const lineHeight = 5;
-
-  // Column 1
-  doc.text("Offertenummer:", labelX, yPos);
-  doc.text(quote.quote_number.toString(), valueX, yPos);
-
-  doc.text("Telefoon klant:", col2LabelX, yPos);
-  doc.text(quote.customer?.phone || quote.customer?.mobile || "-", col2ValueX, yPos);
-  yPos += lineHeight;
-
-  doc.text("Datum offerte:", labelX, yPos);
-  doc.text(formatDate(quote.quote_date), valueX, yPos);
-
-  doc.text("Email-adres:", col2LabelX, yPos);
-  const email = quote.customer?.email || "-";
-  doc.text(email.length > 30 ? email.substring(0, 27) + "..." : email, col2ValueX, yPos);
-  yPos += lineHeight;
-
-  doc.text("Datum afdruk:", labelX, yPos);
-  doc.text(formatDate(new Date().toISOString()), valueX, yPos);
-  yPos += lineHeight;
-
-  doc.text("Geldig tot:", labelX, yPos);
-  doc.text(formatDate(quote.valid_until), valueX, yPos);
-  yPos += lineHeight;
-
-  return yPos + 10;
-}
-
-export function drawSectionHeader(
-  doc: jsPDF,
-  title: string,
-  pageWidth: number,
-  margin: number,
-  yPos: number
-): number {
-  // Gray background
-  const sectionWidth = pageWidth - margin * 2;
-  doc.setFillColor(...COLORS.sectionBg);
-  doc.rect(margin, yPos - 5, sectionWidth, 8, "F");
-
-  // Black left border
-  doc.setFillColor(...COLORS.sectionBorder);
-  doc.rect(margin, yPos - 5, 2, 8, "F");
-
-  // Section title
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...COLORS.text);
-  doc.text(title, margin + 6, yPos);
 
   return yPos + 8;
 }
 
-export function drawSpecsTable(
+/**
+ * Draw quote details grid with delivery address
+ */
+export function drawQuoteDetails(
   doc: jsPDF,
-  section: SectionWithLines,
+  quote: QuoteData,
   margin: number,
+  pageWidth: number,
   yPos: number
 ): number {
-  const specs: { label: string; value: string }[][] = [];
-
-  // Build spec pairs (left and right columns)
-  const leftSpecs: { label: string; value: string }[] = [];
-  const rightSpecs: { label: string; value: string }[] = [];
-
-  if (section.front_number) leftSpecs.push({ label: "Frontnummer:", value: section.front_number });
-  if (section.front_color) leftSpecs.push({ label: "Kleur front:", value: section.front_color });
-  if (section.corpus_color) leftSpecs.push({ label: "Corpuskleur:", value: section.corpus_color });
-  if (section.handle_number) leftSpecs.push({ label: "Greepnummer:", value: section.handle_number });
-  if (section.workbench_material) leftSpecs.push({ label: "Uitvoering:", value: section.workbench_material });
-  if (section.workbench_edge) leftSpecs.push({ label: "Randafwerking:", value: section.workbench_edge });
-
-  if (section.plinth_color) rightSpecs.push({ label: "Plintkleur:", value: section.plinth_color });
-  if (section.column_height_mm) rightSpecs.push({ label: "Kolomkast hoogte:", value: `${section.column_height_mm} mm` });
-  if (section.hinge_color) rightSpecs.push({ label: "Scharnier kleur:", value: section.hinge_color });
-  if (section.drawer_color) rightSpecs.push({ label: "Lade kleur:", value: section.drawer_color });
-  if (section.countertop_height_mm) rightSpecs.push({ label: "Aanrecht hoogte:", value: `${section.countertop_height_mm} mm` });
-  if (section.countertop_thickness_mm) rightSpecs.push({ label: "Blad dikte:", value: `${section.countertop_thickness_mm} mm` });
-  if (section.workbench_color) rightSpecs.push({ label: "Kleur:", value: section.workbench_color });
-
-  const maxRows = Math.max(leftSpecs.length, rightSpecs.length);
-  if (maxRows === 0) return yPos;
-
   doc.setFontSize(9);
-  const labelX1 = margin;
-  const valueX1 = margin + 35;
-  const labelX2 = margin + 90;
-  const valueX2 = margin + 125;
+  doc.setTextColor(...COLORS.text);
 
-  for (let i = 0; i < maxRows; i++) {
-    if (leftSpecs[i]) {
-      doc.setFont("helvetica", "bold");
-      doc.text(leftSpecs[i].label, labelX1, yPos);
-      doc.setFont("helvetica", "normal");
-      doc.text(leftSpecs[i].value, valueX1, yPos);
-    }
-    if (rightSpecs[i]) {
-      doc.setFont("helvetica", "bold");
-      doc.text(rightSpecs[i].label, labelX2, yPos);
-      doc.setFont("helvetica", "normal");
-      doc.text(rightSpecs[i].value, valueX2, yPos);
-    }
-    yPos += 5;
+  const col1LabelX = margin;
+  const col1ValueX = margin + 35;
+  const col2LabelX = pageWidth / 2 + 5;
+  const col2ValueX = pageWidth / 2 + 40;
+  const lineHeight = 4.5;
+
+  // Row 1: Offertenummer + Afleveradres label
+  doc.setFont("helvetica", "bold");
+  doc.text("Offertenummer:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(quote.quote_number.toString(), col1ValueX, yPos);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Afleveradres:", col2LabelX, yPos);
+  yPos += lineHeight;
+
+  // Row 2: Datum offerte + Delivery salutation
+  doc.setFont("helvetica", "bold");
+  doc.text("Datum offerte:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(formatDate(quote.quote_date), col1ValueX, yPos);
+
+  const deliverySalutation = getCustomerSalutation(quote.customer) || getCustomerName(quote.customer);
+  doc.text(deliverySalutation, col2ValueX, yPos);
+  yPos += lineHeight;
+
+  // Row 3: Datum afdruk + Delivery street
+  doc.setFont("helvetica", "bold");
+  doc.text("Datum afdruk:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(formatDate(new Date().toISOString()), col1ValueX, yPos);
+
+  const deliveryStreet = quote.customer?.delivery_street_address || quote.customer?.street_address || "";
+  if (deliveryStreet) {
+    doc.text(deliveryStreet, col2ValueX, yPos);
   }
+  yPos += lineHeight;
 
-  return yPos + 3;
+  // Row 4: Adviseur + Delivery postal/city
+  doc.setFont("helvetica", "bold");
+  doc.text("Adviseur:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(quote.advisor_name || "-", col1ValueX, yPos);
+
+  const deliveryPostal = quote.customer?.delivery_postal_code || quote.customer?.postal_code || "";
+  const deliveryCity = quote.customer?.delivery_city || quote.customer?.city || "";
+  if (deliveryPostal || deliveryCity) {
+    doc.text([deliveryPostal, deliveryCity].filter(Boolean).join(" "), col2ValueX, yPos);
+  }
+  yPos += lineHeight;
+
+  // Row 5: Telefoon klant + Tel
+  doc.setFont("helvetica", "bold");
+  doc.text("Telefoon klant:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(quote.customer?.phone || quote.customer?.mobile || "-", col1ValueX, yPos);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Tel.:", col2LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(quote.customer?.phone || quote.customer?.mobile || "-", col2ValueX, yPos);
+  yPos += lineHeight;
+
+  // Row 6: Email + Floor
+  doc.setFont("helvetica", "bold");
+  doc.text("Email-adres:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  const email = quote.customer?.email || "-";
+  doc.text(email.length > 30 ? email.substring(0, 27) + "..." : email, col1ValueX, yPos);
+
+  if (quote.customer?.delivery_floor) {
+    doc.setFont("helvetica", "bold");
+    doc.text("Verdieping:", col2LabelX, yPos);
+    doc.setFont("helvetica", "normal");
+    doc.text(quote.customer.delivery_floor, col2ValueX, yPos);
+  }
+  yPos += lineHeight;
+
+  // Row 7: Geldig tot
+  doc.setFont("helvetica", "bold");
+  doc.text("Geldig tot:", col1LabelX, yPos);
+  doc.setFont("helvetica", "normal");
+  doc.text(formatDate(quote.valid_until), col1ValueX, yPos);
+
+  return yPos + 10;
 }
 
+/**
+ * Draw intro text for quote
+ */
 export function drawIntroText(
   doc: jsPDF,
+  quote: QuoteData,
   margin: number,
   pageWidth: number,
   yPos: number
@@ -338,7 +362,9 @@ export function drawIntroText(
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...COLORS.text);
 
-  doc.text("Geachte heer/mevrouw,", margin, yPos);
+  const customerName = getCustomerName(quote.customer);
+  const salutation = quote.customer?.salutation ? `Geachte ${quote.customer.salutation.toLowerCase()} ${customerName},` : `Geachte heer/mevrouw ${customerName},`;
+  doc.text(salutation, margin, yPos);
   yPos += 6;
 
   const introText = "Hierbij ontvangt u onze offerte voor de levering van goederen volgens onderstaande specificatie.";
@@ -351,6 +377,91 @@ export function drawIntroText(
   return yPos + 10;
 }
 
+/**
+ * Draw section header - centered bold text with underline
+ */
+export function drawSectionHeader(
+  doc: jsPDF,
+  title: string,
+  pageWidth: number,
+  margin: number,
+  yPos: number
+): number {
+  // Centered bold title
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...COLORS.text);
+  doc.text(title, pageWidth / 2, yPos, { align: "center" });
+
+  // Underline
+  yPos += 2;
+  doc.setDrawColor(...COLORS.text);
+  doc.setLineWidth(0.3);
+  doc.line(margin, yPos, pageWidth - margin, yPos);
+
+  return yPos + 6;
+}
+
+/**
+ * Draw specs as 2-column text (not table) - matching exact Abitare format
+ */
+export function drawSpecsTable(
+  doc: jsPDF,
+  section: SectionWithLines,
+  margin: number,
+  pageWidth: number,
+  yPos: number
+): number {
+  // Build spec pairs
+  const leftSpecs: { label: string; value: string }[] = [];
+  const rightSpecs: { label: string; value: string }[] = [];
+
+  if (section.front_number) leftSpecs.push({ label: "Frontnummer:", value: section.front_number });
+  if (section.front_color) leftSpecs.push({ label: "Kleur front:", value: section.front_color });
+  if (section.corpus_color) leftSpecs.push({ label: "Corpuskleur:", value: section.corpus_color });
+  if (section.handle_number) leftSpecs.push({ label: "Greepnummer:", value: section.handle_number });
+  if (section.workbench_material) leftSpecs.push({ label: "Uitvoering:", value: section.workbench_material });
+  if (section.workbench_edge) leftSpecs.push({ label: "Randafwerking:", value: section.workbench_edge });
+
+  if (section.plinth_color) rightSpecs.push({ label: "Plintkleur:", value: section.plinth_color });
+  if (section.column_height_mm) rightSpecs.push({ label: "Kolomkast hoogte:", value: `${section.column_height_mm}` });
+  if (section.hinge_color) rightSpecs.push({ label: "Scharnier kleur:", value: section.hinge_color });
+  if (section.drawer_color) rightSpecs.push({ label: "Lade kleur:", value: section.drawer_color });
+  if (section.countertop_height_mm) rightSpecs.push({ label: "Aanrecht hoogte:", value: `${section.countertop_height_mm}` });
+  if (section.countertop_thickness_mm) rightSpecs.push({ label: "Blad dikte:", value: `${section.countertop_thickness_mm}` });
+  if (section.workbench_color) rightSpecs.push({ label: "Kleur:", value: section.workbench_color });
+
+  const maxRows = Math.max(leftSpecs.length, rightSpecs.length);
+  if (maxRows === 0) return yPos;
+
+  doc.setFontSize(9);
+  const col1LabelX = margin;
+  const col1ValueX = margin + 30;
+  const col2LabelX = pageWidth / 2 + 5;
+  const col2ValueX = pageWidth / 2 + 38;
+
+  for (let i = 0; i < maxRows; i++) {
+    if (leftSpecs[i]) {
+      doc.setFont("helvetica", "bold");
+      doc.text(leftSpecs[i].label, col1LabelX, yPos);
+      doc.setFont("helvetica", "normal");
+      doc.text(leftSpecs[i].value, col1ValueX, yPos);
+    }
+    if (rightSpecs[i]) {
+      doc.setFont("helvetica", "bold");
+      doc.text(rightSpecs[i].label, col2LabelX, yPos);
+      doc.setFont("helvetica", "normal");
+      doc.text(rightSpecs[i].value, col2ValueX, yPos);
+    }
+    yPos += 4.5;
+  }
+
+  return yPos + 3;
+}
+
+/**
+ * Calculate totals from sections
+ */
 export function calculateTotals(
   sections: SectionWithLines[],
   quoteDiscount: number
@@ -371,7 +482,6 @@ export function calculateTotals(
       0
     ) || 0;
 
-    // Apply section discount
     const sectionDiscount = section.discount_amount || 0;
     const sectionNet = sectionTotal - sectionDiscount;
 
@@ -397,6 +507,9 @@ export function calculateTotals(
   };
 }
 
+/**
+ * Draw totals section
+ */
 export function drawTotalsSection(
   doc: jsPDF,
   totals: ReturnType<typeof calculateTotals>,
@@ -404,13 +517,13 @@ export function drawTotalsSection(
   margin: number,
   yPos: number
 ): number {
-  // Draw top border
-  doc.setDrawColor(...COLORS.sectionBorder);
-  doc.setLineWidth(0.5);
+  // Top separator line
+  doc.setDrawColor(...COLORS.text);
+  doc.setLineWidth(0.3);
   doc.line(margin, yPos, pageWidth - margin, yPos);
   yPos += 8;
 
-  const labelX = pageWidth - margin - 80;
+  const labelX = pageWidth - margin - 70;
   const valueX = pageWidth - margin;
 
   doc.setFontSize(10);
@@ -420,48 +533,51 @@ export function drawTotalsSection(
   // Subtotals
   doc.text("Subtotaal producten:", labelX, yPos);
   doc.text(formatCurrency(totals.subtotalProducts), valueX, yPos, { align: "right" });
-  yPos += 6;
+  yPos += 5;
 
   if (totals.subtotalMontage > 0) {
     doc.text("Subtotaal montage:", labelX, yPos);
     doc.text(formatCurrency(totals.subtotalMontage), valueX, yPos, { align: "right" });
-    yPos += 6;
+    yPos += 5;
   }
 
   if (totals.discountAmount > 0) {
     doc.text("Korting:", labelX, yPos);
     doc.text(`- ${formatCurrency(totals.discountAmount)}`, valueX, yPos, { align: "right" });
-    yPos += 6;
+    yPos += 5;
   }
 
-  // Separator line
-  doc.setLineWidth(0.3);
+  // Separator
+  doc.setLineWidth(0.2);
   doc.line(labelX, yPos, valueX, yPos);
-  yPos += 6;
+  yPos += 5;
 
   doc.text("Subtotaal excl. BTW:", labelX, yPos);
   doc.text(formatCurrency(totals.subtotalExclVat), valueX, yPos, { align: "right" });
-  yPos += 6;
+  yPos += 5;
 
   doc.text("BTW 21%:", labelX, yPos);
   doc.text(formatCurrency(totals.totalVat), valueX, yPos, { align: "right" });
-  yPos += 8;
+  yPos += 6;
 
   // Double line before total
-  doc.setLineWidth(0.5);
-  doc.line(labelX, yPos - 2, valueX, yPos - 2);
-  doc.line(labelX, yPos, valueX, yPos);
+  doc.setLineWidth(0.3);
+  doc.line(labelX, yPos - 1, valueX, yPos - 1);
+  doc.line(labelX, yPos + 1, valueX, yPos + 1);
   yPos += 6;
 
   // Final total
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.text("Totaal incl. BTW:", labelX, yPos);
   doc.text(formatCurrency(totals.totalInclVat), valueX, yPos, { align: "right" });
 
-  return yPos + 15;
+  return yPos + 12;
 }
 
+/**
+ * Draw payment terms
+ */
 export function drawPaymentTerms(
   doc: jsPDF,
   quote: QuoteData,
@@ -473,16 +589,19 @@ export function drawPaymentTerms(
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...COLORS.text);
   doc.text("Betalingsvoorwaarden:", margin, yPos);
-  yPos += 5;
+  yPos += 4;
 
   doc.setFont("helvetica", "normal");
-  const terms = quote.payment_terms_description || "25% aanbetaling bij akkoord, 75% voor levering";
+  const terms = quote.payment_terms_description || "25% aanbetaling bij opdracht, 50% bij afroep, 25% bij levering/voor montage";
   const splitTerms = doc.splitTextToSize(terms, pageWidth - margin * 2);
   doc.text(splitTerms, margin, yPos);
 
-  return yPos + splitTerms.length * 4 + 8;
+  return yPos + splitTerms.length * 4 + 6;
 }
 
+/**
+ * Draw conditions section
+ */
 export function drawConditions(
   doc: jsPDF,
   margin: number,
@@ -490,40 +609,43 @@ export function drawConditions(
   yPos: number
 ): number {
   doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...COLORS.subText);
+  doc.setTextColor(...COLORS.text);
 
-  const conditions = [
-    "Levering:",
-    "- Onze leveringen zijn franco werk indien niet anders vermeld, exclusief verticaal transport tenzij uitdrukkelijk vermeld en opgenomen.",
-    "",
-    "Levertijd:",
-    "- Circa 14 werkweken na afroep uwerzijds of indien de montage datum is ingepland is de levertijd niet van toepassing.",
-    "",
-    "Garantie:",
-    "- De garantie volgens de leverancier ten behoeve van keuken meubelen, werkbladen en apparatuur conform garantievoorwaarden fabrikant.",
-    "",
-    "Op deze overeenkomst zijn de Algemene Voorwaarden volgens CBW-erkend van toepassing.",
+  const sections = [
+    {
+      title: "Levering:",
+      content: "Onze leveringen zijn franco werk indien niet anders vermeld, exclusief verticaal transport tenzij uitdrukkelijk vermeld en opgenomen."
+    },
+    {
+      title: "Levertijd:",
+      content: "Circa 14 werkweken na afroep uwerzijds of indien de montage datum is ingepland is de levertijd niet van toepassing."
+    },
+    {
+      title: "Garantie:",
+      content: "De garantie volgens de leverancier ten behoeve van keuken meubelen, werkbladen en apparatuur conform garantievoorwaarden fabrikant."
+    },
   ];
 
-  conditions.forEach((line) => {
-    if (line === "") {
-      yPos += 3;
-    } else if (line.endsWith(":")) {
-      doc.setFont("helvetica", "bold");
-      doc.text(line, margin, yPos);
-      doc.setFont("helvetica", "normal");
-      yPos += 4;
-    } else {
-      const splitLine = doc.splitTextToSize(line, pageWidth - margin * 2);
-      doc.text(splitLine, margin, yPos);
-      yPos += splitLine.length * 3.5;
-    }
+  sections.forEach((section) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(section.title, margin, yPos);
+    yPos += 3.5;
+
+    doc.setFont("helvetica", "normal");
+    const splitContent = doc.splitTextToSize(`- ${section.content}`, pageWidth - margin * 2);
+    doc.text(splitContent, margin, yPos);
+    yPos += splitContent.length * 3.5 + 3;
   });
+
+  doc.setFont("helvetica", "normal");
+  doc.text("Op deze overeenkomst zijn de Algemene Voorwaarden volgens CBW-erkend van toepassing.", margin, yPos);
 
   return yPos + 8;
 }
 
+/**
+ * Draw signatures section
+ */
 export function drawSignatures(
   doc: jsPDF,
   quote: QuoteData,
@@ -531,35 +653,41 @@ export function drawSignatures(
   pageWidth: number,
   yPos: number
 ): number {
-  const sigWidth = (pageWidth - margin * 2 - 20) / 2;
+  const sigWidth = (pageWidth - margin * 2 - 40) / 2;
 
-  doc.setDrawColor(...COLORS.sectionBorder);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...COLORS.text);
+
+  // Left column - Abitare
+  doc.text("Akkoord directie:", margin, yPos);
+  yPos += 15;
+
+  doc.setDrawColor(...COLORS.text);
   doc.setLineWidth(0.3);
-
-  // Left signature
   doc.line(margin, yPos, margin + sigWidth, yPos);
   yPos += 4;
 
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...COLORS.subText);
-  doc.text("Akkoord Abitare:", margin, yPos);
-
-  // Right signature
-  doc.line(pageWidth - margin - sigWidth, yPos - 4, pageWidth - margin, yPos - 4);
-  doc.text("Voor akkoord klant:", pageWidth - margin - sigWidth, yPos);
-
-  yPos += 4;
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(...COLORS.text);
   doc.text("Abitare B.V.", margin, yPos);
 
-  const customerName = getCustomerSalutation(quote.customer) || getCustomerName(quote.customer);
-  doc.text(customerName, pageWidth - margin - sigWidth, yPos);
+  // Right column - Customer
+  const rightColX = pageWidth - margin - sigWidth;
+  doc.setFont("helvetica", "normal");
+  doc.text("Voor akkoord:", rightColX, yPos - 19);
 
-  return yPos + 15;
+  doc.line(rightColX, yPos - 4, pageWidth - margin, yPos - 4);
+
+  const customerName = getCustomerSalutation(quote.customer) || getCustomerName(quote.customer);
+  doc.setFont("helvetica", "bold");
+  doc.text(customerName, rightColX, yPos);
+
+  return yPos + 12;
 }
 
+/**
+ * Draw footer with Italian flag and page number
+ */
 export function drawFooter(
   doc: jsPDF,
   pageWidth: number,
@@ -568,17 +696,45 @@ export function drawFooter(
   pageNumber: number,
   totalPages: number
 ): void {
-  const footerY = pageHeight - 10;
+  const footerY = pageHeight - 12;
 
+  // Italian flag icons (green and red rectangles)
+  const flagY = footerY;
+  const flagWidth = 12;
+  const flagHeight = 2.5;
+  const flagX = pageWidth - margin - 50;
+
+  doc.setFillColor(...COLORS.flagGreen);
+  doc.rect(flagX, flagY, flagWidth, flagHeight, "F");
+
+  doc.setFillColor(...COLORS.flagRed);
+  doc.rect(flagX + flagWidth + 3, flagY, flagWidth, flagHeight, "F");
+
+  // Page number
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...COLORS.subText);
+  doc.text(`Pagina ${pageNumber} van ${totalPages}`, pageWidth - margin, footerY + 6, { align: "right" });
 
-  doc.text("Met vriendelijke groet,", margin, footerY - 8);
-  doc.setFont("helvetica", "bold");
-  doc.text("Abitare keuken en bad architectuur", margin, footerY - 4);
+  // Greeting on page 1 only (handled in generator)
+}
 
+/**
+ * Draw closing text before signatures
+ */
+export function drawClosingText(
+  doc: jsPDF,
+  margin: number,
+  yPos: number
+): number {
+  doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.text(`Pagina ${pageNumber} van ${totalPages}`, pageWidth - margin, footerY, { align: "right" });
+  doc.setTextColor(...COLORS.text);
+  
+  doc.text("Met vriendelijke groet,", margin, yPos);
+  yPos += 5;
+  doc.setFont("helvetica", "bold");
+  doc.text("Abitare keuken en interieurarchitectuur", margin, yPos);
+
+  return yPos + 12;
 }

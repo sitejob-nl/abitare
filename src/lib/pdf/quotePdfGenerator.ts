@@ -8,7 +8,8 @@ import {
   formatCurrency,
   formatDimension,
   getCustomerName,
-  drawHeader,
+  drawFirstPageHeader,
+  drawSubsequentPageHeader,
   drawDocumentTitle,
   drawQuoteDetails,
   drawIntroText,
@@ -20,6 +21,7 @@ import {
   drawConditions,
   drawSignatures,
   drawFooter,
+  drawClosingText,
 } from "./quotePdfHelpers";
 
 // Re-export types for consumers
@@ -39,7 +41,9 @@ function renderSections(
   pageWidth: number,
   pageHeight: number,
   margin: number,
-  startY: number
+  startY: number,
+  quote: QuoteData,
+  showPrices: boolean
 ): number {
   let yPos = startY;
 
@@ -52,10 +56,10 @@ function renderSections(
     // Check if we need a new page
     if (yPos > pageHeight - 60) {
       doc.addPage();
-      yPos = margin;
+      yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
     }
 
-    // Section header
+    // Section header - centered with underline
     yPos = drawSectionHeader(doc, sectionLabel, pageWidth, margin, yPos);
 
     // Description if present
@@ -77,7 +81,7 @@ function renderSections(
       section.corpus_color;
 
     if (hasSpecs) {
-      yPos = drawSpecsTable(doc, section, margin, yPos);
+      yPos = drawSpecsTable(doc, section, margin, pageWidth, yPos);
     }
 
     // Build table data
@@ -100,62 +104,74 @@ function renderSections(
 
     mainLines.forEach((line) => {
       if (line.is_group_header) {
-        // Group header row
+        // Group header row - bold text, no background
         tableBody.push([
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
-          {
-            content: line.group_title || line.description,
-            styles: { fontStyle: "bold", fillColor: COLORS.sectionBg },
-          },
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
-          { content: "", styles: { fillColor: COLORS.sectionBg } },
+          { content: "", styles: {} },
+          { content: "", styles: {} },
+          { content: line.group_title || line.description, styles: { fontStyle: "bold" } },
+          { content: "", styles: {} },
+          { content: "", styles: {} },
+          { content: "", styles: {} },
+          { content: "", styles: {} },
         ]);
       } else {
         lineNum++;
-        const desc = line.extra_description
-          ? `${line.description}\n${line.extra_description}`
-          : line.description;
-
+        
+        // Main line
         tableBody.push([
           lineNum.toString(),
-          line.article_code || "-",
-          desc,
+          line.article_code || "",
+          line.description,
           formatDimension(line.height_mm),
           formatDimension(line.width_mm),
           line.quantity?.toString() || "1",
-          formatCurrency(line.line_total),
+          showPrices ? formatCurrency(line.line_total) : "",
         ]);
 
-        // Sub-lines
+        // Extra description on new line (indented)
+        if (line.extra_description) {
+          const extraLines = line.extra_description.split('\n');
+          extraLines.forEach(extraLine => {
+            tableBody.push([
+              { content: "", styles: {} },
+              { content: "", styles: {} },
+              { content: extraLine, styles: { fontSize: 8, textColor: COLORS.subText } },
+              { content: "", styles: {} },
+              { content: "", styles: {} },
+              { content: "", styles: {} },
+              { content: "", styles: {} },
+            ]);
+          });
+        }
+
+        // Sub-lines with .1, .2 numbering
         const subLines = subLinesMap.get(line.id) || [];
         subLines.forEach((subLine) => {
           tableBody.push([
-            {
-              content: subLine.sub_line_number || ".",
-              styles: { textColor: COLORS.subText, fontSize: 8 },
-            },
-            {
-              content: subLine.article_code || "",
-              styles: { textColor: COLORS.subText, fontSize: 8 },
-            },
-            {
-              content: subLine.description,
-              styles: { textColor: COLORS.subText, fontSize: 8, cellPadding: { left: 4 } },
-            },
+            { content: subLine.sub_line_number || ".", styles: { fontSize: 8 } },
+            { content: subLine.article_code || "", styles: { fontSize: 8 } },
+            { content: subLine.description, styles: { fontSize: 8 } },
             { content: "", styles: { fontSize: 8 } },
             { content: "", styles: { fontSize: 8 } },
-            {
-              content: subLine.quantity?.toString() || "1",
-              styles: { textColor: COLORS.subText, fontSize: 8 },
-            },
-            {
-              content: formatCurrency(subLine.line_total),
-              styles: { textColor: COLORS.subText, fontSize: 8 },
-            },
+            { content: subLine.quantity?.toString() || "1", styles: { fontSize: 8 } },
+            { content: showPrices ? formatCurrency(subLine.line_total) : "", styles: { fontSize: 8 } },
           ]);
+
+          // Sub-line extra description
+          if (subLine.extra_description) {
+            const extraLines = subLine.extra_description.split('\n');
+            extraLines.forEach(extraLine => {
+              tableBody.push([
+                { content: "", styles: {} },
+                { content: "", styles: {} },
+                { content: extraLine, styles: { fontSize: 7, textColor: COLORS.subText, cellPadding: { left: 4 } } },
+                { content: "", styles: {} },
+                { content: "", styles: {} },
+                { content: "", styles: {} },
+                { content: "", styles: {} },
+              ]);
+            });
+          }
         });
       }
     });
@@ -163,24 +179,26 @@ function renderSections(
     if (tableBody.length > 0) {
       autoTable(doc, {
         startY: yPos,
-        head: [["no", "code", "omschrijving", "hg", "br", "aantal", "bedrag"]],
+        head: [["no", "code", "omschrijving", "hg", "br", "aantal", showPrices ? "bedrag" : ""]],
         body: tableBody,
         margin: { left: margin, right: margin },
+        theme: "plain", // No cell borders
         styles: {
           fontSize: 9,
-          cellPadding: 2,
+          cellPadding: 1.5,
           textColor: COLORS.text,
-          lineColor: COLORS.tableBorder,
-          lineWidth: 0.1,
+          lineWidth: 0,
+          overflow: "linebreak",
         },
         headStyles: {
-          fillColor: COLORS.tableHeaderBg,
-          textColor: COLORS.text,
           fontStyle: "bold",
           fontSize: 9,
+          textColor: COLORS.text,
+          lineWidth: { bottom: 0.2 },
+          lineColor: COLORS.text,
         },
         columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
+          0: { cellWidth: 10, halign: "left" },
           1: { cellWidth: 22 },
           2: { cellWidth: "auto" },
           3: { cellWidth: 12, halign: "center" },
@@ -188,8 +206,12 @@ function renderSections(
           5: { cellWidth: 15, halign: "center" },
           6: { cellWidth: 25, halign: "right" },
         },
-        tableLineColor: COLORS.sectionBorder,
-        tableLineWidth: 0.1,
+        didDrawPage: (data) => {
+          // Draw header on new pages created by the table
+          if (data.pageNumber > 1) {
+            drawSubsequentPageHeader(doc, quote, pageWidth, margin);
+          }
+        },
       });
 
       yPos = (doc as any).lastAutoTable?.finalY || yPos + 20;
@@ -200,43 +222,25 @@ function renderSections(
     const sectionDiscount = section.discount_amount || 0;
     const sectionNet = sectionTotal - sectionDiscount;
 
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...COLORS.text);
-
-    if (sectionDiscount > 0) {
-      doc.text(
-        `Sectie subtotaal: ${formatCurrency(sectionTotal)}`,
-        pageWidth - margin,
-        yPos + 5,
-        { align: "right" }
-      );
-      yPos += 5;
+    if (showPrices) {
+      doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(
-        `Korting: - ${formatCurrency(sectionDiscount)}`,
-        pageWidth - margin,
-        yPos + 5,
-        { align: "right" }
-      );
-      yPos += 5;
-      doc.setFont("helvetica", "bold");
-      doc.text(
-        `Sectie totaal: ${formatCurrency(sectionNet)}`,
-        pageWidth - margin,
-        yPos + 5,
-        { align: "right" }
-      );
-    } else {
-      doc.text(
-        `Sectie totaal: ${formatCurrency(sectionNet)}`,
-        pageWidth - margin,
-        yPos + 5,
-        { align: "right" }
-      );
+      doc.setTextColor(...COLORS.text);
+
+      if (sectionDiscount > 0) {
+        doc.text(`Sectie subtotaal: ${formatCurrency(sectionTotal)}`, pageWidth - margin, yPos + 3, { align: "right" });
+        yPos += 4;
+        doc.text(`Korting: - ${formatCurrency(sectionDiscount)}`, pageWidth - margin, yPos + 3, { align: "right" });
+        yPos += 4;
+        doc.setFont("helvetica", "bold");
+        doc.text(`Sectie totaal: ${formatCurrency(sectionNet)}`, pageWidth - margin, yPos + 3, { align: "right" });
+      } else {
+        doc.setFont("helvetica", "bold");
+        doc.text(`Sectie totaal: ${formatCurrency(sectionNet)}`, pageWidth - margin, yPos + 3, { align: "right" });
+      }
     }
 
-    yPos += 15;
+    yPos += 12;
   });
 
   return yPos;
@@ -247,31 +251,34 @@ export function generateQuotePdf(quote: QuoteData, sections: SectionWithLines[])
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
+  const showPrices = quote.show_prices !== false;
 
-  // Header with customer and company info
-  let yPos = drawHeader(doc, quote, pageWidth, margin);
+  // Page 1: Header with customer and company info
+  let yPos = drawFirstPageHeader(doc, quote, pageWidth, margin);
 
   // Document title
   yPos = drawDocumentTitle(doc, "Offerte", pageWidth, margin, yPos);
 
   // Quote details grid
-  yPos = drawQuoteDetails(doc, quote, margin, yPos);
+  yPos = drawQuoteDetails(doc, quote, margin, pageWidth, yPos);
 
   // Intro text
-  yPos = drawIntroText(doc, margin, pageWidth, yPos);
+  yPos = drawIntroText(doc, quote, margin, pageWidth, yPos);
 
   // Sections with products
-  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos);
+  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices);
 
   // Check for new page before totals
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
 
-  // Totals
-  const totals = calculateTotals(sections, quote.discount_amount || 0);
-  yPos = drawTotalsSection(doc, totals, pageWidth, margin, yPos);
+  // Totals (only if showing prices)
+  if (showPrices) {
+    const totals = calculateTotals(sections, quote.discount_amount || 0);
+    yPos = drawTotalsSection(doc, totals, pageWidth, margin, yPos);
+  }
 
   // Payment terms
   yPos = drawPaymentTerms(doc, quote, margin, pageWidth, yPos);
@@ -279,17 +286,20 @@ export function generateQuotePdf(quote: QuoteData, sections: SectionWithLines[])
   // Check for new page before conditions
   if (yPos > pageHeight - 60) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
 
   // Conditions
   yPos = drawConditions(doc, margin, pageWidth, yPos);
 
   // Check for new page before signatures
-  if (yPos > pageHeight - 40) {
+  if (yPos > pageHeight - 50) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
+
+  // Closing text
+  yPos = drawClosingText(doc, margin, yPos);
 
   // Signatures
   yPos = drawSignatures(doc, quote, margin, pageWidth, yPos);
@@ -319,31 +329,34 @@ export function generateQuotePdfBase64(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
+  const showPrices = quote.show_prices !== false;
 
-  // Header with customer and company info
-  let yPos = drawHeader(doc, quote, pageWidth, margin);
+  // Page 1: Header with customer and company info
+  let yPos = drawFirstPageHeader(doc, quote, pageWidth, margin);
 
   // Document title
   yPos = drawDocumentTitle(doc, "Offerte", pageWidth, margin, yPos);
 
   // Quote details grid
-  yPos = drawQuoteDetails(doc, quote, margin, yPos);
+  yPos = drawQuoteDetails(doc, quote, margin, pageWidth, yPos);
 
   // Intro text
-  yPos = drawIntroText(doc, margin, pageWidth, yPos);
+  yPos = drawIntroText(doc, quote, margin, pageWidth, yPos);
 
   // Sections with products
-  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos);
+  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices);
 
   // Check for new page before totals
   if (yPos > pageHeight - 80) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
 
-  // Totals
-  const totals = calculateTotals(sections, quote.discount_amount || 0);
-  yPos = drawTotalsSection(doc, totals, pageWidth, margin, yPos);
+  // Totals (only if showing prices)
+  if (showPrices) {
+    const totals = calculateTotals(sections, quote.discount_amount || 0);
+    yPos = drawTotalsSection(doc, totals, pageWidth, margin, yPos);
+  }
 
   // Payment terms
   yPos = drawPaymentTerms(doc, quote, margin, pageWidth, yPos);
@@ -351,17 +364,20 @@ export function generateQuotePdfBase64(
   // Check for new page before conditions
   if (yPos > pageHeight - 60) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
 
   // Conditions
   yPos = drawConditions(doc, margin, pageWidth, yPos);
 
   // Check for new page before signatures
-  if (yPos > pageHeight - 40) {
+  if (yPos > pageHeight - 50) {
     doc.addPage();
-    yPos = margin;
+    yPos = drawSubsequentPageHeader(doc, quote, pageWidth, margin);
   }
+
+  // Closing text
+  yPos = drawClosingText(doc, margin, yPos);
 
   // Signatures
   yPos = drawSignatures(doc, quote, margin, pageWidth, yPos);
