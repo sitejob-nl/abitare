@@ -188,36 +188,35 @@ export function usePriceGroupImport() {
   };
 }
 
-// Helper function to parse price strings like "1,275.00" or "1.275,00"
+// Helper function to parse price strings like "€ 1,275.00" or "1.275,00"
 export function parsePrice(value: string | number | undefined | null): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   if (typeof value === 'number') return value;
   
-  // Remove any spaces
-  let cleaned = value.toString().trim();
+  let str = String(value).trim();
   
-  // Handle European format (1.275,00) vs US format (1,275.00)
-  // Count occurrences of . and ,
-  const dotCount = (cleaned.match(/\./g) || []).length;
-  const commaCount = (cleaned.match(/,/g) || []).length;
+  // Remove currency symbols (€, $, £, ¥) and spaces
+  str = str.replace(/[€$£¥\s]/g, '');
   
-  if (commaCount === 1 && dotCount >= 1) {
-    // European format: 1.275,00 -> 1275.00
-    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-  } else if (dotCount === 1 && commaCount >= 1) {
-    // US format: 1,275.00 -> 1275.00
-    cleaned = cleaned.replace(/,/g, '');
-  } else if (commaCount === 1 && dotCount === 0) {
-    // Could be decimal comma: 1275,00 -> 1275.00
-    cleaned = cleaned.replace(',', '.');
-  } else if (dotCount === 1 && commaCount === 0) {
-    // Standard decimal format: 1275.00
-    // Already correct
+  // Check for special values (e.g., "-" means no price)
+  if (str === '-' || str === '' || str === '--') return undefined;
+  
+  // Auto-detect format based on last separator position
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  
+  // Determine if comma or dot is the decimal separator
+  const isCommaDecimal = lastComma > lastDot;
+  
+  if (isCommaDecimal) {
+    // European format: 1.275,00 → 1275.00
+    str = str.replace(/\./g, '');   // Remove thousand separators
+    str = str.replace(',', '.');    // Comma → decimal
   } else {
-    // Multiple separators of same type, treat as thousand separators
-    cleaned = cleaned.replace(/[,.]/g, '');
+    // US format: 1,275.00 → 1275.00
+    str = str.replace(/,/g, '');    // Remove thousand separators
   }
   
-  const parsed = parseFloat(cleaned);
+  const parsed = parseFloat(str);
   return isNaN(parsed) ? undefined : parsed;
 }
