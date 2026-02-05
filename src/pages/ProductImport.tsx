@@ -112,12 +112,73 @@ export default function ProductImport() {
       dimension_3: '',
     };
 
-    const articlePatterns = ['artikel', 'article', 'codice', 'code', 'sku', 'artikelcode', 'article_code', 'product_code', 'artikelnummer', 'codice listino'];
-    const namePatterns = ['omschrijving', 'naam', 'name', 'descrizione', 'description', 'product', 'title', 'productnaam'];
-    const costPatterns = ['inkoop', 'cost', 'netto', 'factuur', 'inkoopprijs', 'cost_price', 'netto factuur', 'costo'];
-    const pricePatterns = ['verkoop', 'advies', 'price', 'prijs', 'base', 'verkoopprijs', 'base_price', 'adviesprijs', 'prezzo', 'listino'];
-    const rangeCodePatterns = ['variante 1', 'variante', 'range_code', 'prijsgroep_code', 'variant'];
-    const rangeNamePatterns = ['descrizione 1', 'variabile', 'range_name', 'prijsgroep_naam'];
+    // Artikelcode patronen - specifiek naar generiek
+    const articlePatterns = [
+      'codice gestionale',    // Stosa exact
+      'codice listino',       // Stosa alternatief
+      'artikel',              // NL
+      'article_code',
+      'artikelcode',
+      'artikelnummer',
+      'article',
+      'codice',
+      'code',
+      'sku',
+      'product_code',
+    ];
+    
+    // Naam patronen (let op: niet variabile/variante)
+    const namePatterns = [
+      'descrizione',          // IT (maar niet variabile)
+      'omschrijving',         // NL
+      'naam',
+      'name',
+      'description',
+      'product',
+      'title',
+      'productnaam',
+    ];
+    
+    // Inkoopprijs patronen
+    const costPatterns = [
+      'netto factuur',        // Siemens exact
+      'inkoop',
+      'cost',
+      'netto',
+      'inkoopprijs',
+      'cost_price',
+      'costo',
+    ];
+    
+    // Verkoopprijs patronen
+    const pricePatterns = [
+      'prezzo listino',       // Stosa exact
+      'adviesprijs',          // Siemens
+      'verkoop',
+      'advies',
+      'price',
+      'prijs',
+      'base_price',
+      'verkoopprijs',
+      'prezzo',
+      'listino',
+    ];
+    
+    // Prijsgroep code patronen - STRIKTER (alleen exacte matches)
+    const rangeCodePatterns = [
+      'variante 1',           // Stosa exact
+      'range_code',
+      'prijsgroep_code',
+    ];
+    
+    // Prijsgroep naam patronen
+    const rangeNamePatterns = [
+      'descrizione 1° variabile',  // Stosa exact
+      'descrizione variante',
+      'range_name',
+      'prijsgroep_naam',
+    ];
+    
     const dim1Patterns = ['dimensione 1', 'breedte', 'width', 'larghezza', 'dim1'];
     const dim2Patterns = ['dimensione 2', 'hoogte', 'height', 'altezza', 'dim2'];
     const dim3Patterns = ['dimensione 3', 'diepte', 'depth', 'profondità', 'dim3'];
@@ -125,24 +186,39 @@ export default function ProductImport() {
     columns.forEach(col => {
       const colLower = col.toLowerCase();
       
+      // Artikelcode
       if (!mapping.article_code && articlePatterns.some(p => colLower.includes(p))) {
         mapping.article_code = col;
       }
-      if (!mapping.name && namePatterns.some(p => colLower.includes(p)) && !colLower.includes('variabile')) {
+      
+      // Naam - NIET matchen als het "variabile" of "variante" bevat
+      if (!mapping.name && namePatterns.some(p => colLower.includes(p)) 
+          && !colLower.includes('variabile') && !colLower.includes('variante')) {
         mapping.name = col;
       }
+      
+      // Inkoopprijs
       if (!mapping.cost_price && costPatterns.some(p => colLower.includes(p))) {
         mapping.cost_price = col;
       }
-      if (!mapping.base_price && pricePatterns.some(p => colLower.includes(p)) && !colLower.includes('inkoop') && !colLower.includes('cost')) {
+      
+      // Verkoopprijs - niet inkoop/cost
+      if (!mapping.base_price && pricePatterns.some(p => colLower.includes(p)) 
+          && !colLower.includes('inkoop') && !colLower.includes('cost')) {
         mapping.base_price = col;
       }
+      
+      // Prijsgroep code - strikte matching
       if (!mapping.range_code && rangeCodePatterns.some(p => colLower.includes(p))) {
         mapping.range_code = col;
       }
+      
+      // Prijsgroep naam
       if (!mapping.range_name && rangeNamePatterns.some(p => colLower.includes(p))) {
         mapping.range_name = col;
       }
+      
+      // Dimensies
       if (!mapping.dimension_1 && dim1Patterns.some(p => colLower.includes(p))) {
         mapping.dimension_1 = col;
       }
@@ -307,12 +383,48 @@ export default function ProductImport() {
       // Auto-detect column mapping
       const columns = Object.keys(jsonData[0]);
       const detectedMapping = autoDetectMapping(columns);
-      setColumnMapping(detectedMapping);
       
-      // Auto-detect import mode if price group columns are found
-      if (detectedMapping.range_code) {
-        setImportMode('price_groups');
+      // Valideer of dit echt een prijsgroepen bestand is
+      let shouldUsePriceGroups = false;
+      
+      if (detectedMapping.range_code && detectedMapping.article_code) {
+        const rangeValues = new Set<string>();
+        const articleValues = new Set<string>();
+        
+        // Check eerste 200 rijen voor unieke ranges en artikelen
+        jsonData.slice(0, 200).forEach(row => {
+          const rangeVal = row[detectedMapping.range_code]?.toString().trim();
+          const articleVal = row[detectedMapping.article_code]?.toString().trim();
+          
+          // Filter lege en speciale waarden
+          if (rangeVal && rangeVal !== '-' && rangeVal !== '' && rangeVal !== '€ -') {
+            rangeValues.add(rangeVal);
+          }
+          if (articleVal && articleVal !== '-' && articleVal !== '') {
+            articleValues.add(articleVal);
+          }
+        });
+        
+        // Prijsgroepen modus alleen als:
+        // 1. Er tenminste 3 unieke ranges zijn
+        // 2. Het aantal ranges significant minder is dan het aantal artikelen
+        //    (anders is elke regel uniek = standaard import)
+        // 3. Er minder dan 500 ranges zijn (anders is het geen prijsgroep structuur)
+        const hasMultipleRanges = rangeValues.size >= 3;
+        const rangesAreReused = articleValues.size > 0 && rangeValues.size < articleValues.size * 0.5;
+        const notTooManyRanges = rangeValues.size < 500;
+        
+        shouldUsePriceGroups = hasMultipleRanges && rangesAreReused && notTooManyRanges;
+        
+        if (!shouldUsePriceGroups) {
+          // Reset range kolommen - dit is geen prijsgroep bestand
+          detectedMapping.range_code = '';
+          detectedMapping.range_name = '';
+        }
       }
+      
+      setColumnMapping(detectedMapping);
+      setImportMode(shouldUsePriceGroups ? 'price_groups' : 'standard');
       
       setStep(2);
     } catch (err) {
