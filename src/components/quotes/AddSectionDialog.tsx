@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateQuoteSection, SECTION_TYPES, SectionType } from "@/hooks/useQuoteSections";
+import { useSuppliers } from "@/hooks/useSuppliers";
+import { useProductRanges } from "@/hooks/useProductRanges";
 import { toast } from "@/hooks/use-toast";
 
 interface AddSectionDialogProps {
@@ -36,27 +38,44 @@ export function AddSectionDialog({
   const createSection = useCreateQuoteSection();
   const [sectionType, setSectionType] = useState<SectionType>("meubelen");
   const [title, setTitle] = useState("");
+  const [supplierId, setSupplierId] = useState<string>("");
+  const [rangeId, setRangeId] = useState<string>("");
+
+  const { data: suppliers } = useSuppliers();
+  const { data: ranges } = useProductRanges(supplierId || undefined);
+
+  const handleSupplierChange = (value: string) => {
+    setSupplierId(value);
+    setRangeId(""); // Reset range when supplier changes
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Get range name for default title
+    const selectedRange = ranges?.find(r => r.id === rangeId);
+    const defaultTitle = selectedRange?.name || title.trim() || null;
 
     try {
       await createSection.mutateAsync({
         quote_id: quoteId,
         section_type: sectionType,
-        title: title.trim() || null,
+        title: defaultTitle,
         sort_order: existingSectionsCount,
         subtotal: 0,
+        range_id: rangeId || null,
       });
 
       toast({
         title: "Sectie toegevoegd",
-        description: `De sectie "${title || SECTION_TYPES.find(t => t.value === sectionType)?.label}" is aangemaakt.`,
+        description: `De sectie "${defaultTitle || SECTION_TYPES.find(t => t.value === sectionType)?.label}" is aangemaakt.`,
       });
 
       // Reset form
       setSectionType("meubelen");
       setTitle("");
+      setSupplierId("");
+      setRangeId("");
       onOpenChange(false);
     } catch (error) {
       console.error("Error creating section:", error);
@@ -70,7 +89,7 @@ export function AddSectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
           <DialogTitle>Nieuwe sectie</DialogTitle>
         </DialogHeader>
@@ -96,6 +115,40 @@ export function AddSectionDialog({
           </div>
 
           <div className="space-y-2">
+            <Label>Leverancier</Label>
+            <Select value={supplierId} onValueChange={handleSupplierChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecteer leverancier" />
+              </SelectTrigger>
+              <SelectContent>
+                {suppliers?.map((supplier) => (
+                  <SelectItem key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {supplierId && (
+            <div className="space-y-2">
+              <Label>Prijsgroep</Label>
+              <Select value={rangeId} onValueChange={setRangeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecteer prijsgroep" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ranges?.map((range) => (
+                    <SelectItem key={range.id} value={range.id}>
+                      {range.name || range.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
             <Label htmlFor="title">Titel (optioneel)</Label>
             <Input
               id="title"
@@ -104,7 +157,7 @@ export function AddSectionDialog({
               onChange={(e) => setTitle(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Laat leeg om alleen het type als naam te gebruiken
+              Laat leeg om de prijsgroep of type als naam te gebruiken
             </p>
           </div>
 
