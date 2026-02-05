@@ -1092,6 +1092,8 @@ export type Database = {
           range_id: string | null
           valid_from: string | null
           valid_until: string | null
+          variant_2_code: string | null
+          variant_2_name: string | null
         }
         Insert: {
           created_at?: string | null
@@ -1101,6 +1103,8 @@ export type Database = {
           range_id?: string | null
           valid_from?: string | null
           valid_until?: string | null
+          variant_2_code?: string | null
+          variant_2_name?: string | null
         }
         Update: {
           created_at?: string | null
@@ -1110,6 +1114,8 @@ export type Database = {
           range_id?: string | null
           valid_from?: string | null
           valid_until?: string | null
+          variant_2_code?: string | null
+          variant_2_name?: string | null
         }
         Relationships: [
           {
@@ -1137,6 +1143,7 @@ export type Database = {
           name: string | null
           price_group: number | null
           supplier_id: string | null
+          type: string | null
         }
         Insert: {
           code: string
@@ -1146,6 +1153,7 @@ export type Database = {
           name?: string | null
           price_group?: number | null
           supplier_id?: string | null
+          type?: string | null
         }
         Update: {
           code?: string
@@ -1155,6 +1163,7 @@ export type Database = {
           name?: string | null
           price_group?: number | null
           supplier_id?: string | null
+          type?: string | null
         }
         Relationships: [
           {
@@ -1170,11 +1179,13 @@ export type Database = {
         Row: {
           article_code: string
           base_price: number | null
+          catalog_code: string | null
           category_id: string | null
           cost_price: number | null
           created_at: string | null
           depth_mm: number | null
           description: string | null
+          discount_group: string | null
           ean_code: string | null
           height_mm: number | null
           id: string
@@ -1192,11 +1203,13 @@ export type Database = {
         Insert: {
           article_code: string
           base_price?: number | null
+          catalog_code?: string | null
           category_id?: string | null
           cost_price?: number | null
           created_at?: string | null
           depth_mm?: number | null
           description?: string | null
+          discount_group?: string | null
           ean_code?: string | null
           height_mm?: number | null
           id?: string
@@ -1214,11 +1227,13 @@ export type Database = {
         Update: {
           article_code?: string
           base_price?: number | null
+          catalog_code?: string | null
           category_id?: string | null
           cost_price?: number | null
           created_at?: string | null
           depth_mm?: number | null
           description?: string | null
+          discount_group?: string | null
           ean_code?: string | null
           height_mm?: number | null
           id?: string

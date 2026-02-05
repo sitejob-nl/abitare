@@ -31,7 +31,12 @@ interface ColumnMapping {
 interface PriceGroupMapping extends ColumnMapping {
   range_code: string;
   range_name: string;
-  range_type: string;  // Type variabele (bijv. "CAM" voor kleur accessoires)
+  range_type: string;      // Variabile 1: Type variabele (bijv. "FPC", "CAM")
+  range_code_2: string;    // Variante 2: Secundaire variant code
+  range_name_2: string;    // Descrizione 2° variabile: Secundaire variant naam
+  range_type_2: string;    // Variabile 2: Type secundaire variabele (bijv. "TBF", "LAJ")
+  discount_group: string;  // Cat. molt.: Kortingsgroep (GR1, GR2, GR3)
+  catalog_code: string;    // Codice listino cartaceo: Papieren cataloguscode
   dimension_1: string;
   dimension_2: string;
   dimension_3: string;
@@ -58,6 +63,11 @@ export default function ProductImport() {
     range_code: '',
     range_name: '',
     range_type: '',
+    range_code_2: '',
+    range_name_2: '',
+    range_type_2: '',
+    discount_group: '',
+    catalog_code: '',
     dimension_1: '',
     dimension_2: '',
     dimension_3: '',
@@ -110,6 +120,11 @@ export default function ProductImport() {
       range_code: '',
       range_name: '',
       range_type: '',
+      range_code_2: '',
+      range_name_2: '',
+      range_type_2: '',
+      discount_group: '',
+      catalog_code: '',
       dimension_1: '',
       dimension_2: '',
       dimension_3: '',
@@ -190,6 +205,42 @@ export default function ProductImport() {
       'type variabele',
     ];
     
+    // Secundaire variant patronen (Variabile 2 / Variante 2)
+    const rangeCode2Patterns = [
+      'variante 2',         // Stosa exact
+      'variant_2',
+      'range_code_2',
+    ];
+    
+    const rangeName2Patterns = [
+      'descrizione 2° variabile',  // Stosa exact
+      'descrizione variante 2',
+      'range_name_2',
+    ];
+    
+    const rangeType2Patterns = [
+      'variabile 2',        // Stosa exact
+      'variable_type_2',
+      'variant_type_2',
+    ];
+    
+    // Kortingsgroep patronen
+    const discountGroupPatterns = [
+      'cat. molt',          // Stosa exact
+      'cat molt',
+      'kortingsgroep',
+      'discount_group',
+      'discount group',
+    ];
+    
+    // Cataloguscode patronen
+    const catalogCodePatterns = [
+      'codice listino cartaceo',  // Stosa exact
+      'cataloguscode',
+      'catalog_code',
+      'paper_code',
+    ];
+    
     const dim1Patterns = ['dimensione 1', 'breedte', 'width', 'larghezza', 'dim1'];
     const dim2Patterns = ['dimensione 2', 'hoogte', 'height', 'altezza', 'dim2'];
     const dim3Patterns = ['dimensione 3', 'diepte', 'depth', 'profondità', 'dim3'];
@@ -232,6 +283,31 @@ export default function ProductImport() {
       // Type variabele (bijv. "CAM")
       if (!mapping.range_type && rangeTypePatterns.some(p => colLower.includes(p))) {
         mapping.range_type = col;
+      }
+      
+      // Secundaire variant code (Variante 2)
+      if (!mapping.range_code_2 && rangeCode2Patterns.some(p => colLower.includes(p))) {
+        mapping.range_code_2 = col;
+      }
+      
+      // Secundaire variant naam
+      if (!mapping.range_name_2 && rangeName2Patterns.some(p => colLower.includes(p))) {
+        mapping.range_name_2 = col;
+      }
+      
+      // Secundaire variant type (Variabile 2)
+      if (!mapping.range_type_2 && rangeType2Patterns.some(p => colLower.includes(p))) {
+        mapping.range_type_2 = col;
+      }
+      
+      // Kortingsgroep (Cat. molt.)
+      if (!mapping.discount_group && discountGroupPatterns.some(p => colLower.includes(p))) {
+        mapping.discount_group = col;
+      }
+      
+      // Cataloguscode
+      if (!mapping.catalog_code && catalogCodePatterns.some(p => colLower.includes(p))) {
+        mapping.catalog_code = col;
       }
       
       // Dimensies
@@ -292,6 +368,8 @@ export default function ProductImport() {
       width_mm?: number;
       height_mm?: number;
       depth_mm?: number;
+      discount_group?: string;
+      catalog_code?: string;
     }>();
     
     fileData.forEach(row => {
@@ -303,6 +381,8 @@ export default function ProductImport() {
           width_mm: columnMapping.dimension_1 ? parsePrice(row[columnMapping.dimension_1]) : undefined,
           height_mm: columnMapping.dimension_2 ? parsePrice(row[columnMapping.dimension_2]) : undefined,
           depth_mm: columnMapping.dimension_3 ? parsePrice(row[columnMapping.dimension_3]) : undefined,
+          discount_group: columnMapping.discount_group ? row[columnMapping.discount_group]?.toString().trim() : undefined,
+          catalog_code: columnMapping.catalog_code ? row[columnMapping.catalog_code]?.toString().trim() : undefined,
         });
       }
     });
@@ -318,6 +398,8 @@ export default function ProductImport() {
       article_code: row[columnMapping.article_code]?.toString().trim() || '',
       range_code: row[columnMapping.range_code]?.toString().trim() || '',
       price: parsePrice(row[columnMapping.base_price]) || 0,
+      variant_2_code: columnMapping.range_code_2 ? row[columnMapping.range_code_2]?.toString().trim() : undefined,
+      variant_2_name: columnMapping.range_name_2 ? row[columnMapping.range_name_2]?.toString().trim() : undefined,
     })).filter(p => p.article_code && p.range_code && p.price > 0);
   }, [fileData, columnMapping, importMode]);
 
@@ -521,6 +603,11 @@ export default function ProductImport() {
       range_code: '',
       range_name: '',
       range_type: '',
+      range_code_2: '',
+      range_name_2: '',
+      range_type_2: '',
+      discount_group: '',
+      catalog_code: '',
       dimension_1: '',
       dimension_2: '',
       dimension_3: '',
@@ -785,12 +872,71 @@ export default function ProductImport() {
 
                   {/* Price group fields */}
                   <div>
-                    <h4 className="font-medium mb-3">Prijsgroep velden</h4>
+                    <h4 className="font-medium mb-3">Primaire prijsgroep (Variabile 1)</h4>
                     <div className="grid gap-4 md:grid-cols-3">
                       {[
-                        { key: 'range_code', label: 'Prijsgroep code *' },
-                        { key: 'range_name', label: 'Prijsgroep naam' },
-                        { key: 'range_type', label: 'Type variabele' },
+                        { key: 'range_type', label: 'Type variabele (Variabile 1)' },
+                        { key: 'range_code', label: 'Prijsgroep code (Variante 1) *' },
+                        { key: 'range_name', label: 'Prijsgroep naam (Descrizione 1°)' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <Select 
+                            value={columnMapping[key as keyof PriceGroupMapping] || '__none__'} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecteer kolom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">-- Niet mappen --</SelectItem>
+                              {availableColumns.map((col) => (
+                                <SelectItem key={col} value={col}>{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Secondary variant fields */}
+                  <div>
+                    <h4 className="font-medium mb-3">Secundaire variant (Variabile 2) - optioneel</h4>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {[
+                        { key: 'range_type_2', label: 'Type variabele (Variabile 2)' },
+                        { key: 'range_code_2', label: 'Variant code (Variante 2)' },
+                        { key: 'range_name_2', label: 'Variant naam (Descrizione 2°)' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <Select 
+                            value={columnMapping[key as keyof PriceGroupMapping] || '__none__'} 
+                            onValueChange={(value) => setColumnMapping(prev => ({ ...prev, [key]: value === '__none__' ? '' : value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecteer kolom" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">-- Niet mappen --</SelectItem>
+                              {availableColumns.map((col) => (
+                                <SelectItem key={col} value={col}>{col}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Extra metadata fields */}
+                  <div>
+                    <h4 className="font-medium mb-3">Extra velden - optioneel</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {[
+                        { key: 'discount_group', label: 'Kortingsgroep (Cat. molt.)' },
+                        { key: 'catalog_code', label: 'Cataloguscode (Codice listino cartaceo)' },
                       ].map(({ key, label }) => (
                         <div key={key} className="space-y-2">
                           <Label>{label}</Label>
@@ -815,7 +961,7 @@ export default function ProductImport() {
 
                   {/* Dimension fields */}
                   <div>
-                    <h4 className="font-medium mb-3">Afmetingen (optioneel)</h4>
+                    <h4 className="font-medium mb-3">Afmetingen - optioneel</h4>
                     <div className="grid gap-4 md:grid-cols-3">
                       {[
                         { key: 'dimension_1', label: 'Breedte (mm)' },

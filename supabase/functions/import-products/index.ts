@@ -20,6 +20,8 @@ interface PriceGroupProduct {
   width_mm?: number
   height_mm?: number
   depth_mm?: number
+  discount_group?: string
+  catalog_code?: string
 }
 
 interface PriceGroupRange {
@@ -32,6 +34,8 @@ interface PriceGroupPrice {
   article_code: string
   range_code: string
   price: number
+  variant_2_code?: string
+  variant_2_name?: string
 }
 
 interface ImportRequest {
@@ -210,11 +214,12 @@ async function handlePriceGroupImport(
       rangeMap.set(r.code, existingRangeMap.get(r.code)!)
     })
     
-    // Bulk insert new ranges
+    // Bulk insert new ranges with type
     if (newRanges.length > 0) {
       const rangesToInsert = newRanges.map(r => ({
         code: r.code,
         name: r.name,
+        type: r.type || null,
         supplier_id: supplierId,
         is_active: true,
       }))
@@ -245,7 +250,7 @@ async function handlePriceGroupImport(
     
     const existingProductMap = new Map((allExistingProducts || []).map((e: any) => [e.article_code, e.id]))
     
-    // Prepare all products for upsert
+    // Prepare all products for upsert with new fields
     const allProductsToUpsert = data.products.map(p => ({
       article_code: p.article_code,
       name: p.name,
@@ -254,6 +259,8 @@ async function handlePriceGroupImport(
       width_mm: p.width_mm || null,
       height_mm: p.height_mm || null,
       depth_mm: p.depth_mm || null,
+      discount_group: p.discount_group || null,
+      catalog_code: p.catalog_code || null,
       vat_rate: 21,
       unit: 'stuk',
       is_active: true,
@@ -317,6 +324,8 @@ async function handlePriceGroupImport(
         product_id: productMap.get(p.article_code)!,
         range_id: rangeMap.get(p.range_code)!,
         price: p.price,
+        variant_2_code: p.variant_2_code || null,
+        variant_2_name: p.variant_2_name || null,
         valid_from: new Date().toISOString().split('T')[0],
       }))
       
