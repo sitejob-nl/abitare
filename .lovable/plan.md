@@ -1,101 +1,177 @@
 
-# Plan: Fix GL Account Type Filter
 
-## Probleem
+# Plan: Offerte PDF Template Restylen naar Orderbevestiging Opmaak
 
-De huidige code zoekt naar grootboekrekeningen met `Type eq 32`, maar:
-- **Type 32** = Herwaarderingsrekeningen (bijv. "Herwaarderingen bedrijfsinventaris")
-- **Type 110** = Omzetrekeningen (bijv. "Omzet handelsgoederen")
+## Overzicht
 
-De filter retourneert dus geen geschikte omzetrekening.
-
-## Oplossing
-
-Wijzig de `getDefaultRevenueGLAccount()` functie om te zoeken naar **Type 110** (Revenue) en specifiek een standaard omzetrekening te vinden (zoals code 80002 "Omzet handelsgoederen").
+De huidige offerte PDF wordt gegenereerd met een eenvoudige opmaak. De nieuwe template volgt de stijl van het orderbevestiging-sjabloon met:
+- Klantgegevens links, bedrijfsgegevens rechts
+- Gedetailleerde order-informatie in een grid
+- Sectieheaders met grijze achtergrond en zwarte rand links
+- Specificatie-tabellen per sectie (model, frontnummer, kleur, etc.)
+- Product-tabellen met kolommen: no, code, omschrijving, hg, br, aantal, bedrag
+- Sub-items met ingesprongen stijl
+- Totalen-sectie
+- Voorwaarden en handtekeningen
 
 ---
 
-## Technische Wijzigingen
+## Wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `supabase/functions/exact-sync-invoices/index.ts` | Wijzig filter van `Type eq 32` naar `Type eq 110` + zoek naar beste match |
+| `src/lib/generateQuotePdf.ts` | Volledige restyling naar orderbevestiging opmaak |
+| `src/lib/generateQuotePdfBase64.ts` | Zelfde wijzigingen als generateQuotePdf.ts |
 
-### Code Wijziging
+---
 
-**Huidige code (regel 431):**
-```typescript
-const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 32&$select=ID,Code,Description&$top=1`;
+## Nieuwe PDF Structuur
+
+### 1. Header Sectie
+- **Links**: Klantadres (aanhef, straat, postcode plaats)
+- **Rechts**: Abitare logo + bedrijfsgegevens (adres, telefoon, email, BTW, IBAN, KvK)
+
+### 2. Documenttitel
+- "Offerte" met dikke zwarte lijn eronder (in plaats van "Orderbevestiging")
+
+### 3. Offerte Details Grid
+Twee kolommen met informatie:
+- Offertenummer
+- Datum offerte
+- Datum afdruk
+- Geldig tot
+- Adviseur (indien beschikbaar)
+- Telefoon klant
+- Email klant
+
+### 4. Intro Tekst
+Aangepaste tekst voor offertes in plaats van orderbevestiging.
+
+### 5. Secties (Meubelen, Apparatuur, Werkbladen, etc.)
+
+**Sectie Header**:
+```
+┌────────────────────────────────────────┐
+│█ Meubelen                              │ (grijze achtergrond, zwarte rand links)
+└────────────────────────────────────────┘
 ```
 
-**Nieuwe code:**
+**Specificatie Tabel** (indien van toepassing):
+```
+Model: [waarde]           Plintkleur: [waarde]
+Frontnummer: [waarde]     Kolomkast hoogte: [waarde]
+Kleur front: [waarde]     Scharnier kleur: [waarde]
+...
+```
+
+**Product Tabel**:
+```
+┌────┬──────────┬─────────────────────────┬────┬────┬───────┬─────────┐
+│ no │ code     │ omschrijving            │ hg │ br │ aantal│ bedrag  │
+├────┼──────────┼─────────────────────────┼────┼────┼───────┼─────────┤
+│ 1  │ ART001   │ Onderkast 60cm          │ 85 │ 60 │   1   │ € 450,00│
+│ .1 │          │   - Lade systeem        │    │    │   1   │ € 50,00 │
+│ .2 │          │   - Soft-close          │    │    │   1   │ € 25,00 │
+└────┴──────────┴─────────────────────────┴────┴────┴───────┴─────────┘
+```
+
+### 6. Totalen Sectie
+```
+────────────────────────────────────────────────
+Subtotaal producten:              € 15.250,00
+Subtotaal montage:                €  1.500,00
+Korting:                         -€    500,00
+────────────────────────────────────────────────
+Subtotaal excl. BTW:              € 16.250,00
+BTW 21%:                          €  3.412,50
+════════════════════════════════════════════════
+Totaal incl. BTW:                 € 19.662,50
+```
+
+### 7. Betalingsvoorwaarden
+Sectie met betalingsvoorwaarden uit de offerte.
+
+### 8. Algemene Voorwaarden
+Verkorte versie van leveringsvoorwaarden.
+
+### 9. Footer
+- Akkoord handtekeningen (Abitare en klant)
+- Pagina nummering
+- Afsluiting
+
+---
+
+## Technische Implementatie
+
+### Styling Constanten
 ```typescript
-async function getDefaultRevenueGLAccount(
-  accessToken: string,
-  exactDivision: number
-): Promise<string | null> {
-  try {
-    // Type 110 = Revenue accounts in Exact Online
-    // Prefer accounts starting with "80" (standard sales/revenue accounts)
-    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/GLAccounts?$filter=Type eq 110&$select=ID,Code,Description&$orderby=Code`;
-    
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    });
-    
-    if (!response.ok) {
-      console.error("Failed to fetch GL accounts:", await response.text());
-      return null;
-    }
-    
-    const data = await response.json();
-    const accounts = data.d?.results || [];
-    
-    if (accounts.length === 0) {
-      console.error("No revenue GL accounts (Type 110) found");
-      return null;
-    }
-    
-    // Prefer accounts starting with "80" (standard sales/revenue)
-    const preferredAccount = accounts.find((acc: any) => 
-      acc.Code?.startsWith("80") || 
-      acc.Description?.toLowerCase().includes("omzet")
-    );
-    
-    const selectedAccount = preferredAccount || accounts[0];
-    console.log(`Using GL Account: ${selectedAccount.Code} - ${selectedAccount.Description}`);
-    
-    return selectedAccount.ID;
-  } catch (err) {
-    console.error("Error fetching GL accounts:", err);
-    return null;
-  }
+// Kleuren (aangepast naar de template)
+const sectionHeaderBg: RGB = [240, 240, 240];  // Lichtgrijs
+const sectionHeaderBorder: RGB = [51, 51, 51]; // Donkergrijs/zwart
+const tableHeaderBg: RGB = [245, 245, 245];    // Lichtgrijs
+const textColor: RGB = [51, 51, 51];           // Donkergrijs
+const subItemColor: RGB = [102, 102, 102];     // Grijs voor sub-items
+
+// Fonts
+const fontFamily = "helvetica"; // Dichtstbijzijnde aan Arial in jsPDF
+const baseFontSize = 10;        // 10pt basis
+const smallFontSize = 9;        // 9pt voor tabellen
+const tinyFontSize = 8;         // 8pt voor sub-items en details
+```
+
+### Nieuwe Helper Functies
+```typescript
+// Sectie header met grijze achtergrond en zwarte rand links
+function drawSectionHeader(doc: jsPDF, title: string, y: number): number
+
+// Specificatie tabel in 2x2 grid formaat
+function drawSpecsTable(doc: jsPDF, section: QuoteSection, y: number): number
+
+// Product tabel met sub-items ondersteuning
+function drawProductTable(doc: jsPDF, lines: QuoteLine[], y: number): number
+
+// Totalen sectie
+function drawTotalsSection(doc: jsPDF, totals: TotalsData, y: number): number
+
+// Voorwaarden en handtekeningen
+function drawTermsAndSignatures(doc: jsPDF, y: number): number
+```
+
+### Data Interface Uitbreiding
+```typescript
+interface QuoteData {
+  // Bestaande velden...
+  
+  // Nieuwe optionele velden voor extra details
+  advisor_name?: string;
+  delivery_week?: string;
+  commission_reference?: string;
 }
 ```
 
 ---
 
-## Exact Online GLAccount Types Reference
+## Vergelijking Oud vs Nieuw
 
-| Type | Beschrijving |
-|------|-------------|
-| 12 | Bankrekeningen |
-| 20 | Debiteuren |
-| 22 | Crediteuren |
-| 24 | BTW-rekeningen |
-| 32 | Herwaardering |
-| **110** | **Omzet (Revenue)** |
-| 111 | Inkoopwaarde |
-| 122 | Afschrijvingen |
-| 130 | Lasten |
+| Element | Huidige PDF | Nieuwe PDF |
+|---------|-------------|------------|
+| Header | Donkerblauwe balk met witte tekst | Klant links, bedrijfsinfo rechts |
+| Kleur schema | Blauw/goud | Grijs/wit/zwart |
+| Sectie headers | Gouden balk | Grijze balk met zwarte rand links |
+| Specificaties | Inline tekst | 2x2 grid tabel |
+| Sub-items | Grijze tekst | Ingesprongen + punt-nummering |
+| Totalen | Box rechtsonder | Volle breedte met lijnen |
+| Voorwaarden | Eén regel | Meerdere paragrafen |
+| Handtekeningen | Geen | Twee kolommen |
 
 ---
 
 ## Resultaat
 
-- Facturen kunnen naar Exact worden gepusht met de juiste omzetrekening
-- De functie zoekt eerst naar een standaard omzetrekening (code 80xxx)
-- Als fallback wordt de eerste beschikbare Type 110 rekening gebruikt
+Na deze wijziging zal de offerte PDF:
+- Professionele uitstraling hebben consistent met orderbevestigingen
+- Alle sectie-configuraties tonen in overzichtelijk grid-formaat
+- Sub-regels correct inspringen met punt-nummering
+- Volledige voorwaarden en handtekeningvakken bevatten
+- Pagina-nummering ondersteunen bij meerdere pagina's
+
