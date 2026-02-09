@@ -1,153 +1,70 @@
 
-# STOSA Prijsgroepen Systeem - Implementatieplan
+# Fix: Stosa Import - Prijzen worden niet opgeslagen
 
-## Huidige Situatie
+## Probleem Analyse
 
-- **3.000 Stosa producten** al geimporteerd in `products`
-- **2.667 product_ranges** met variant codes (401, 402, 404...) als code en "FPC" als naam
-- Prijzen staan al in `product_prices` gekoppeld aan deze ranges
-- `worktop_operations` tabel bestaat al
-- `QuoteSectionConfig` heeft al leverancier/prijsgroep/kleur selectie
+De edge function logs tonen het resultaat van je laatste import:
 
-## Probleem
+```
+15.123 producten verwerkt → 3.000 in DB (deduplicatie)
+629 ranges → 0 nieuwe (bestonden al van vorige import)
+2.632 prijzen verstuurd → 0 opgeslagen
+23 price groups gelinkt
+```
 
-De huidige ranges zijn ruwe variant codes uit de Excel (401 = E1, 701 = E1 variant). Er is geen structuur voor:
-- Echte prijsgroepen (E1-E10, A, B, C) met betekenisvolle namen
-- Kleur-per-prijsgroep mapping
-- Model/collectie laag (Metropolis, Natural, Kaya)
-- Werkbladmaterialen en plintopties
+Er zijn **drie problemen** gevonden:
 
-## Plan - Fase 1: Database Schema Uitbreiden
+### Probleem 1: Te weinig prijzen uit frontend (2.632 van ~69.000)
+De frontend `extractedPrices` filtert met `parsePrice()` en `price > 0`. Waarschijnlijk worden veel prijzen niet correct geparsed vanuit de Excel data, waardoor ze als 0 of undefined uitkomen.
 
-### 1.1 Suppliers tabel uitbreiden
-Twee kolommen toevoegen aan `suppliers`:
-- `has_price_groups` (boolean, default false)
-- `price_system` (text: 'direct', 'price_groups', 'points')
+### Probleem 2: rangeMap bevat geen bestaande ranges
+In de edge function worden bestaande ranges opgehaald en in `rangeMap` gezet, maar de `validPrices` filter checkt `rangeMap.has(p.range_code)`. Het probleem: de frontend stuurt range codes zoals "701", "402" etc., en de `rangeMap` wordt correct gevuld. **Maar** de `productMap` wordt alleen gevuld door stap 2's upsert response. Als de upsert `ignoreDuplicates: false` draait maar de response niet alle IDs teruggeeft (Supabase upsert quirk), dan zijn er artikelcodes in `productMap` die niet matchen.
 
-Stosa instellen op `price_system = 'price_groups'`.
+### Probleem 3: Article codes mismatch
+De producten worden gedeinigreerd in de frontend (`extractedProducts` pakt alleen unieke article_codes), maar de prijzen refereren naar `article_code` uit elke rij. Als het Excel bestand een composite article_code gebruikt (bijv. met prefix "X3M"), dan matchen de prijzen-rijen niet met de product-codes in `productMap`.
 
-### 1.2 Product_ranges tabel uitbreiden
-Kolommen toevoegen:
-- `collection` (text) - 'evolution' of 'art'
-- `available_price_groups` (text[]) - bijv. ['E1','E2',...]
+## Oplossing
 
-### 1.3 Nieuwe tabel: `price_groups`
-Definitie van prijsgroepen per leverancier:
+### Stap 1: Edge function debuggen - logging toevoegen
+Voeg gedetailleerde logging toe om te zien waarom prijzen niet matchen:
+- Log een sample van `data.prices` (eerste 5)
+- Log `productMap` size en `rangeMap` size
+- Log hoeveel van `data.prices` een match hebben in productMap en rangeMap
+- Log specifiek welke article_codes en range_codes NIET matchen
 
-| Kolom | Type | Omschrijving |
-|-------|------|-------------|
-| id | uuid | PK |
-| supplier_id | uuid | FK naar suppliers |
-| code | text | 'E1', 'E2', ..., 'A', 'B', 'C' |
-| name | text | 'Prijsgroep E1 - Termo Strutturato' |
-| collection | text | 'evolution', 'art' |
-| sort_order | integer | Sorteervolgorde |
-| is_glass | boolean | True voor A, B, C |
+### Stap 2: Fix productMap vulling
+Na de upsert moeten we ook bestaande producten ophalen als de upsert response incompleet is. Momenteel worden bestaande producten in `existingProductMap` opgehaald maar nooit naar `productMap` gekopieerd. **Dit is het hoofdprobleem.**
 
-Seed data: E1-E10 + A, B, C voor Stosa Evolution.
+```
+// HUIDIGE CODE (fout):
+existingProductMap → alleen gebruikt voor telling
+productMap → alleen gevuld vanuit upsert response
 
-### 1.4 Nieuwe tabel: `price_group_colors`
-Kleuren per prijsgroep:
+// FIX:
+existingProductMap → ook kopiiren naar productMap
+```
 
-| Kolom | Type | Omschrijving |
-|-------|------|-------------|
-| id | uuid | PK |
-| price_group_id | uuid | FK naar price_groups |
-| color_code | text | 'RNO', 'BIA', etc. |
-| color_name | text | 'Rovere Nodato' |
-| material_type | text | 'termo_strutturato', 'laccato' |
-| finish | text | 'opaco', 'lucido' |
+### Stap 3: Fix rangeMap vulling (zelfde issue)
+Bestaande ranges worden in `existingRangeMap` gezet en naar `rangeMap` gekopieerd - dit lijkt correct. Maar verifieer dit.
 
-### 1.5 Nieuwe tabel: `worktop_materials`
-Werkbladmaterialen:
+### Stap 4: Frontend parsePrice debugging
+Voeg een console.log toe in de frontend om te verifiieren dat prijzen correct geparsed worden uit het Excel bestand. De `raw: false` optie in XLSX parsing geeft geformatteerde strings terug - dit kan problemen geven met prijzen.
 
-| Kolom | Type | Omschrijving |
-|-------|------|-------------|
-| id | uuid | PK |
-| supplier_id | uuid | FK |
-| code | text | Artikelcode |
-| name | text | Naam |
-| material_type | text | 'laminato', 'fenix', 'dekton' |
-| thickness_mm | integer | 20, 40, 60 |
-| price_per_meter | numeric | Prijs per meter |
+## Technische wijzigingen
 
-### 1.6 Nieuwe tabel: `plinth_options`
-Plintopties:
+### 1. `supabase/functions/import-products/index.ts`
+- **Stap 2 fix**: Na de product upsert, kopieer `existingProductMap` entries naar `productMap` zodat alle bekende product IDs beschikbaar zijn voor de prijs-matching
+- Voeg debug logging toe voor `validPrices` filtering
+- Log sample mismatches
 
-| Kolom | Type | Omschrijving |
-|-------|------|-------------|
-| id | uuid | PK |
-| supplier_id | uuid | FK |
-| code | text | Artikelcode |
-| name | text | Naam |
-| height_mm | integer | 100, 120, 150 |
-| price_per_meter | numeric | Meterprijs |
+### 2. `src/pages/ProductImport.tsx`  
+- Voeg een console.log toe die toont hoeveel prijzen `extractedPrices` bevat vs. hoeveel gefilterd worden
+- Overweeg `raw: true` in XLSX parsing voor numerieke kolommen
 
-### 1.7 Quote_sections: `price_group_id` kolom toevoegen
-Zodat een sectie direct verwijst naar een prijsgroep (E5) naast de range (model).
+### 3. Deploy en test
+- Deploy de aangepaste edge function
+- Vraag de gebruiker om opnieuw te importeren
+- Controleer de logs voor debug output
 
-## Fase 2: Prijsgroep Selectie in Offerte Workflow
-
-### 2.1 AddSectionDialog aanpassen
-Na het selecteren van leverancier "Stosa" (met `has_price_groups = true`):
-1. Toon **Model** dropdown (product_ranges gefilterd op leverancier)
-2. Toon **Prijsgroep** dropdown (price_groups gefilterd op leverancier + collectie)
-3. Automatisch de sectietitel zetten op model + prijsgroep
-
-### 2.2 QuoteSectionConfig aanpassen
-- Prijsgroep selectie toevoegen (E1-E10, A, B, C)
-- Kleuren filteren op geselecteerde prijsgroep via `price_group_colors`
-- Bestaande kleurvelden (front, corpus, scharnier, lade, plint) behouden
-
-### 2.3 Prijs lookup aanpassen
-Bij het toevoegen van een product aan een sectie:
-- Huidige prijs lookup via `product_prices.range_id` blijft werken
-- De prijsgroep uit de sectie bepaalt welke range_id gebruikt wordt voor de prijs
-
-## Fase 3: Beheer UI
-
-### 3.1 PriceGroups pagina uitbreiden
-- Tabblad voor "Prijsgroepen" (E1-E10) naast bestaande "Ranges"
-- Per prijsgroep: kleuren beheren
-- Seed knop om E1-E10 + A, B, C aan te maken voor Stosa
-
-### 3.2 Werkbladen & Plinten beheer
-- Aparte sectie op de PriceGroups pagina of nieuwe pagina
-- CRUD voor worktop_materials en plinth_options
-
-## Fase 4: Import Aanpassen
-
-### 4.1 Excel import verbeteren
-De bestaande import al werkt met variant codes (701-710 mapping naar ranges). Aanpassing:
-- Bij import automatisch koppelen aan `price_groups` in plaats van losse ranges
-- Mapping: 701=E1, 702=E2, ..., 710=E10, 731=A, 732=B, 733=C
-
-## Technische Details
-
-### Migraties nodig
-1. ALTER TABLE suppliers - 2 kolommen
-2. ALTER TABLE product_ranges - 2 kolommen  
-3. ALTER TABLE quote_sections - 1 kolom (price_group_id)
-4. CREATE TABLE price_groups + RLS
-5. CREATE TABLE price_group_colors + RLS
-6. CREATE TABLE worktop_materials + RLS
-7. CREATE TABLE plinth_options + RLS
-8. INSERT seed data voor E1-E10 + A, B, C
-
-### Frontend bestanden te wijzigen
-- `src/components/quotes/AddSectionDialog.tsx` - prijsgroep selectie
-- `src/components/quotes/QuoteSectionConfig.tsx` - prijsgroep + kleuren
-- `src/pages/PriceGroups.tsx` - beheer prijsgroepen/kleuren
-- `src/hooks/useProductPrices.ts` - lookup via price_group_id
-- `src/hooks/useProductRanges.ts` - collection filter
-- Nieuwe hooks: `usePriceGroups.ts`, `usePriceGroupColors.ts`, `useWorktopMaterials.ts`, `usePlinthOptions.ts`
-- Supabase types regenereren
-
-### RLS Policies
-Alle nieuwe tabellen:
-- SELECT: `true` (iedereen mag lezen)
-- INSERT/UPDATE/DELETE: `is_admin_or_manager(auth.uid())`
-
-## Aanbevolen Volgorde
-
-Vanwege de omvang stel ik voor om te starten met **Fase 1 + 2**: database schema + offerte workflow. Dit geeft direct werkende functionaliteit. Fase 3 en 4 kunnen daarna als vervolgstappen.
+## Verwacht resultaat
+Na de fix zouden alle ~69.000 prijs-combinaties correct opgeslagen moeten worden, gekoppeld aan de 3.000 producten en 2.667 ranges.
