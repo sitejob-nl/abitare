@@ -21,6 +21,7 @@ import Installation from "./pages/Installation";
 import InstallationDetail from "./pages/InstallationDetail";
 import Inbox from "./pages/Inbox";
 import Products from "./pages/Products";
+import ProductDetail from "./pages/ProductDetail";
 import ProductImport from "./pages/ProductImport";
 import PriceGroups from "./pages/PriceGroups";
 import Reports from "./pages/Reports";
@@ -94,6 +95,7 @@ const App = () => (
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/products/import" element={<ProtectedRoute><ProductImport /></ProtectedRoute>} />
+            <Route path="/products/:id" element={<ProtectedRoute><ProductDetail /></ProtectedRoute>} />
             <Route path="/settings/price-groups" element={<ProtectedRoute><PriceGroups /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
