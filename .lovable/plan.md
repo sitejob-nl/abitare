@@ -1,84 +1,75 @@
 
 
-# Overzicht: Actiepunten uit de meeting
+# Stosa Import Verbeteren - 3 Fasen
 
-Uit de notulen komen de volgende **software-gerelateerde** punten naar voren. Ik deel ze op in wat nu gebouwd moet worden vs. wat later komt.
+## Samenvatting
 
----
+Het geüploade plan (`stosa-import-fix-plan.md`) beschrijft drie problemen met de huidige Stosa-import en stelt een gefaseerde oplossing voor. Na analyse van de huidige code bevestig ik dat het plan klopt en implementeerbaar is.
 
-## A. Nu te bouwen: Servicetickets "wacht op onderdelen" sidebar bij de agenda
+## Huidige situatie
 
-**Actie-item uit de meeting:**
-> Maak een visueel overzicht (naast de agenda) voor servicetickets die wachten op een onderdeel, zodat deze eenvoudig naar de agenda gesleept kunnen worden zodra de onderdelen binnen zijn.
-
-### Wat wordt gebouwd
-Een zijpaneel naast de agendaweergave (`/calendar`) dat servicetickets met status `wacht_op_onderdelen` toont als draggable kaarten. Wanneer een ticket op een agendadag wordt gesleept, wordt de status gewijzigd naar `ingepland` en de geplande datum opgeslagen.
-
-### Aanpak
-1. **Nieuw component `ServiceTicketSidebar`** -- Toont een scrollbare lijst van servicetickets met status `wacht_op_onderdelen`, opgehaald via een gefilterde query op `service_tickets`.
-2. **Draggable kaarten** -- Elk ticket wordt een `useDraggable` item binnen de bestaande `DndContext` van de Calendar-pagina.
-3. **Drop-afhandeling uitbreiden** -- De `handleDragEnd` in `Calendar.tsx` herkent nu alleen order-events. Dit wordt uitgebreid zodat het ook serviceticket-drops herkent (op basis van een `service-ticket-` prefix in het drag-ID). Bij een drop:
-   - Status wijzigen naar `ingepland`
-   - (Optioneel) een `planned_date` veld opslaan op het ticket
-4. **Layout aanpassing** -- De Calendar-pagina krijgt een flexbox-layout: agenda links (flex-1), sidebar rechts (~280px breed), inklapbaar.
-5. **Database** -- Er is mogelijk een kolom `planned_date` nodig op `service_tickets` om de ingeplande datum vast te leggen. Als die er niet is, wordt een migratie aangemaakt.
+De Stosa Excel bevat 69.015 rijen, maar de import verwerkt momenteel alleen FPC-rijen (keukenelementen met prijsgroepen). Daardoor worden:
+- 11.231 standalone producten (accessoires, grepen, plinten) overgeslagen
+- 1.809 werkbladen (MOL-varianten) overgeslagen
+- Geen collectie-filter beschikbaar (Evolution/Look/Art/City door elkaar)
+- `base_price` niet gevuld bij prijsgroepen-import
 
 ---
 
-## B. Noteren voor later (geen directe bouw nu)
+## Fase 1: Collectie-filter in UI
 
-De volgende punten uit de meeting zijn relevant maar vereisen eerst externe input of verdere afstemming:
+**Doel:** Gebruiker kan kiezen om alleen een specifieke collectie te importeren (bijv. alleen Evolution).
 
-| Punt | Status |
-|------|--------|
-| **Drie prijsvelden** (inkoop, boekprijs, Abitare-prijs) | Huidige `product_prices` tabel heeft 1 prijsveld. Uitbreiding nodig zodra de prijslijst-PDF is ontvangen en de logica helder is. |
-| **Permanente productcorrecties** (wijzigingen op artikelnummer bewaren bij herimport) | Vereist een `product_overrides` tabel of `is_manually_edited` flag. Kan gebouwd worden zodra de import stabiel is. |
-| **Klantportaal beperken** (alleen definitieve order + factuur, geen offertes) | Portaal bestaat al. Filter op quotes verwijderen is een kleine aanpassing, in te plannen. |
-| **Monteursagenda max 1 week vooruit** | InstallerDashboard toont al vandaag/morgen/week tabs. "Later" tab kan verborgen/beperkt worden. |
-| **WhatsApp-koppeling** | Wacht op telefoonnummer en verificatie. Technisch: Meta Business API integratie. |
-| **TradePlace uitgebreide koppeling** | Wacht op communicatie met TradePlace. |
-| **CIMA/Stoza directe leverancierskoppeling** | Wacht op contact met leverancier. |
+**Wijzigingen in `src/pages/ProductImport.tsx`:**
+- Nieuwe state `selectedCollection` toevoegen
+- Functie `detectCollection()` die op basis van het Variante 1 prefix (7xx=Evolution, 4xx=Look, 5xx=City, 8xx=Art) de collectie bepaalt
+- De bestaande `extractedPrices`, `extractedProducts` en `extractedPriceGroups` filteren op de geselecteerde collectie
+- Een Select-dropdown toevoegen in stap 3 (boven de preview) met opties: Alle collecties, Evolution, Look, Standalone, Werkbladen
 
 ---
 
-## Technische details: Serviceticket sidebar
+## Fase 2: Standalone producten ondersteunen
 
-### Nieuwe/gewijzigde bestanden
+**Doel:** Producten zonder varianten (lege `Variabile 1`) worden ook geimporteerd met hun basisprijs.
 
-1. **`src/components/calendar/ServiceTicketSidebar.tsx`** (nieuw)
-   - Query: `service_tickets` WHERE `status = 'wacht_op_onderdelen'`
-   - Toont per ticket: ticketnummer, onderwerp, klantnaam, prioriteit-badge
-   - Elk ticket is wrapped in `useDraggable` met ID `service-ticket-{id}`
-   - Inklapbaar via een toggle-knop
+**Wijzigingen in `src/pages/ProductImport.tsx`:**
+- `extractedProducts` aanpassen: rijen groeperen per `article_code`, de `base_price` ophalen uit de rij zonder variant (lege `Variabile 1`)
+- Interface `PriceGroupProduct` in `src/hooks/useProductImport.ts` uitbreiden met `base_price?: number`, `has_variants?: boolean`, `variant_type?: string`
 
-2. **`src/pages/Calendar.tsx`** (wijzigen)
-   - Layout: wrap content in flex container, sidebar rechts
-   - `handleDragEnd` uitbreiden: als `active.id` begint met `service-ticket-`, update ticket status naar `ingepland` + sla datum op
-   - Sidebar-state (open/dicht) in useState
+**Wijzigingen in `supabase/functions/import-products/index.ts`:**
+- `PriceGroupProduct` interface uitbreiden met `base_price`
+- Bij de product-upsert (stap 2) het `base_price` veld meesturen, zodat de standaardprijs op het product wordt opgeslagen
+- Dit veld bestaat al in de `products` tabel maar wordt nu niet gevuld bij prijsgroepen-import
 
-3. **`src/hooks/useServiceTicketMutations.ts`** (wijzigen)
-   - Eventueel een `useScheduleServiceTicket` mutation toevoegen die status + datum in een keer updatet
+---
 
-4. **Database migratie** (indien `planned_date` nog niet bestaat)
-   - `ALTER TABLE service_tickets ADD COLUMN planned_date date;`
+## Fase 3: LOOK collectie mapping
 
-### Interactie-flow
+**Doel:** LOOK-producten (4xx codes) correct koppelen aan eigen prijsgroepen.
 
-```text
-+------------------------------------------+-------------+
-|              AGENDA                       |  SIDEBAR    |
-|                                           |             |
-|  [Ma] [Di] [Wo] [Do] [Vr] [Za] [Zo]      | Wacht op    |
-|                                           | onderdelen  |
-|   Levering #1023                          |             |
-|   Montage #1045                           | [Ticket 42] |
-|                                           | [Ticket 58] |
-|                                           | [Ticket 61] |
-|                                           |             |
-|           Drop ticket hier                |   drag -->  |
-|                                           |             |
-+------------------------------------------+-------------+
-```
+**Wijzigingen in `supabase/functions/import-products/index.ts`:**
+- `VARIANT_TO_PRICE_GROUP` mapping uitbreiden: 401-412 mappen naar L1-L12 (in plaats van E1-E10), 431-433 naar LA/LB/LC
+- Collectie-naam dynamisch bepalen op basis van variant prefix (7xx = "evolution", 4xx = "look", 8xx = "art")
 
-Gebruiker sleept een ticket vanuit de sidebar naar een dag in de agenda. Het ticket verdwijnt uit de sidebar (status wordt `ingepland`) en verschijnt als event op die dag.
+**Database migratie:**
+- LOOK prijsgroepen (L1-L12, LA, LB, LC) aanmaken in `price_groups` tabel, gekoppeld aan de Stosa leverancier
+
+---
+
+## Bestanden die wijzigen
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/pages/ProductImport.tsx` | Collectie-filter, standalone extractie, base_price logica |
+| `src/hooks/useProductImport.ts` | Interface uitbreiding (base_price, has_variants, variant_type) |
+| `supabase/functions/import-products/index.ts` | base_price meesturen, LOOK mapping, collectie-detectie |
+| Nieuwe migratie | LOOK prijsgroepen in database |
+
+## Verwacht resultaat
+
+- Evolution import: 923 producten met E1-E10 + A/B/C prijzen
+- Standalone import: 11.231 producten met base_price
+- Werkbladen import: 1.809 producten met materiaal-varianten (DEA, HPA, etc.)
+- LOOK import: 1.449 producten met L1-L12 prijzen
+- Herhaalde import overschrijft bestaande data correct (upsert)
 
