@@ -1,74 +1,75 @@
 
 
-# Fix 3 Importproblemen + Stosa Data Opschonen
+# Fase 4: Offerte Flow met Prijsgroep Selectie en Per-Regel Override
 
-## Analyse van de problemen
+## Wat wordt er gebouwd?
 
-### Probleem 1: Verkeerde range codes (ROOT CAUSE)
-De edge function logs tonen dat `range_code` waarden als "011", "012", "013" bevat in plaats van "DEA", "HPA", "IRA". Dit betekent dat de **kolom-mapping fout gaat**: een verkeerde kolom wordt als `range_code` gebruikt. Hierdoor worden 2.667 onzinnige ranges aangemaakt (met codes als "00", "001", "00A" en namen als "MOL", "TEL").
+Wanneer je een product aan een offerte toevoegt, wordt de prijs automatisch bepaald op basis van de sectie-configuratie (prijsgroep/range). Daarnaast kan per offerteregel een afwijkende prijsgroep worden ingesteld ("override"), zodat individuele producten een andere prijs/kleur kunnen krijgen zonder de rest van de offerte te wijzigen.
 
-De `extractedPriceGroups` gebruikt `range_name` (die eigenlijk het type "MOL" bevat vanuit "Variabile 1") als naam, en de verkeerde kolom als code.
-
-**Fix**: De kolom-mapping en extractie-logica in `ProductImport.tsx` debuggen en corrigeren. Waarschijnlijk matcht "Variante 1" op een andere kolom dan verwacht, of de Excel heeft net iets andere kolomnamen. Extra logging toevoegen bij auto-detect om te zien welke kolom aan welke mapping wordt gekoppeld.
-
-### Probleem 2: base_price niet gevuld
-In `extractedProducts` (regel 362-391) wordt `base_price` nergens uit de data gehaald. De `PriceGroupProduct` interface in de edge function (regel 17-25) mist ook het `base_price` veld. Hierdoor hebben alle 15.123 producten `base_price = null`.
-
-**Fix**: 
-- Frontend: bij het groeperen per article_code, de prijs uit rijen ZONDER variant opslaan als `base_price`
-- Edge function: `base_price` toevoegen aan interface en meesturen bij product upsert
-
-### Probleem 3: Duplicate key bij prijzen
-De cleanup in stap 3 (regel 301-315) verwijdert alleen prijzen met matching `range_id`s. Als er al prijzen bestaan van een eerdere import (met dezelfde of andere ranges), faalt de insert op de unique constraint `(product_id, range_id, valid_from)`.
-
-**Fix**: Bij cleanup ALLE prijzen voor de supplier's producten verwijderen, niet alleen voor de huidige ranges. Dit garandeert een schone staat voor elke herimport.
+De prijs wordt bepaald volgens deze hierarchie:
+1. **Regel-override** -- als de regel een eigen prijsgroep heeft, gebruik die prijs
+2. **Sectie-default** -- anders de prijsgroep van de sectie (range_id)
+3. **Base price** -- als er geen prijsgroep-prijs is, de basisprijs van het product
 
 ---
 
-## Implementatieplan
+## Stappen
 
-### Stap 1: Database opschonen (migratie)
-Alle Stosa data verwijderen zodat we schoon kunnen beginnen:
-- Verwijder alle `product_prices` voor Stosa-producten
-- Verwijder alle `product_ranges` voor Stosa
-- Verwijder alle `products` voor Stosa
-- Stosa supplier_id: `29a8e1aa-35da-4784-99ff-23129f36fe22`
+### Stap 1: Database migratie
+Twee nieuwe kolommen toevoegen aan `quote_lines`:
+- `range_override_id` (UUID, FK naar product_ranges) -- per-regel prijsgroep override
+- `color_override` (VARCHAR) -- per-regel kleur override tekst
 
-### Stap 2: Frontend - base_price extractie (`src/pages/ProductImport.tsx`)
-- `extractedProducts` aanpassen: voor elke article_code de `base_price` ophalen uit de eerste rij die GEEN variant heeft (lege `range_code`)
-- Console logging toevoegen bij `autoDetectMapping` zodat we kunnen zien welke Excel-kolom aan welke mapping wordt gekoppeld
+### Stap 2: AddProductDialog uitbreiden
+- Na productselectie, toon een optioneel "Override prijsgroep" dropdown
+- Wanneer een override wordt gekozen, haal de prijs op uit die prijsgroep in plaats van de sectie-default
+- Badge toont "Prijsgroep prijs", "Override prijs" of "Basisprijs" afhankelijk van de bron
 
-### Stap 3: Frontend - range extractie verbeteren (`src/pages/ProductImport.tsx`)
-- Debug-logging toevoegen aan `extractedPriceGroups` om te verifieren welke kolom-data gebruikt wordt
-- Rijen met lege `range_code` uitsluiten van de price-extractie (dat zijn de base-price rijen)
-- `extractedPriceGroups` moet de `range_name` uit de juiste kolom ("Descrizione 1a variabile") halen, en `range_type` uit "Variabile 1"
+### Stap 3: EditableLineRow - override UI
+- Nieuwe klikbare kolom/icoon per regel om een prijsgroep-override in te stellen
+- Wanneer een override actief is: visuele indicator (waarschuwings-badge of andere kleur)
+- Bij wijziging van de override: automatisch de prijs herberekenen via `fetchProductPrice`
 
-### Stap 4: Hook - interface uitbreiden (`src/hooks/useProductImport.ts`)
-- `PriceGroupProduct` interface: `base_price?: number` toevoegen
+### Stap 4: Prijsbepaling centraliseren
+- `fetchProductPrice` uitbreiden: accepteert zowel `rangeId` (sectie-default) als `overrideRangeId` (regel-override)
+- Hierarchie: override > sectie-default > base_price
+- Hergebruik in zowel AddProductDialog als EditableLineRow
 
-### Stap 5: Edge Function - 3 fixes (`supabase/functions/import-products/index.ts`)
-1. `PriceGroupProduct` interface uitbreiden met `base_price?: number`
-2. Bij product upsert (stap 2) `base_price` meesturen: `base_price: p.base_price || null`
-3. Cleanup (stap 3) aanpassen: verwijder ALLE `product_prices` voor deze supplier's producten, ongeacht `range_id`:
-   ```
-   // In plaats van: .in('range_id', rangeIds)
-   // Gewoon: delete alle prices voor productIds
-   ```
+### Stap 5: Quote-to-Order conversie
+- `range_override_id` en `color_override` meenemen bij het converteren van offerte naar order (als die kolommen ook op order_lines bestaan, anders opslaan in het bestaande `configuration` JSONB veld)
 
 ---
 
-## Bestanden die wijzigen
+## Technische details
+
+### Database migratie
+```sql
+ALTER TABLE quote_lines 
+  ADD COLUMN IF NOT EXISTS range_override_id UUID REFERENCES product_ranges(id),
+  ADD COLUMN IF NOT EXISTS color_override VARCHAR(255);
+```
+
+### Bestanden die wijzigen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| Nieuwe migratie | DELETE Stosa producten, ranges, prijzen |
-| `src/pages/ProductImport.tsx` | base_price extractie, debug logging, range mapping fix |
-| `src/hooks/useProductImport.ts` | `base_price` aan PriceGroupProduct interface |
-| `supabase/functions/import-products/index.ts` | base_price in upsert, bredere cleanup |
+| Nieuwe migratie | `range_override_id` + `color_override` op quote_lines |
+| `src/integrations/supabase/types.ts` | Regenerated types |
+| `src/components/quotes/AddProductDialog.tsx` | Override prijsgroep dropdown + aangepaste prijslogica |
+| `src/components/quotes/EditableLineRow.tsx` | Override indicator + inline override selector |
+| `src/hooks/useProductPrices.ts` | `fetchProductPrice` uitbreiden met override parameter |
+| `src/hooks/useQuoteLines.ts` | `range_override_id` meesturen bij create/update |
+| `src/components/quotes/QuoteSectionCard.tsx` | Override range doorgeven aan line rows |
 
-## Verwacht resultaat na herimport
-- Producten met correcte `base_price` uit rijen zonder variant
-- Ranges met correcte codes (DEA, HPA, IRA, etc.) en namen
-- Prijzen correct gekoppeld zonder duplicate key fouten
-- Herhaalde import werkt foutloos dankzij bredere cleanup
+### Prijs-lookup flow (pseudocode)
+```text
+fetchProductPrice(productId, sectionRangeId, overrideRangeId?)
+  1. if overrideRangeId -> query product_prices WHERE range_id = overrideRangeId
+  2. if sectionRangeId -> query product_prices WHERE range_id = sectionRangeId  
+  3. fallback -> product.base_price
+```
 
+### UI voorbeeld override op een regel
+- Normale regel: geen indicator, prijs uit sectie-default
+- Override regel: klein badge "Override: E7" naast de omschrijving, prijs uit E7
+- Klik op badge om override te wijzigen of te verwijderen
