@@ -1,214 +1,153 @@
 
-# Plan: STOSA Volledige Ondersteuning - Fase 2
+# STOSA Prijsgroepen Systeem - Implementatieplan
 
-## Overzicht
+## Huidige Situatie
 
-Dit plan breidt het bestaande import systeem uit met ontbrekende features voor volledige STOSA ondersteuning.
+- **3.000 Stosa producten** al geimporteerd in `products`
+- **2.667 product_ranges** met variant codes (401, 402, 404...) als code en "FPC" als naam
+- Prijzen staan al in `product_prices` gekoppeld aan deze ranges
+- `worktop_operations` tabel bestaat al
+- `QuoteSectionConfig` heeft al leverancier/prijsgroep/kleur selectie
 
-## Database Wijzigingen
+## Probleem
 
-### 1. Product Ranges Uitbreiden
+De huidige ranges zijn ruwe variant codes uit de Excel (401 = E1, 701 = E1 variant). Er is geen structuur voor:
+- Echte prijsgroepen (E1-E10, A, B, C) met betekenisvolle namen
+- Kleur-per-prijsgroep mapping
+- Model/collectie laag (Metropolis, Natural, Kaya)
+- Werkbladmaterialen en plintopties
 
-```sql
-ALTER TABLE product_ranges ADD COLUMN IF NOT EXISTS 
-  is_handleless BOOLEAN DEFAULT false;
+## Plan - Fase 1: Database Schema Uitbreiden
 
-ALTER TABLE product_ranges ADD COLUMN IF NOT EXISTS 
-  door_type TEXT; -- 'full', 'glass', 'wood_panel'
+### 1.1 Suppliers tabel uitbreiden
+Twee kolommen toevoegen aan `suppliers`:
+- `has_price_groups` (boolean, default false)
+- `price_system` (text: 'direct', 'price_groups', 'points')
 
-CREATE INDEX IF NOT EXISTS idx_product_ranges_type ON product_ranges(type);
-```
+Stosa instellen op `price_system = 'price_groups'`.
 
-### 2. Product Colors - Kleur Type Toevoegen
+### 1.2 Product_ranges tabel uitbreiden
+Kolommen toevoegen:
+- `collection` (text) - 'evolution' of 'art'
+- `available_price_groups` (text[]) - bijv. ['E1','E2',...]
 
-```sql
-ALTER TABLE product_colors ADD COLUMN IF NOT EXISTS 
-  color_type TEXT DEFAULT 'front'; 
-  -- 'front', 'corpus', 'handle', 'hinge', 'drawer', 'plinth'
-```
+### 1.3 Nieuwe tabel: `price_groups`
+Definitie van prijsgroepen per leverancier:
 
-### 3. Nieuwe Tabel: Leverancier Kortingen
+| Kolom | Type | Omschrijving |
+|-------|------|-------------|
+| id | uuid | PK |
+| supplier_id | uuid | FK naar suppliers |
+| code | text | 'E1', 'E2', ..., 'A', 'B', 'C' |
+| name | text | 'Prijsgroep E1 - Termo Strutturato' |
+| collection | text | 'evolution', 'art' |
+| sort_order | integer | Sorteervolgorde |
+| is_glass | boolean | True voor A, B, C |
 
-```sql
-CREATE TABLE IF NOT EXISTS supplier_discounts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  supplier_id UUID REFERENCES suppliers(id),
-  discount_group TEXT NOT NULL,      -- 'GR1', 'GR2', 'GR3'
-  discount_percent DECIMAL(5,2),     -- Dealer korting %
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  UNIQUE(supplier_id, discount_group)
-);
-```
+Seed data: E1-E10 + A, B, C voor Stosa Evolution.
 
-### 4. Nieuwe Tabel: Montage Tarieven
+### 1.4 Nieuwe tabel: `price_group_colors`
+Kleuren per prijsgroep:
 
-```sql
-CREATE TABLE IF NOT EXISTS installation_rates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  unit TEXT DEFAULT 'stuk',         -- 'm1', 'stuk', 'uur'
-  default_price DECIMAL(10,2),
-  vat_rate DECIMAL(5,2) DEFAULT 21,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+| Kolom | Type | Omschrijving |
+|-------|------|-------------|
+| id | uuid | PK |
+| price_group_id | uuid | FK naar price_groups |
+| color_code | text | 'RNO', 'BIA', etc. |
+| color_name | text | 'Rovere Nodato' |
+| material_type | text | 'termo_strutturato', 'laccato' |
+| finish | text | 'opaco', 'lucido' |
 
--- Seed standaard tarieven
-INSERT INTO installation_rates (code, name, unit, default_price) VALUES
-  ('STOSA', 'Keuken montage per m1', 'm1', 200.00),
-  ('AANSLUIT', 'Aansluitkosten op maat gelegde leidingen', 'stuk', 175.00),
-  ('KOKENDW', 'Aansluiten kokendwater kraan', 'stuk', 100.00),
-  ('ZONE1', 'Transportkosten zone 1 (Limburg)', 'stuk', 250.00),
-  ('ZONE2', 'Transportkosten zone 2', 'stuk', 350.00)
-ON CONFLICT (code) DO NOTHING;
-```
+### 1.5 Nieuwe tabel: `worktop_materials`
+Werkbladmaterialen:
 
-### 5. Nieuwe Tabel: Werkblad Bewerkingen
+| Kolom | Type | Omschrijving |
+|-------|------|-------------|
+| id | uuid | PK |
+| supplier_id | uuid | FK |
+| code | text | Artikelcode |
+| name | text | Naam |
+| material_type | text | 'laminato', 'fenix', 'dekton' |
+| thickness_mm | integer | 20, 40, 60 |
+| price_per_meter | numeric | Prijs per meter |
 
-```sql
-CREATE TABLE IF NOT EXISTS worktop_operations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  supplier_id UUID REFERENCES suppliers(id),
-  code TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  price DECIMAL(10,2),
-  price_type TEXT DEFAULT 'fixed',   -- 'fixed', 'per_meter', 'per_m2'
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  UNIQUE(supplier_id, code)
-);
-```
+### 1.6 Nieuwe tabel: `plinth_options`
+Plintopties:
 
-## Frontend Wijzigingen
+| Kolom | Type | Omschrijving |
+|-------|------|-------------|
+| id | uuid | PK |
+| supplier_id | uuid | FK |
+| code | text | Artikelcode |
+| name | text | Naam |
+| height_mm | integer | 100, 120, 150 |
+| price_per_meter | numeric | Meterprijs |
 
-### 1. QuoteSectionConfig Verbeteren
+### 1.7 Quote_sections: `price_group_id` kolom toevoegen
+Zodat een sectie direct verwijst naar een prijsgroep (E5) naast de range (model).
 
-Kleuren filteren op `color_type`:
+## Fase 2: Prijsgroep Selectie in Offerte Workflow
 
-```typescript
-// Huidige code
-const { data: colors = [] } = useProductColors(formData.range_id || null);
+### 2.1 AddSectionDialog aanpassen
+Na het selecteren van leverancier "Stosa" (met `has_price_groups = true`):
+1. Toon **Model** dropdown (product_ranges gefilterd op leverancier)
+2. Toon **Prijsgroep** dropdown (price_groups gefilterd op leverancier + collectie)
+3. Automatisch de sectietitel zetten op model + prijsgroep
 
-// Nieuwe code - groepeer per type
-const frontColors = colors.filter(c => c.color_type === 'front' || !c.color_type);
-const corpusColors = colors.filter(c => c.color_type === 'corpus');
-const hingeColors = colors.filter(c => c.color_type === 'hinge');
-const drawerColors = colors.filter(c => c.color_type === 'drawer');
-const plinthColors = colors.filter(c => c.color_type === 'plinth');
-```
+### 2.2 QuoteSectionConfig aanpassen
+- Prijsgroep selectie toevoegen (E1-E10, A, B, C)
+- Kleuren filteren op geselecteerde prijsgroep via `price_group_colors`
+- Bestaande kleurvelden (front, corpus, scharnier, lade, plint) behouden
 
-En dropdowns per kleurtype:
+### 2.3 Prijs lookup aanpassen
+Bij het toevoegen van een product aan een sectie:
+- Huidige prijs lookup via `product_prices.range_id` blijft werken
+- De prijsgroep uit de sectie bepaalt welke range_id gebruikt wordt voor de prijs
 
-```typescript
-{/* Front kleur - nu met dropdown ipv input */}
-<Select 
-  value={formData.color_id} 
-  onValueChange={handleColorChange}
->
-  <SelectContent>
-    {frontColors.map(color => (
-      <SelectItem key={color.id} value={color.id}>
-        {color.code} - {color.name}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-```
+## Fase 3: Beheer UI
 
-### 2. Nieuwe Hook: useSupplierDiscounts
+### 3.1 PriceGroups pagina uitbreiden
+- Tabblad voor "Prijsgroepen" (E1-E10) naast bestaande "Ranges"
+- Per prijsgroep: kleuren beheren
+- Seed knop om E1-E10 + A, B, C aan te maken voor Stosa
 
-```typescript
-// hooks/useSupplierDiscounts.ts
-export function useSupplierDiscounts(supplierId: string | null) {
-  return useQuery({
-    queryKey: ['supplier-discounts', supplierId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('supplier_discounts')
-        .select('*')
-        .eq('supplier_id', supplierId);
-      return data || [];
-    },
-    enabled: !!supplierId,
-  });
-}
-```
+### 3.2 Werkbladen & Plinten beheer
+- Aparte sectie op de PriceGroups pagina of nieuwe pagina
+- CRUD voor worktop_materials en plinth_options
 
-### 3. Nieuwe Hook: useInstallationRates
+## Fase 4: Import Aanpassen
 
-```typescript
-// hooks/useInstallationRates.ts
-export function useInstallationRates() {
-  return useQuery({
-    queryKey: ['installation-rates'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('installation_rates')
-        .select('*')
-        .eq('is_active', true)
-        .order('code');
-      return data || [];
-    },
-  });
-}
-```
+### 4.1 Excel import verbeteren
+De bestaande import al werkt met variant codes (701-710 mapping naar ranges). Aanpassing:
+- Bij import automatisch koppelen aan `price_groups` in plaats van losse ranges
+- Mapping: 701=E1, 702=E2, ..., 710=E10, 731=A, 732=B, 733=C
 
-### 4. Import Uitbreiden met Kleuren & Kortingen
+## Technische Details
 
-In de ProductImport pagina, een extra stap voor kleur import:
+### Migraties nodig
+1. ALTER TABLE suppliers - 2 kolommen
+2. ALTER TABLE product_ranges - 2 kolommen  
+3. ALTER TABLE quote_sections - 1 kolom (price_group_id)
+4. CREATE TABLE price_groups + RLS
+5. CREATE TABLE price_group_colors + RLS
+6. CREATE TABLE worktop_materials + RLS
+7. CREATE TABLE plinth_options + RLS
+8. INSERT seed data voor E1-E10 + A, B, C
 
-```typescript
-interface ColorImportRow {
-  code: string;
-  name: string;
-  color_type: 'front' | 'corpus' | 'hinge' | 'drawer' | 'plinth';
-  hex_color?: string;
-}
-```
+### Frontend bestanden te wijzigen
+- `src/components/quotes/AddSectionDialog.tsx` - prijsgroep selectie
+- `src/components/quotes/QuoteSectionConfig.tsx` - prijsgroep + kleuren
+- `src/pages/PriceGroups.tsx` - beheer prijsgroepen/kleuren
+- `src/hooks/useProductPrices.ts` - lookup via price_group_id
+- `src/hooks/useProductRanges.ts` - collection filter
+- Nieuwe hooks: `usePriceGroups.ts`, `usePriceGroupColors.ts`, `useWorktopMaterials.ts`, `usePlinthOptions.ts`
+- Supabase types regenereren
 
-### 5. Settings Pagina: Kortingen Configureren
+### RLS Policies
+Alle nieuwe tabellen:
+- SELECT: `true` (iedereen mag lezen)
+- INSERT/UPDATE/DELETE: `is_admin_or_manager(auth.uid())`
 
-Nieuwe tab in Settings voor leverancier kortingen:
+## Aanbevolen Volgorde
 
-```typescript
-// components/settings/SupplierDiscountsSettings.tsx
-export function SupplierDiscountsSettings() {
-  // UI voor GR1/GR2/GR3 percentages per leverancier
-}
-```
-
-## Bestandsoverzicht
-
-| Bestand | Actie |
-|---------|-------|
-| `supabase/migrations/xxx.sql` | Database migratie |
-| `src/integrations/supabase/types.ts` | Types regenereren |
-| `src/hooks/useSupplierDiscounts.ts` | Nieuw |
-| `src/hooks/useInstallationRates.ts` | Nieuw |
-| `src/hooks/useProductColors.ts` | Uitbreiden met color_type |
-| `src/components/quotes/QuoteSectionConfig.tsx` | Dropdowns voor kleuren |
-| `src/components/settings/SupplierDiscountsSettings.tsx` | Nieuw |
-| `src/pages/Settings.tsx` | Tab toevoegen |
-
-## Prioriteit Implementatie
-
-```text
-1. Database migratie          → Basis voor alles
-2. supplier_discounts         → Inkoopprijs berekening
-3. product_colors.color_type  → Kleur filtering in offertes
-4. installation_rates         → Montage op offertes
-5. worktop_operations         → Werkblad bewerkingen
-```
-
-## Resultaat
-
-Na implementatie:
-- Automatische inkoopprijs berekening (adviesprijs × (100 - korting%)
-- Kleuren selectie per type (front, corpus, scharnier, etc.)
-- Montage tarieven als standaard producten op offerte
-- Werkblad bewerkingen configureerbaar
+Vanwege de omvang stel ik voor om te starten met **Fase 1 + 2**: database schema + offerte workflow. Dit geeft direct werkende functionaliteit. Fase 3 en 4 kunnen daarna als vervolgstappen.
