@@ -1,32 +1,57 @@
 
-
-# Fix: Stosa producten worden niet opgeslagen (12.000+ stilletjes gefaald)
+# Fix: Prijs-insert errors zichtbaar maken
 
 ## Probleem
+De logs tonen dat alle 2.632 prijzen als "valid" door de filter komen, maar er worden **0 prijzen** daadwerkelijk opgeslagen. De insert-fouten worden niet naar `console.error` geschreven (zelfde bug als eerder bij de product-upserts), waardoor ze onzichtbaar zijn.
 
-Van de 15.123 producten die naar de server worden gestuurd, worden er slechts 3.000 opgeslagen. De overige 12.000+ falen stilletjes omdat:
+## Oorzaak
+Regel 363-364 in `import-products/index.ts`:
+```typescript
+if (priceError) {
+  errors.push(`Price insert error batch ...`);  // alleen in array, niet gelogd!
+}
+```
 
-1. **Upsert errors worden niet gelogd** - De errors worden in een array verzameld maar nooit naar `console.error` geschreven, waardoor ze onzichtbaar zijn in de Supabase logs
-2. **`name` kolom is `varchar(255)`** - Als een productnaam langer is dan 255 tekens, faalt de hele batch van 500 producten
-3. **Dimensie-kolommen zijn `integer`** - De velden `width_mm`, `height_mm`, `depth_mm` accepteren geen decimalen, maar `parsePrice()` kan floats teruggeven
-
-Omdat de producten in batches van 500 worden verwerkt, zorgt 1 ongeldige rij ervoor dat de hele batch faalt. De eerste 6 batches (3.000 producten) slagen, de rest faalt.
+Waarschijnlijk faalt de insert door een database-constraint (bijv. een unieke index op `product_id + range_id + variant_2_code`, of een ontbrekende kolom). Maar zonder logging weten we niet wat de exacte fout is.
 
 ## Oplossing
 
-### 1. Database migratie
-- Verander `name` van `varchar(255)` naar `text` (geen lengtebeperking meer)
+### 1. Edge function (`import-products/index.ts`)
+- Voeg `console.error` toe bij prijs-insert fouten (net zoals bij de product-upserts)
+- Voeg een batch-samenvatting toe voor prijzen (X geslaagd, Y gefaald)
+- Log het eerste mislukte price record zodat we de exacte constraint-fout kunnen zien
 
-### 2. Edge function (`import-products/index.ts`)
-- Voeg `console.error` toe bij upsert errors zodat ze zichtbaar zijn in de logs
-- Rond dimensie-waarden af naar integers met `Math.round()` voordat ze worden opgeslagen
-- Voeg een samenvatting-log toe die toont hoeveel batches zijn geslaagd vs. gefaald
+### 2. Deploy en test
+- Deploy de aangepaste edge function
+- Importeer opnieuw
+- Controleer de logs voor de specifieke foutmelding
 
-### 3. Testen
-- Na de fix opnieuw importeren
-- In de logs controleren of er nu WEL foutmeldingen verschijnen (of dat alles slaagt)
+Na de eerste test weten we precies welke constraint faalt en kunnen we die gericht fixen.
 
-## Verwacht resultaat
-- Alle 15.123 producten worden succesvol opgeslagen
-- De 2.632 prijzen matchen met de productMap en worden ook opgeslagen
-- Eventuele resterende problemen worden zichtbaar via de console logs
+## Technische wijzigingen
+
+**`supabase/functions/import-products/index.ts`** (regel 363-368):
+```typescript
+// VOOR:
+if (priceError) {
+  errors.push(`Price insert error batch ${Math.floor(i/priceChunkSize)}: ${priceError.message}`)
+}
+
+// NA:
+if (priceError) {
+  console.error(`Price insert error batch ${Math.floor(i/priceChunkSize)}: ${priceError.message}`)
+  if (priceBatchesFailed === 0) {
+    console.error(`First failing price record sample:`, JSON.stringify(pricesToInsert[0]))
+  }
+  priceBatchesFailed++
+  errors.push(`Price insert error batch ${Math.floor(i/priceChunkSize)}: ${priceError.message}`)
+} else {
+  priceBatchesSucceeded++
+  pricesInserted += insertedPrices?.length || 0
+}
+```
+
+Plus een samenvatting-log na de loop:
+```typescript
+console.log(`Price insert summary: ${priceBatchesSucceeded} batches succeeded, ${priceBatchesFailed} batches failed`)
+```
