@@ -221,6 +221,7 @@ export function SortableSectionCard({ section, quoteId, onEdit }: SortableSectio
                             quoteId={quoteId}
                             lineNumber={line.is_group_header ? undefined : lineNumber}
                             subLines={subLines}
+                            sectionRangeId={section.range_id}
                           />
                         );
                       })}

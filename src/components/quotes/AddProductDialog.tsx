@@ -25,12 +25,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useProducts } from "@/hooks/useProducts";
 import { useCreateQuoteLine } from "@/hooks/useQuoteLines";
 import { fetchProductPrice } from "@/hooks/useProductPrices";
+import { useProductRanges } from "@/hooks/useProductRanges";
 import { toast } from "@/hooks/use-toast";
 
 interface AddProductDialogProps {
@@ -62,8 +70,9 @@ export function AddProductDialog({
   const [heightMm, setHeightMm] = useState("");
   const [widthMm, setWidthMm] = useState("");
   const [extraDescription, setExtraDescription] = useState("");
-  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | null>(null);
+  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [overrideRangeId, setOverrideRangeId] = useState<string | null>(null);
   
   // Free line fields
   const [freeDescription, setFreeDescription] = useState("");
@@ -82,6 +91,9 @@ export function AddProductDialog({
     search: productSearch || undefined,
     enabled: open,
   });
+
+  // Fetch all active ranges for override dropdown
+  const { data: ranges } = useProductRanges();
 
   const selectedProduct = useMemo(() => {
     return products?.find((p) => p.id === selectedProductId);
@@ -103,10 +115,18 @@ export function AddProductDialog({
       setWidthMm(product.width_mm.toString());
     }
 
-    // Fetch price from product_prices based on section range
+    // Fetch price from product_prices based on section range (and override if set)
+    await refetchPrice(productId, overrideRangeId);
+  };
+
+  // Refetch price when override changes
+  const refetchPrice = async (productId: string, overrideId: string | null) => {
+    const product = products?.find(p => p.id === productId);
+    if (!product) return;
+
     setIsLoadingPrice(true);
     try {
-      const priceResult = await fetchProductPrice(productId, sectionRangeId || null);
+      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId);
       if (priceResult.price != null) {
         setUnitPrice(priceResult.price.toString());
         setPriceSource(priceResult.source);
@@ -116,7 +136,6 @@ export function AddProductDialog({
       }
     } catch (error) {
       console.error("Error fetching price:", error);
-      // Fallback to base_price
       if (product.base_price) {
         setUnitPrice(product.base_price.toString());
         setPriceSource("base_price");
@@ -126,11 +145,19 @@ export function AddProductDialog({
     }
   };
 
+  const handleOverrideChange = (value: string) => {
+    const newOverrideId = value === "none" ? null : value;
+    setOverrideRangeId(newOverrideId);
+    if (selectedProductId) {
+      refetchPrice(selectedProductId, newOverrideId);
+    }
+  };
+
   const handleSubmitProduct = async () => {
     if (!selectedProduct) return;
 
     try {
-      await createLine.mutateAsync({
+      const lineData: any = {
         quote_id: quoteId,
         section_id: sectionId,
         product_id: selectedProduct.id,
@@ -144,7 +171,14 @@ export function AddProductDialog({
         height_mm: heightMm ? parseInt(heightMm) : null,
         width_mm: widthMm ? parseInt(widthMm) : null,
         extra_description: extraDescription.trim() || null,
-      });
+      };
+
+      // Add override if set
+      if (overrideRangeId) {
+        lineData.range_override_id = overrideRangeId;
+      }
+
+      await createLine.mutateAsync(lineData);
 
       toast({
         title: "Product toegevoegd",
@@ -262,6 +296,7 @@ export function AddProductDialog({
     setWidthMm("");
     setExtraDescription("");
     setPriceSource(null);
+    setOverrideRangeId(null);
     setFreeDescription("");
     setFreeArticleCode("");
     setFreePrice("");
@@ -359,11 +394,32 @@ export function AddProductDialog({
 
             {selectedProduct && (
               <>
+                {/* Override prijsgroep dropdown */}
+                <div className="space-y-2">
+                  <Label>Override prijsgroep (optioneel)</Label>
+                  <Select
+                    value={overrideRangeId || "none"}
+                    onValueChange={handleOverrideChange}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Sectie-default gebruiken" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Geen override (sectie-default)</SelectItem>
+                      {ranges?.map((range) => (
+                        <SelectItem key={range.id} value={range.id}>
+                          {range.code} - {range.name || range.collection || ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Price indicator */}
                 {priceSource && (
                   <div className="flex items-center gap-2">
-                    <Badge variant={priceSource === "range_price" ? "default" : "secondary"}>
-                      {priceSource === "range_price" ? "Prijsgroep prijs" : "Basisprijs"}
+                    <Badge variant={priceSource === "override_price" ? "destructive" : priceSource === "range_price" ? "default" : "secondary"}>
+                      {priceSource === "override_price" ? "Override prijs" : priceSource === "range_price" ? "Prijsgroep prijs" : "Basisprijs"}
                     </Badge>
                     {isLoadingPrice && <Loader2 className="h-3 w-3 animate-spin" />}
                   </div>
