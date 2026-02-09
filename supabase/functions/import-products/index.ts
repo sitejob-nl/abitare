@@ -50,8 +50,17 @@ interface ImportRequest {
   }
 }
 
+// Mapping of Stosa variant codes to price group codes
+const VARIANT_TO_PRICE_GROUP: Record<string, string> = {
+  '701': 'E1', '702': 'E2', '703': 'E3', '704': 'E4', '705': 'E5',
+  '706': 'E6', '707': 'E7', '708': 'E8', '709': 'E9', '710': 'E10',
+  '731': 'A', '732': 'B', '733': 'C',
+  // Also map 4xx variants (older format)
+  '401': 'E1', '402': 'E2', '403': 'E3', '404': 'E4', '405': 'E5',
+  '406': 'E6', '407': 'E7', '408': 'E8', '409': 'E9', '410': 'E10',
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -59,10 +68,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get authorization header for user validation
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
@@ -71,7 +78,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Verify user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     )
@@ -93,7 +99,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Handle price groups import mode
     if (import_mode === 'price_groups' && body.price_group_data) {
       return handlePriceGroupImport(supabase, supplier_id, category_id, body.price_group_data)
     }
@@ -107,7 +112,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Prepare products for upsert
     const productsToUpsert = products.map(p => ({
       article_code: p.article_code?.trim(),
       name: p.name?.trim() || p.article_code?.trim(),
@@ -121,34 +125,25 @@ Deno.serve(async (req) => {
       is_active: p.is_active ?? true,
     })).filter(p => p.article_code && p.article_code.length > 0)
 
-    // Use bulk upsert with onConflict for speed (500 per batch for large imports)
     const chunkSize = 500
     let inserted = 0
     let updated = 0
     const errors: string[] = []
 
-    // First, get all existing article codes for this supplier in one query
     const { data: allExisting } = await supabase
       .from('products')
       .select('article_code')
       .eq('supplier_id', supplier_id)
     
     const existingCodes = new Set(allExisting?.map(e => e.article_code) || [])
-    
-    // Count what will be inserted vs updated
     const newProducts = productsToUpsert.filter(p => !existingCodes.has(p.article_code))
     const existingProducts = productsToUpsert.filter(p => existingCodes.has(p.article_code))
 
-    // Bulk upsert in larger chunks
     for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
       const chunk = productsToUpsert.slice(i, i + chunkSize)
-      
-      const { error: upsertError, data: upsertedData } = await supabase
+      const { error: upsertError } = await supabase
         .from('products')
-        .upsert(chunk, {
-          onConflict: 'supplier_id,article_code',
-          ignoreDuplicates: false,
-        })
+        .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
         .select('id')
       
       if (upsertError) {
@@ -160,13 +155,7 @@ Deno.serve(async (req) => {
     updated = existingProducts.length
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        inserted,
-        updated,
-        total: inserted + updated,
-        errors: errors.length > 0 ? errors : undefined,
-      }),
+      JSON.stringify({ success: true, inserted, updated, total: inserted + updated, errors: errors.length > 0 ? errors : undefined }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
@@ -191,13 +180,13 @@ async function handlePriceGroupImport(
   let productsUpdated = 0
   let rangesCreated = 0
   let pricesInserted = 0
+  let priceGroupsLinked = 0
 
   try {
     // Step 1: Bulk upsert product ranges
     console.log(`Processing ${data.ranges.length} ranges...`)
-    const rangeMap = new Map<string, string>() // code -> id
+    const rangeMap = new Map<string, string>()
     
-    // Get existing ranges in one query
     const { data: existingRanges } = await supabase
       .from('product_ranges')
       .select('id, code')
@@ -205,16 +194,13 @@ async function handlePriceGroupImport(
     
     const existingRangeMap = new Map<string, string>((existingRanges || []).map((r: any) => [r.code, r.id]))
     
-    // Separate into new and existing
     const newRanges = data.ranges.filter(r => !existingRangeMap.has(r.code))
     const existingRangeCodes = data.ranges.filter(r => existingRangeMap.has(r.code))
     
-    // Set existing range IDs
     existingRangeCodes.forEach(r => {
       rangeMap.set(r.code, existingRangeMap.get(r.code)!)
     })
     
-    // Bulk insert new ranges with type
     if (newRanges.length > 0) {
       const rangesToInsert = newRanges.map(r => ({
         code: r.code,
@@ -237,12 +223,21 @@ async function handlePriceGroupImport(
       }
     }
 
-    // Step 2: Bulk upsert products (500 per batch for 15k+ products)
+    // Step 1b: Fetch existing price_groups for this supplier to link variant codes
+    const { data: existingPriceGroups } = await supabase
+      .from('price_groups')
+      .select('id, code')
+      .eq('supplier_id', supplierId)
+    
+    const priceGroupMap = new Map<string, string>(
+      (existingPriceGroups || []).map((pg: any) => [pg.code, pg.id])
+    )
+
+    // Step 2: Bulk upsert products
     console.log(`Processing ${data.products.length} products...`)
-    const productMap = new Map<string, string>() // article_code -> id
+    const productMap = new Map<string, string>()
     const chunkSize = 500
 
-    // Get all existing products for this supplier in one query
     const { data: allExistingProducts } = await supabase
       .from('products')
       .select('id, article_code')
@@ -250,7 +245,6 @@ async function handlePriceGroupImport(
     
     const existingProductMap = new Map((allExistingProducts || []).map((e: any) => [e.article_code, e.id]))
     
-    // Prepare all products for upsert with new fields
     const allProductsToUpsert = data.products.map(p => ({
       article_code: p.article_code,
       name: p.name,
@@ -266,20 +260,14 @@ async function handlePriceGroupImport(
       is_active: true,
     }))
     
-    // Count new vs existing
     const newProductCount = data.products.filter(p => !existingProductMap.has(p.article_code)).length
     const existingProductCount = data.products.filter(p => existingProductMap.has(p.article_code)).length
 
-    // Bulk upsert in chunks
     for (let i = 0; i < allProductsToUpsert.length; i += chunkSize) {
       const chunk = allProductsToUpsert.slice(i, i + chunkSize)
-      
       const { data: upsertedProducts, error: upsertError } = await supabase
         .from('products')
-        .upsert(chunk, {
-          onConflict: 'supplier_id,article_code',
-          ignoreDuplicates: false,
-        })
+        .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
         .select('id, article_code')
       
       if (upsertError) {
@@ -292,13 +280,12 @@ async function handlePriceGroupImport(
     productsInserted = newProductCount
     productsUpdated = existingProductCount
 
-    // Step 3: Delete existing prices for this supplier's products and ranges
+    // Step 3: Delete existing prices for cleanup
     console.log('Cleaning up existing prices...')
     const rangeIds = Array.from(rangeMap.values())
     const productIds = Array.from(productMap.values())
     
     if (rangeIds.length > 0 && productIds.length > 0) {
-      // Delete in batches of 1000 for large datasets
       for (let i = 0; i < productIds.length; i += 1000) {
         const productChunk = productIds.slice(i, i + 1000)
         await supabase
@@ -309,7 +296,7 @@ async function handlePriceGroupImport(
       }
     }
 
-    // Step 4: Bulk insert prices in larger batches (1000 per batch)
+    // Step 4: Bulk insert prices
     console.log(`Processing ${data.prices.length} prices...`)
     const validPrices = data.prices.filter(p => 
       productMap.has(p.article_code) && 
@@ -341,7 +328,28 @@ async function handlePriceGroupImport(
       }
     }
 
-    console.log(`Import complete: ${productsInserted} inserted, ${productsUpdated} updated, ${rangesCreated} ranges, ${pricesInserted} prices`)
+    // Step 5: Link ranges to price_groups via variant code mapping
+    // E.g. range code "701" or "401" → price_group "E1"
+    if (priceGroupMap.size > 0) {
+      console.log('Linking ranges to price groups...')
+      for (const [rangeCode, rangeId] of rangeMap.entries()) {
+        const pgCode = VARIANT_TO_PRICE_GROUP[rangeCode]
+        if (pgCode && priceGroupMap.has(pgCode)) {
+          // Update the range's available_price_groups
+          const { error: linkError } = await supabase
+            .from('product_ranges')
+            .update({ 
+              available_price_groups: [pgCode],
+              collection: 'evolution',
+            })
+            .eq('id', rangeId)
+          
+          if (!linkError) priceGroupsLinked++
+        }
+      }
+    }
+
+    console.log(`Import complete: ${productsInserted} inserted, ${productsUpdated} updated, ${rangesCreated} ranges, ${pricesInserted} prices, ${priceGroupsLinked} price groups linked`)
 
     return new Response(
       JSON.stringify({
@@ -350,6 +358,7 @@ async function handlePriceGroupImport(
         products_updated: productsUpdated,
         ranges_created: rangesCreated,
         prices_inserted: pricesInserted,
+        price_groups_linked: priceGroupsLinked,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
