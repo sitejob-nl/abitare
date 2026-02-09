@@ -181,6 +181,8 @@ async function handlePriceGroupImport(
   let rangesCreated = 0
   let pricesInserted = 0
   let priceGroupsLinked = 0
+  let priceBatchesFailed = 0
+  let priceBatchesSucceeded = 0
 
   try {
     // Step 1: Bulk upsert product ranges
@@ -361,11 +363,18 @@ async function handlePriceGroupImport(
         .select('id')
       
       if (priceError) {
+        console.error(`Price insert error batch ${Math.floor(i/priceChunkSize)}: ${priceError.message}`)
+        if (priceBatchesFailed === 0) {
+          console.error(`First failing price record sample:`, JSON.stringify(pricesToInsert[0]))
+        }
+        priceBatchesFailed++
         errors.push(`Price insert error batch ${Math.floor(i/priceChunkSize)}: ${priceError.message}`)
       } else {
+        priceBatchesSucceeded++
         pricesInserted += insertedPrices?.length || 0
       }
     }
+    console.log(`Price insert summary: ${priceBatchesSucceeded} batches succeeded, ${priceBatchesFailed} batches failed`)
 
     // Step 5: Link ranges to price_groups via variant code mapping
     // E.g. range code "701" or "401" → price_group "E1"
