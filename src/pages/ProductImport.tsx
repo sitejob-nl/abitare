@@ -132,6 +132,8 @@ export default function ProductImport() {
 
     // Artikelcode patronen - specifiek naar generiek
     const articlePatterns = [
+      'codice gestionale',    // Stosa exact - moet VOOR generieke 'codice' patterns
+
       'codice gestionale',    // Stosa exact
       'codice listino',       // Stosa alternatief
       'artikel',              // NL
@@ -322,6 +324,10 @@ export default function ProductImport() {
       }
     });
 
+    // Debug logging
+    console.log('[Import AutoDetect] Column mapping result:', JSON.stringify(mapping, null, 2));
+    console.log('[Import AutoDetect] Available columns:', columns);
+    
     return mapping;
   };
 
@@ -358,13 +364,14 @@ export default function ProductImport() {
     return Array.from(rangeMap.values()).sort((a, b) => b.count - a.count);
   }, [fileData, columnMapping.range_code, columnMapping.range_name, columnMapping.range_type, importMode]);
 
-  // Extract unique products for price_groups mode
+  // Extract unique products for price_groups mode, including base_price from rows without variant
   const extractedProducts = useMemo(() => {
     if (importMode !== 'price_groups' || !columnMapping.article_code) return [];
     
     const productMap = new Map<string, { 
       article_code: string; 
       name: string; 
+      base_price?: number;
       width_mm?: number;
       height_mm?: number;
       depth_mm?: number;
@@ -374,20 +381,40 @@ export default function ProductImport() {
     
     fileData.forEach(row => {
       const code = row[columnMapping.article_code]?.toString().trim();
-      if (code && !productMap.has(code)) {
+      if (!code) return;
+      
+      const rangeCode = columnMapping.range_code ? row[columnMapping.range_code]?.toString().trim() : '';
+      
+      if (!productMap.has(code)) {
+        // First occurrence: set product data
+        const basePrice = (!rangeCode && columnMapping.base_price) 
+          ? parsePrice(row[columnMapping.base_price]) 
+          : undefined;
+        
         productMap.set(code, {
           article_code: code,
           name: columnMapping.name ? row[columnMapping.name]?.toString().trim() || code : code,
+          base_price: basePrice,
           width_mm: columnMapping.dimension_1 ? parsePrice(row[columnMapping.dimension_1]) : undefined,
           height_mm: columnMapping.dimension_2 ? parsePrice(row[columnMapping.dimension_2]) : undefined,
           depth_mm: columnMapping.dimension_3 ? parsePrice(row[columnMapping.dimension_3]) : undefined,
           discount_group: columnMapping.discount_group ? row[columnMapping.discount_group]?.toString().trim() : undefined,
           catalog_code: columnMapping.catalog_code ? row[columnMapping.catalog_code]?.toString().trim() : undefined,
         });
+      } else if (!rangeCode && columnMapping.base_price && !productMap.get(code)!.base_price) {
+        // Update base_price from a row without variant (if not already set)
+        const basePrice = parsePrice(row[columnMapping.base_price]);
+        if (basePrice) {
+          productMap.get(code)!.base_price = basePrice;
+        }
       }
     });
     
-    return Array.from(productMap.values());
+    const products = Array.from(productMap.values());
+    const withBasePrice = products.filter(p => p.base_price);
+    console.log(`[Import Debug] extractedProducts: ${products.length} unique, ${withBasePrice.length} with base_price`);
+    
+    return products;
   }, [fileData, columnMapping, importMode]);
 
   // Extract prices per product-range for price_groups mode
@@ -406,6 +433,7 @@ export default function ProductImport() {
       };
     });
     
+    // Filter: must have article_code, range_code (non-empty = variant row), and valid price
     const filtered = allPrices.filter(p => p.article_code && p.range_code && p.price > 0);
     
     // Debug logging for price extraction
