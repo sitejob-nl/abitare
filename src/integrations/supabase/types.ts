@@ -1490,6 +1490,7 @@ export type Database = {
       quote_lines: {
         Row: {
           article_code: string | null
+          color_override: string | null
           configuration: Json | null
           created_at: string | null
           description: string
@@ -1504,6 +1505,7 @@ export type Database = {
           product_id: string | null
           quantity: number | null
           quote_id: string | null
+          range_override_id: string | null
           section_id: string | null
           sort_order: number | null
           sub_line_number: string | null
@@ -1514,6 +1516,7 @@ export type Database = {
         }
         Insert: {
           article_code?: string | null
+          color_override?: string | null
           configuration?: Json | null
           created_at?: string | null
           description: string
@@ -1528,6 +1531,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           quote_id?: string | null
+          range_override_id?: string | null
           section_id?: string | null
           sort_order?: number | null
           sub_line_number?: string | null
@@ -1538,6 +1542,7 @@ export type Database = {
         }
         Update: {
           article_code?: string | null
+          color_override?: string | null
           configuration?: Json | null
           created_at?: string | null
           description?: string
@@ -1552,6 +1557,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           quote_id?: string | null
+          range_override_id?: string | null
           section_id?: string | null
           sort_order?: number | null
           sub_line_number?: string | null
@@ -1580,6 +1586,13 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_lines_range_override_id_fkey"
+            columns: ["range_override_id"]
+            isOneToOne: false
+            referencedRelation: "product_ranges"
             referencedColumns: ["id"]
           },
           {

@@ -140,7 +140,11 @@ export function useConvertQuoteToOrder() {
             discount_percentage: line.discount_percentage,
             vat_rate: line.vat_rate,
             line_total: line.line_total,
-            configuration: line.configuration,
+            configuration: {
+              ...(typeof line.configuration === 'object' && line.configuration !== null ? line.configuration : {}),
+              range_override_id: line.range_override_id || null,
+              color_override: line.color_override || null,
+            },
             section_type: line._section?.section_type || null,
             section_id: orderSectionId,
             group_title: line.group_title || line._section?.title || null,

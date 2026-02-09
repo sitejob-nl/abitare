@@ -114,40 +114,48 @@ export function useProductPrice(productId: string | null | undefined, rangeId: s
  */
 export async function fetchProductPrice(
   productId: string,
-  rangeId: string | null
-): Promise<{ price: number | null; source: "range_price" | "base_price" }> {
-  if (!rangeId) {
-    const { data: product, error } = await supabase
-      .from("products")
-      .select("base_price")
-      .eq("id", productId)
-      .single();
+  rangeId: string | null,
+  overrideRangeId?: string | null
+): Promise<{ price: number | null; source: "override_price" | "range_price" | "base_price" }> {
+  // 1. Try override range first
+  if (overrideRangeId) {
+    const { data: overridePrice, error: overrideError } = await supabase
+      .from("product_prices")
+      .select("price")
+      .eq("product_id", productId)
+      .eq("range_id", overrideRangeId)
+      .maybeSingle();
 
-    if (error) throw error;
-    return {
-      price: product?.base_price ?? null,
-      source: "base_price",
-    };
+    if (overrideError) throw overrideError;
+
+    if (overridePrice?.price != null) {
+      return {
+        price: overridePrice.price,
+        source: "override_price",
+      };
+    }
   }
 
-  // Try range-specific price first
-  const { data: rangePrice, error: rangePriceError } = await supabase
-    .from("product_prices")
-    .select("price")
-    .eq("product_id", productId)
-    .eq("range_id", rangeId)
-    .maybeSingle();
+  // 2. Try section default range
+  if (rangeId) {
+    const { data: rangePrice, error: rangePriceError } = await supabase
+      .from("product_prices")
+      .select("price")
+      .eq("product_id", productId)
+      .eq("range_id", rangeId)
+      .maybeSingle();
 
-  if (rangePriceError) throw rangePriceError;
+    if (rangePriceError) throw rangePriceError;
 
-  if (rangePrice?.price != null) {
-    return {
-      price: rangePrice.price,
-      source: "range_price",
-    };
+    if (rangePrice?.price != null) {
+      return {
+        price: rangePrice.price,
+        source: "range_price",
+      };
+    }
   }
 
-  // Fall back to base price
+  // 3. Fall back to base price
   const { data: product, error: productError } = await supabase
     .from("products")
     .select("base_price")

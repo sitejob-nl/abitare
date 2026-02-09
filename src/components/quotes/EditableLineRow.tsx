@@ -1,9 +1,24 @@
 import { useState, useRef, useEffect } from "react";
-import { Trash2, GripVertical, Check, X } from "lucide-react";
+import { Trash2, GripVertical, Check, X, Palette } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
+import { fetchProductPrice } from "@/hooks/useProductPrices";
+import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -13,6 +28,7 @@ interface EditableLineRowProps {
   quoteId: string;
   lineNumber?: number;
   subLines?: QuoteLine[];
+  sectionRangeId?: string | null;
 }
 
 function formatCurrency(value: number | null): string {
@@ -34,7 +50,7 @@ function parseDimension(value: string): number | null {
   return num * 10; // Convert cm to mm
 }
 
-export function EditableLineRow({ line, quoteId, lineNumber, subLines = [] }: EditableLineRowProps) {
+export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId }: EditableLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
   
@@ -47,6 +63,12 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [] }: Ed
   const [heightMm, setHeightMm] = useState(formatDimension(line.height_mm));
   const [widthMm, setWidthMm] = useState(formatDimension(line.width_mm));
   const [articleCode, setArticleCode] = useState(line.article_code || "");
+  const [showOverridePopover, setShowOverridePopover] = useState(false);
+
+  // Override range data
+  const overrideRangeId = (line as any).range_override_id as string | null;
+  const { data: overrideRange } = useProductRange(overrideRangeId);
+  const { data: ranges } = useProductRanges();
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +166,26 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [] }: Ed
   const handleDelete = () => {
     if (confirm("Weet je zeker dat je deze regel wilt verwijderen?")) {
       deleteLine.mutate({ id: line.id, quoteId });
+    }
+  };
+
+  const handleOverrideChange = async (value: string) => {
+    const newOverrideId = value === "none" ? null : value;
+    setShowOverridePopover(false);
+
+    // Update the override in DB
+    updateLine.mutate({ id: line.id, quoteId, range_override_id: newOverrideId } as any);
+
+    // Refetch the price if there's a product
+    if (line.product_id) {
+      try {
+        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId);
+        if (priceResult.price != null) {
+          updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, range_override_id: newOverrideId } as any);
+        }
+      } catch (error) {
+        console.error("Error fetching override price:", error);
+      }
     }
   };
 
@@ -301,15 +343,61 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [] }: Ed
               </div>
             </div>
           ) : (
-            <div 
-              className="space-y-0.5 cursor-pointer hover:bg-accent/30 px-1 py-0.5 rounded transition-colors"
-              onClick={() => setEditingField("description")}
-            >
-              <span className="line-clamp-1 text-sm">{line.description}</span>
-              {line.extra_description && (
-                <span className="block text-xs text-muted-foreground line-clamp-1">
-                  {line.extra_description}
-                </span>
+            <div className="space-y-0.5">
+              <div
+                className="cursor-pointer hover:bg-accent/30 px-1 py-0.5 rounded transition-colors"
+                onClick={() => setEditingField("description")}
+              >
+                <span className="line-clamp-1 text-sm">{line.description}</span>
+                {line.extra_description && (
+                  <span className="block text-xs text-muted-foreground line-clamp-1">
+                    {line.extra_description}
+                  </span>
+                )}
+              </div>
+              {/* Override badge */}
+              {line.product_id && (
+                <Popover open={showOverridePopover} onOpenChange={setShowOverridePopover}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="inline-flex items-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {overrideRangeId ? (
+                        <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100">
+                          <Palette className="h-3 w-3" />
+                          Override: {overrideRange?.code || "..."}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer opacity-0 group-hover:opacity-60 hover:!opacity-100">
+                          <Palette className="h-3 w-3" />
+                          Prijsgroep
+                        </Badge>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="start" onClick={(e) => e.stopPropagation()}>
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium">Override prijsgroep</p>
+                      <Select
+                        value={overrideRangeId || "none"}
+                        onValueChange={handleOverrideChange}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Geen override</SelectItem>
+                          {ranges?.map((range) => (
+                            <SelectItem key={range.id} value={range.id}>
+                              {range.code} - {range.name || range.collection || ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
           )}
