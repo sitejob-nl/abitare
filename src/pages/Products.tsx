@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useProducts, useProductCategories, useSuppliers } from "@/hooks/useProducts";
 
 function formatCurrency(value: number | null): string {
@@ -25,6 +26,7 @@ const Products = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const navigate = useNavigate();
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -144,6 +146,7 @@ const Products = () => {
                     <tr
                       key={product.id}
                       className="cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30"
+                      onClick={() => navigate(`/products/${product.id}`)}
                     >
                       <td className="px-5 py-4">
                         <span className="font-mono text-sm text-foreground">
@@ -184,6 +187,7 @@ const Products = () => {
                 <div
                   key={product.id}
                   className="p-4 rounded-xl border border-border bg-card cursor-pointer transition-colors hover:bg-muted/30 active:bg-muted/50"
+                  onClick={() => navigate(`/products/${product.id}`)}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
