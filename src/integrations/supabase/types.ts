@@ -2136,6 +2136,7 @@ export type Database = {
           division_id: string | null
           id: string
           order_id: string | null
+          planned_date: string | null
           priority: Database["public"]["Enums"]["service_ticket_priority"]
           quote_id: string | null
           resolved_at: string | null
@@ -2156,6 +2157,7 @@ export type Database = {
           division_id?: string | null
           id?: string
           order_id?: string | null
+          planned_date?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
           quote_id?: string | null
           resolved_at?: string | null
@@ -2176,6 +2178,7 @@ export type Database = {
           division_id?: string | null
           id?: string
           order_id?: string | null
+          planned_date?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
           quote_id?: string | null
           resolved_at?: string | null
