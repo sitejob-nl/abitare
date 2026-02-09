@@ -22,6 +22,7 @@ interface ImportResult {
 interface PriceGroupProduct {
   article_code: string;
   name: string;
+  base_price?: number;
   width_mm?: number;
   height_mm?: number;
   depth_mm?: number;

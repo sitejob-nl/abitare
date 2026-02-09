@@ -17,6 +17,7 @@ interface ProductImportRow {
 interface PriceGroupProduct {
   article_code: string
   name: string
+  base_price?: number
   width_mm?: number
   height_mm?: number
   depth_mm?: number
@@ -242,6 +243,7 @@ async function handlePriceGroupImport(
     const allProductsToUpsert = data.products.map(p => ({
       article_code: p.article_code,
       name: p.name,
+      base_price: p.base_price || null,
       supplier_id: supplierId,
       category_id: categoryId || null,
       width_mm: p.width_mm ? Math.round(p.width_mm) : null,
@@ -298,20 +300,23 @@ async function handlePriceGroupImport(
     const sampleCodes = Array.from(productMap.keys()).filter(c => c.startsWith('200')).slice(0, 5)
     if (sampleCodes.length > 0) console.log(`Sample 200xx codes in productMap: ${sampleCodes.join(', ')}`)
 
-    // Step 3: Delete existing prices for cleanup
-    console.log('Cleaning up existing prices...')
-    const rangeIds = Array.from(rangeMap.values())
+    // Step 3: Delete ALL existing prices for this supplier's products (broader cleanup)
+    console.log('Cleaning up existing prices for all supplier products...')
     const productIds = Array.from(productMap.values())
     
-    if (rangeIds.length > 0 && productIds.length > 0) {
+    if (productIds.length > 0) {
       for (let i = 0; i < productIds.length; i += 1000) {
         const productChunk = productIds.slice(i, i + 1000)
-        await supabase
+        const { error: deleteError } = await supabase
           .from('product_prices')
           .delete()
           .in('product_id', productChunk)
-          .in('range_id', rangeIds)
+        
+        if (deleteError) {
+          console.error(`Price cleanup error batch ${Math.floor(i/1000)}: ${deleteError.message}`)
+        }
       }
+      console.log(`Cleaned up prices for ${productIds.length} products`)
     }
 
     // Step 4: Bulk insert prices
