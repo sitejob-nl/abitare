@@ -235,16 +235,8 @@ async function handlePriceGroupImport(
 
     // Step 2: Bulk upsert products
     console.log(`Processing ${data.products.length} products...`)
-    const productMap = new Map<string, string>()
     const chunkSize = 500
 
-    const { data: allExistingProducts } = await supabase
-      .from('products')
-      .select('id, article_code')
-      .eq('supplier_id', supplierId)
-    
-    const existingProductMap = new Map((allExistingProducts || []).map((e: any) => [e.article_code, e.id]))
-    
     const allProductsToUpsert = data.products.map(p => ({
       article_code: p.article_code,
       name: p.name,
@@ -259,37 +251,43 @@ async function handlePriceGroupImport(
       unit: 'stuk',
       is_active: true,
     }))
-    
-    const newProductCount = data.products.filter(p => !existingProductMap.has(p.article_code)).length
-    const existingProductCount = data.products.filter(p => existingProductMap.has(p.article_code)).length
 
     for (let i = 0; i < allProductsToUpsert.length; i += chunkSize) {
       const chunk = allProductsToUpsert.slice(i, i + chunkSize)
-      const { data: upsertedProducts, error: upsertError } = await supabase
+      const { error: upsertError } = await supabase
         .from('products')
         .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
-        .select('id, article_code')
       
       if (upsertError) {
         errors.push(`Product upsert error batch ${Math.floor(i/chunkSize)}: ${upsertError.message}`)
-      } else if (upsertedProducts) {
-        upsertedProducts.forEach((p: any) => productMap.set(p.article_code, p.id))
       }
     }
-    
-    productsInserted = newProductCount
-    productsUpdated = existingProductCount
 
-    // CRITICAL FIX: Merge existingProductMap into productMap
-    // The upsert response may not return all rows (Supabase quirk),
-    // so we need to ensure ALL known product IDs are available for price matching
-    for (const [articleCode, productId] of existingProductMap.entries()) {
-      if (!productMap.has(articleCode)) {
-        productMap.set(articleCode, productId)
-      }
+    // CRITICAL FIX: Paginated re-fetch of ALL products for this supplier
+    // This bypasses both the 1000-row query limit and incomplete upsert responses
+    const productMap = new Map<string, string>()
+    let offset = 0
+    const pageSize = 1000
+    while (true) {
+      const { data: page } = await supabase
+        .from('products')
+        .select('id, article_code')
+        .eq('supplier_id', supplierId)
+        .range(offset, offset + pageSize - 1)
+      
+      if (!page || page.length === 0) break
+      page.forEach((p: any) => productMap.set(p.article_code, p.id))
+      offset += pageSize
+      if (page.length < pageSize) break
     }
     
-    console.log(`productMap size after merge: ${productMap.size} (upsert returned ${productMap.size - existingProductMap.size + newProductCount}, existing had ${existingProductMap.size})`)
+    productsInserted = data.products.length
+    productsUpdated = 0
+    
+    console.log(`productMap size after paginated fetch: ${productMap.size} (fetched ${offset > 0 ? offset - pageSize + (productMap.size % pageSize || pageSize) : 0} rows)`)
+    // Log sample to verify 200BA codes are present
+    const sampleCodes = Array.from(productMap.keys()).filter(c => c.startsWith('200')).slice(0, 5)
+    if (sampleCodes.length > 0) console.log(`Sample 200xx codes in productMap: ${sampleCodes.join(', ')}`)
 
     // Step 3: Delete existing prices for cleanup
     console.log('Cleaning up existing prices...')
