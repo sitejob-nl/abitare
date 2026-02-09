@@ -394,13 +394,33 @@ export default function ProductImport() {
   const extractedPrices = useMemo(() => {
     if (importMode !== 'price_groups' || !columnMapping.article_code || !columnMapping.range_code || !columnMapping.base_price) return [];
     
-    return fileData.map(row => ({
-      article_code: row[columnMapping.article_code]?.toString().trim() || '',
-      range_code: row[columnMapping.range_code]?.toString().trim() || '',
-      price: parsePrice(row[columnMapping.base_price]) || 0,
-      variant_2_code: columnMapping.range_code_2 ? row[columnMapping.range_code_2]?.toString().trim() : undefined,
-      variant_2_name: columnMapping.range_name_2 ? row[columnMapping.range_name_2]?.toString().trim() : undefined,
-    })).filter(p => p.article_code && p.range_code && p.price > 0);
+    const allPrices = fileData.map(row => {
+      const rawPrice = row[columnMapping.base_price];
+      const parsed = parsePrice(rawPrice);
+      return {
+        article_code: row[columnMapping.article_code]?.toString().trim() || '',
+        range_code: row[columnMapping.range_code]?.toString().trim() || '',
+        price: parsed || 0,
+        variant_2_code: columnMapping.range_code_2 ? row[columnMapping.range_code_2]?.toString().trim() : undefined,
+        variant_2_name: columnMapping.range_name_2 ? row[columnMapping.range_name_2]?.toString().trim() : undefined,
+      };
+    });
+    
+    const filtered = allPrices.filter(p => p.article_code && p.range_code && p.price > 0);
+    
+    // Debug logging for price extraction
+    const zeroPrices = allPrices.filter(p => p.article_code && p.range_code && p.price === 0);
+    if (zeroPrices.length > 0) {
+      console.log(`[Import Debug] ${filtered.length} valid prices, ${zeroPrices.length} filtered out (price=0).`);
+      console.log(`[Import Debug] Sample zero-price rows (raw values):`, 
+        fileData.slice(0, 5).map(row => ({ 
+          raw: row[columnMapping.base_price], 
+          parsed: parsePrice(row[columnMapping.base_price]) 
+        }))
+      );
+    }
+    
+    return filtered;
   }, [fileData, columnMapping, importMode]);
 
   // Preview data (first 10 rows)

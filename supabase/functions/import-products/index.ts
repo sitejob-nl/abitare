@@ -280,6 +280,17 @@ async function handlePriceGroupImport(
     productsInserted = newProductCount
     productsUpdated = existingProductCount
 
+    // CRITICAL FIX: Merge existingProductMap into productMap
+    // The upsert response may not return all rows (Supabase quirk),
+    // so we need to ensure ALL known product IDs are available for price matching
+    for (const [articleCode, productId] of existingProductMap.entries()) {
+      if (!productMap.has(articleCode)) {
+        productMap.set(articleCode, productId)
+      }
+    }
+    
+    console.log(`productMap size after merge: ${productMap.size} (upsert returned ${productMap.size - existingProductMap.size + newProductCount}, existing had ${existingProductMap.size})`)
+
     // Step 3: Delete existing prices for cleanup
     console.log('Cleaning up existing prices...')
     const rangeIds = Array.from(rangeMap.values())
@@ -298,11 +309,34 @@ async function handlePriceGroupImport(
 
     // Step 4: Bulk insert prices
     console.log(`Processing ${data.prices.length} prices...`)
+    
+    // Debug: log sample prices and match stats
+    if (data.prices.length > 0) {
+      console.log(`Sample prices (first 3):`, JSON.stringify(data.prices.slice(0, 3)))
+      console.log(`rangeMap size: ${rangeMap.size}, productMap size: ${productMap.size}`)
+      
+      let noProduct = 0, noRange = 0, noPrice = 0
+      const missingArticles = new Set<string>()
+      const missingRanges = new Set<string>()
+      
+      data.prices.forEach(p => {
+        if (!productMap.has(p.article_code)) { noProduct++; if (missingArticles.size < 5) missingArticles.add(p.article_code) }
+        if (!rangeMap.has(p.range_code)) { noRange++; if (missingRanges.size < 5) missingRanges.add(p.range_code) }
+        if (p.price <= 0) noPrice++
+      })
+      
+      console.log(`Price filter stats: ${noProduct} missing product, ${noRange} missing range, ${noPrice} zero/negative price`)
+      if (missingArticles.size > 0) console.log(`Sample missing articles: ${Array.from(missingArticles).join(', ')}`)
+      if (missingRanges.size > 0) console.log(`Sample missing ranges: ${Array.from(missingRanges).join(', ')}`)
+    }
+    
     const validPrices = data.prices.filter(p => 
       productMap.has(p.article_code) && 
       rangeMap.has(p.range_code) && 
       p.price > 0
     )
+    
+    console.log(`Valid prices after filtering: ${validPrices.length} of ${data.prices.length}`)
 
     const priceChunkSize = 1000
     for (let i = 0; i < validPrices.length; i += priceChunkSize) {
