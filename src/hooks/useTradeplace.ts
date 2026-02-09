@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 interface TradeplaceConfig {
   configured: boolean;
   retailer_gln: string | null;
+  environment: string | null;
+  base_url: string | null;
   missing_secrets: string[];
   message: string;
 }
@@ -42,7 +44,7 @@ export function useTradeplaceConfig() {
       if (error) throw error;
       return data as TradeplaceConfig;
     },
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: false
   });
 }
@@ -91,7 +93,6 @@ export function usePlaceSupplierOrder() {
   });
 }
 
-// Hook to get suppliers with Tradeplace enabled
 export function useTradeplaceSuppliers() {
   return useQuery({
     queryKey: ["tradeplace-suppliers"],
@@ -108,7 +109,6 @@ export function useTradeplaceSuppliers() {
   });
 }
 
-// Hook to update supplier Tradeplace settings
 export function useUpdateSupplierTradeplace() {
   const queryClient = useQueryClient();
 
@@ -117,19 +117,22 @@ export function useUpdateSupplierTradeplace() {
       id,
       tradeplace_enabled,
       tradeplace_gln,
-      tradeplace_endpoint
+      tradeplace_endpoint,
+      tradeplace_tp_id
     }: {
       id: string;
       tradeplace_enabled: boolean;
       tradeplace_gln?: string | null;
       tradeplace_endpoint?: string | null;
+      tradeplace_tp_id?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("suppliers")
         .update({
           tradeplace_enabled,
           tradeplace_gln,
-          tradeplace_endpoint
+          tradeplace_endpoint,
+          tradeplace_tp_id
         })
         .eq("id", id)
         .select()

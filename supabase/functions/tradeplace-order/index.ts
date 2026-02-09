@@ -3,28 +3,36 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function getBaseUrl(): string {
+  const env = Deno.env.get("TRADEPLACE_ENVIRONMENT") || "test";
+  return env === "live"
+    ? "https://hub-api.tradeplace.com/hub"
+    : "https://qhub-api.tradeplace.com/hub";
+}
+
+function getAuthHeader(): string {
+  const username = Deno.env.get("TRADEPLACE_USERNAME")!;
+  const password = Deno.env.get("TRADEPLACE_PASSWORD")!;
+  return "Basic " + btoa(`${username}:${password}`);
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Check if secrets are configured
-    const apiKey = Deno.env.get("TRADEPLACE_API_KEY");
+    const username = Deno.env.get("TRADEPLACE_USERNAME");
+    const password = Deno.env.get("TRADEPLACE_PASSWORD");
     const retailerGln = Deno.env.get("TRADEPLACE_RETAILER_GLN");
 
-    if (!apiKey || !retailerGln) {
+    if (!username || !password || !retailerGln) {
       return new Response(JSON.stringify({
         error: "not_configured",
         message: "Tradeplace is nog niet geconfigureerd. Ga naar Instellingen > Koppelingen.",
-        missing: [
-          !apiKey && "TRADEPLACE_API_KEY",
-          !retailerGln && "TRADEPLACE_RETAILER_GLN"
-        ].filter(Boolean)
       }), {
         status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -43,7 +51,6 @@ serve(async (req) => {
       });
     }
 
-    // Get supplier order with lines and supplier details
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -89,21 +96,70 @@ serve(async (req) => {
       });
     }
 
-    // Build XML order request
+    const tpId = supplier.tradeplace_tp_id;
+    if (!tpId) {
+      return new Response(JSON.stringify({
+        error: "supplier_tp_id_missing",
+        message: `${supplier.name} heeft geen Tradeplace TP-ID. Configureer dit in leveranciersinstellingen.`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Build TradeXML 2.0 OrderPlacementRequest
     const xmlRequest = buildOrderRequest(
       retailerGln, 
       supplier.tradeplace_gln, 
       supplierOrder,
       supplierOrder.lines
     );
-    
-    console.log("Would send order XML:", xmlRequest);
 
-    // TODO: Send to Tradeplace API when documentation is available
-    // For now, simulate order placement
+    // Send to TMH2
+    const baseUrl = getBaseUrl();
+    const apiUrl = `${baseUrl}/api/messages/tp/${encodeURIComponent(tpId)}`;
 
-    // Generate mock external order ID
-    const externalOrderId = `TP-${new Date().getFullYear()}-${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`;
+    console.log(`Sending order to TMH2: ${apiUrl}`);
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": getAuthHeader(),
+        "Content-Type": "application/xml",
+      },
+      body: xmlRequest,
+    });
+
+    const responseText = await response.text();
+    console.log(`TMH2 order response status: ${response.status}`);
+
+    if (!response.ok) {
+      console.error("TMH2 order error:", responseText);
+
+      // Update order with error
+      await supabase
+        .from("supplier_orders")
+        .update({
+          xml_request: xmlRequest,
+          xml_response: responseText,
+          notes: `TMH2 fout (${response.status}): ${responseText.substring(0, 200)}`,
+        })
+        .eq("id", supplier_order_id);
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: "tmh2_error",
+        message: `TMH2 fout (${response.status}): bestelling niet geaccepteerd`,
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Parse external order ID from response if available
+    const externalIdMatch = responseText.match(/<OrderID>([^<]+)<\/OrderID>/i) 
+      || responseText.match(/<ExternalOrderID>([^<]+)<\/ExternalOrderID>/i);
+    const externalOrderId = externalIdMatch?.[1] || `TMH2-${Date.now()}`;
 
     // Update supplier order status
     const { error: updateError } = await supabase
@@ -113,10 +169,7 @@ serve(async (req) => {
         external_order_id: externalOrderId,
         sent_at: new Date().toISOString(),
         xml_request: xmlRequest,
-        xml_response: JSON.stringify({
-          note: "Demo modus - echte response na Tradeplace activatie",
-          simulated_order_id: externalOrderId
-        })
+        xml_response: responseText,
       })
       .eq("id", supplier_order_id);
 
@@ -133,8 +186,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       external_order_id: externalOrderId,
-      message: "Bestelling is geregistreerd (demo modus)",
-      note: "Live orderplaatsing wordt actief na ontvangst Tradeplace API documentatie"
+      message: "Bestelling is verzonden via TMH2",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
@@ -160,7 +212,7 @@ function buildOrderRequest(
   const messageId = crypto.randomUUID();
   const timestamp = new Date().toISOString();
   
-  const orderLines = lines.map((line, index) => `
+  const orderLines = lines.map((line: any, index: number) => `
     <OrderLine>
       <LineNumber>${index + 1}</LineNumber>
       <EAN>${escapeXml(line.ean_code || '')}</EAN>
@@ -169,7 +221,7 @@ function buildOrderRequest(
     </OrderLine>`).join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<OrderRequest xmlns="http://www.tradeplace.com/schema/pi">
+<OrderPlacementRequest xmlns="http://www.tradeplace.com/schema/pi">
   <Header>
     <MessageID>${messageId}</MessageID>
     <Timestamp>${timestamp}</Timestamp>
@@ -182,7 +234,7 @@ function buildOrderRequest(
     <OrderLines>${orderLines}
     </OrderLines>
   </Order>
-</OrderRequest>`;
+</OrderPlacementRequest>`;
 }
 
 function escapeXml(str: string): string {

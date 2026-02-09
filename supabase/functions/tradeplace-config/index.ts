@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -15,24 +13,32 @@ serve(async (req) => {
   try {
     const { action } = await req.json();
 
-    // Check if secrets are configured
-    const apiKey = Deno.env.get("TRADEPLACE_API_KEY");
+    const username = Deno.env.get("TRADEPLACE_USERNAME");
+    const password = Deno.env.get("TRADEPLACE_PASSWORD");
     const retailerGln = Deno.env.get("TRADEPLACE_RETAILER_GLN");
+    const environment = Deno.env.get("TRADEPLACE_ENVIRONMENT") || "test";
 
     const missing: string[] = [];
-    if (!apiKey) missing.push("TRADEPLACE_API_KEY");
+    if (!username) missing.push("TRADEPLACE_USERNAME");
+    if (!password) missing.push("TRADEPLACE_PASSWORD");
     if (!retailerGln) missing.push("TRADEPLACE_RETAILER_GLN");
 
     const configured = missing.length === 0;
+
+    const baseUrl = environment === "live"
+      ? "https://hub-api.tradeplace.com/hub"
+      : "https://qhub-api.tradeplace.com/hub";
 
     if (action === "check") {
       return new Response(JSON.stringify({
         configured,
         retailer_gln: configured ? retailerGln : null,
+        environment: configured ? environment : null,
+        base_url: configured ? baseUrl : null,
         missing_secrets: missing,
         message: configured 
-          ? "Tradeplace is geconfigureerd en actief" 
-          : "Configureer de Tradeplace secrets in Supabase Dashboard"
+          ? `Tradeplace TMH2 is geconfigureerd (${environment.toUpperCase()})` 
+          : "Configureer de TMH2 secrets via Lovable"
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -51,15 +57,46 @@ serve(async (req) => {
         });
       }
 
-      // TODO: When Tradeplace API details are known, implement actual connection test
-      // For now, return success if secrets are configured
-      return new Response(JSON.stringify({
-        success: true,
-        message: "Tradeplace configuratie is compleet. Verbindingstest wordt beschikbaar na ontvangst API documentatie.",
-        retailer_gln: retailerGln
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      // Test connection by making a simple request to TMH2
+      try {
+        const authHeader = "Basic " + btoa(`${username}:${password}`);
+        const testUrl = `${baseUrl}/api/status`;
+        
+        const response = await fetch(testUrl, {
+          method: "GET",
+          headers: {
+            "Authorization": authHeader,
+          },
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: "Authenticatie mislukt. Controleer username en password.",
+            environment,
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: `Verbinding met TMH2 ${environment.toUpperCase()} succesvol`,
+          environment,
+          retailer_gln: retailerGln,
+          base_url: baseUrl,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (fetchError) {
+        return new Response(JSON.stringify({
+          success: false,
+          message: `Kan TMH2 niet bereiken: ${fetchError instanceof Error ? fetchError.message : "Onbekende fout"}`,
+          environment,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
     }
 
     return new Response(JSON.stringify({

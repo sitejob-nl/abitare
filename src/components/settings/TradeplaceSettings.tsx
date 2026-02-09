@@ -2,6 +2,7 @@ import { useState } from "react";
 import { 
   AlertCircle, 
   CheckCircle2, 
+  Copy,
   ExternalLink, 
   Loader2, 
   RefreshCw,
@@ -17,13 +18,13 @@ import {
   useTradeplaceConfig, 
   useTestTradeplaceConnection,
   useTradeplaceSuppliers,
-  useUpdateSupplierTradeplace
 } from "@/hooks/useTradeplace";
 import { useToast } from "@/hooks/use-toast";
 import { SupplierTradeplaceDialog } from "@/components/suppliers/SupplierTradeplaceDialog";
 import type { Supplier } from "@/hooks/useSuppliers";
 
 const SUPABASE_PROJECT_ID = "lqfqxspaamzhtgxhvlib";
+const WEBHOOK_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/tradeplace-webhook`;
 
 export function TradeplaceSettings() {
   const { toast } = useToast();
@@ -52,6 +53,11 @@ export function TradeplaceSettings() {
     });
   };
 
+  const handleCopyWebhookUrl = () => {
+    navigator.clipboard.writeText(WEBHOOK_URL);
+    toast({ title: "Gekopieerd", description: "Webhook URL gekopieerd naar klembord" });
+  };
+
   const tradeplaceSuppliers = suppliers?.filter(s => 
     s.supplier_type === 'apparatuur' || s.tradeplace_enabled
   ) || [];
@@ -66,9 +72,9 @@ export function TradeplaceSettings() {
                 <Truck className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-lg">Tradeplace Direct Connection</CardTitle>
+                <CardTitle className="text-lg">Tradeplace TMH2</CardTitle>
                 <CardDescription>
-                  Real-time verbinding met apparatenfabrikanten
+                  Real-time B2B-koppeling met apparatenfabrikanten via TradeXML 2.0
                 </CardDescription>
               </div>
             </div>
@@ -80,7 +86,7 @@ export function TradeplaceSettings() {
             ) : config?.configured ? (
               <Badge variant="default" className="gap-1 bg-green-600">
                 <CheckCircle2 className="h-3 w-3" />
-                Actief
+                Actief ({config.environment?.toUpperCase()})
               </Badge>
             ) : (
               <Badge variant="secondary" className="gap-1">
@@ -95,35 +101,23 @@ export function TradeplaceSettings() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="ml-2">
-                <p className="font-medium">Tradeplace is nog niet geconfigureerd</p>
+                <p className="font-medium">Tradeplace TMH2 is nog niet geconfigureerd</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Om Tradeplace te activeren:
+                  Om Tradeplace TMH2 te activeren:
                 </p>
                 <ol className="mt-2 ml-4 list-decimal text-sm text-muted-foreground space-y-1">
-                  <li>Vraag een account aan via <a href="mailto:connect@tradeplace.com" className="text-primary hover:underline">connect@tradeplace.com</a></li>
-                  <li>Voeg de volgende secrets toe in Supabase Dashboard:
+                  <li>Vraag een TMH2 account aan via <a href="mailto:connect@tradeplace.com" className="text-primary hover:underline">connect@tradeplace.com</a></li>
+                  <li>Na goedkeuring ontvang je een username en password per e-mail</li>
+                  <li>Voeg de volgende secrets toe via Lovable (Instellingen):
                     <ul className="ml-4 mt-1 list-disc">
-                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_API_KEY</code></li>
-                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_RETAILER_GLN</code></li>
-                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_WEBHOOK_SECRET</code> (optioneel)</li>
+                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_USERNAME</code> — TMH2 login username</li>
+                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_PASSWORD</code> — TMH2 login password</li>
+                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_RETAILER_GLN</code> — Je eigen GLN-nummer</li>
+                      <li><code className="text-xs bg-muted px-1 py-0.5 rounded">TRADEPLACE_ENVIRONMENT</code> — <code className="text-xs bg-muted px-1 py-0.5 rounded">test</code> of <code className="text-xs bg-muted px-1 py-0.5 rounded">live</code></li>
                     </ul>
                   </li>
+                  <li>Configureer in TMH2 Admin de webhook URL (zie hieronder)</li>
                 </ol>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-3 gap-2"
-                  asChild
-                >
-                  <a 
-                    href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/settings/functions`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Open Supabase Secrets
-                  </a>
-                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -160,8 +154,31 @@ export function TradeplaceSettings() {
                   </Button>
                 </div>
               </div>
+
+              <div className="rounded-lg border p-3">
+                <p className="text-sm font-medium">Omgeving</p>
+                <p className="text-sm text-muted-foreground">
+                  {config.environment === 'live' ? '🟢 LIVE' : '🟡 TEST'} — {config.base_url}
+                </p>
+              </div>
             </div>
           )}
+
+          <Separator className="my-4" />
+
+          {/* Webhook URL section */}
+          <div>
+            <h4 className="text-sm font-medium mb-2">Webhook URL (voor TMH2 Admin)</h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              Voer deze URL in bij TMH2 Admin onder "Outbound &gt; Transport HTTP" om bevestigingen en verzendmeldingen te ontvangen.
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border p-2 bg-muted/50">
+              <code className="text-xs flex-1 break-all font-mono">{WEBHOOK_URL}</code>
+              <Button variant="ghost" size="sm" onClick={handleCopyWebhookUrl}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
 
           <Separator className="my-4" />
 
@@ -195,6 +212,7 @@ export function TradeplaceSettings() {
                           {supplier.tradeplace_gln 
                             ? `GLN: ${supplier.tradeplace_gln}` 
                             : 'GLN niet ingesteld'}
+                          {(supplier as any).tradeplace_tp_id && ` · TP-ID: ${(supplier as any).tradeplace_tp_id}`}
                         </p>
                       </div>
                     </div>
@@ -209,6 +227,22 @@ export function TradeplaceSettings() {
                 ))}
               </div>
             )}
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <a 
+                href="https://admin.tradeplace.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="gap-2"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                TMH2 Admin
+              </a>
+            </Button>
           </div>
         </CardContent>
       </Card>

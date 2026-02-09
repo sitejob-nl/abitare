@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface ProductRequest {
@@ -20,25 +20,33 @@ interface AvailabilityResult {
   message?: string;
 }
 
+function getBaseUrl(): string {
+  const env = Deno.env.get("TRADEPLACE_ENVIRONMENT") || "test";
+  return env === "live"
+    ? "https://hub-api.tradeplace.com/hub"
+    : "https://qhub-api.tradeplace.com/hub";
+}
+
+function getAuthHeader(): string {
+  const username = Deno.env.get("TRADEPLACE_USERNAME")!;
+  const password = Deno.env.get("TRADEPLACE_PASSWORD")!;
+  return "Basic " + btoa(`${username}:${password}`);
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Check if secrets are configured
-    const apiKey = Deno.env.get("TRADEPLACE_API_KEY");
+    const username = Deno.env.get("TRADEPLACE_USERNAME");
+    const password = Deno.env.get("TRADEPLACE_PASSWORD");
     const retailerGln = Deno.env.get("TRADEPLACE_RETAILER_GLN");
 
-    if (!apiKey || !retailerGln) {
+    if (!username || !password || !retailerGln) {
       return new Response(JSON.stringify({
         error: "not_configured",
         message: "Tradeplace is nog niet geconfigureerd. Ga naar Instellingen > Koppelingen.",
-        missing: [
-          !apiKey && "TRADEPLACE_API_KEY",
-          !retailerGln && "TRADEPLACE_RETAILER_GLN"
-        ].filter(Boolean)
       }), {
         status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -60,7 +68,6 @@ serve(async (req) => {
       });
     }
 
-    // Get supplier details
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -91,28 +98,57 @@ serve(async (req) => {
       });
     }
 
-    // TODO: Implement actual Tradeplace API call when documentation is available
-    // For now, return mock data to demonstrate the flow
-    
-    // Build XML request (for future implementation)
-    const xmlRequest = buildAvailabilityRequest(retailerGln, supplier.tradeplace_gln, products);
-    console.log("Would send XML request:", xmlRequest);
+    const tpId = supplier.tradeplace_tp_id;
+    if (!tpId) {
+      return new Response(JSON.stringify({
+        error: "supplier_tp_id_missing",
+        message: `${supplier.name} heeft geen Tradeplace TP-ID. Configureer dit in leveranciersinstellingen.`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
-    // Mock response - in production this would come from Tradeplace API
-    const results: AvailabilityResult[] = products.map(product => ({
-      ean_code: product.ean_code,
-      available: true,
-      quantity_available: null,
-      lead_time_days: null,
-      status: 'unknown' as const,
-      message: "Live beschikbaarheid wordt actief na ontvangst Tradeplace API documentatie"
-    }));
+    // Build TradeXML 2.0 ProductAvailabilityRequest
+    const xmlRequest = buildAvailabilityRequest(retailerGln, supplier.tradeplace_gln, products);
+
+    // Send to TMH2
+    const baseUrl = getBaseUrl();
+    const apiUrl = `${baseUrl}/api/messages/tp/${encodeURIComponent(tpId)}`;
+
+    console.log(`Sending availability request to: ${apiUrl}`);
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": getAuthHeader(),
+        "Content-Type": "application/xml",
+      },
+      body: xmlRequest,
+    });
+
+    const responseText = await response.text();
+    console.log(`TMH2 response status: ${response.status}`);
+
+    if (!response.ok) {
+      console.error("TMH2 error response:", responseText);
+      return new Response(JSON.stringify({
+        success: false,
+        error: "tmh2_error",
+        message: `TMH2 fout (${response.status}): ${responseText.substring(0, 200)}`,
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Parse XML response
+    const results = parseAvailabilityResponse(responseText, products);
 
     return new Response(JSON.stringify({
       success: true,
       supplier_name: supplier.name,
       results,
-      note: "Demo modus - live data beschikbaar na Tradeplace account activatie"
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
@@ -156,6 +192,50 @@ function buildAvailabilityRequest(
 </ProductAvailabilityRequest>`;
 }
 
+function parseAvailabilityResponse(xml: string, products: ProductRequest[]): AvailabilityResult[] {
+  // Parse the XML response from TMH2
+  // TradeXML responses contain <ProductAvailabilityReply> with product availability info
+  return products.map(product => {
+    // Try to find availability info for this EAN in the XML
+    const eanPattern = new RegExp(`<EAN>${escapeRegex(product.ean_code)}</EAN>[\\s\\S]*?<\\/Product>`, 'i');
+    const match = xml.match(eanPattern);
+
+    if (!match) {
+      return {
+        ean_code: product.ean_code,
+        available: false,
+        quantity_available: null,
+        lead_time_days: null,
+        status: 'unknown' as const,
+        message: "Geen beschikbaarheidsinformatie ontvangen",
+      };
+    }
+
+    const block = match[0];
+    const qtyMatch = block.match(/<AvailableQuantity>(\d+)<\/AvailableQuantity>/i);
+    const leadTimeMatch = block.match(/<LeadTimeDays>(\d+)<\/LeadTimeDays>/i);
+    const statusMatch = block.match(/<AvailabilityStatus>([^<]+)<\/AvailabilityStatus>/i);
+
+    const qtyAvailable = qtyMatch ? parseInt(qtyMatch[1]) : null;
+    const leadTime = leadTimeMatch ? parseInt(leadTimeMatch[1]) : null;
+    const rawStatus = statusMatch?.[1]?.toLowerCase() || '';
+
+    let status: AvailabilityResult['status'] = 'unknown';
+    if (rawStatus.includes('in_stock') || rawStatus.includes('available')) status = 'in_stock';
+    else if (rawStatus.includes('limited')) status = 'limited';
+    else if (rawStatus.includes('out_of_stock') || rawStatus.includes('unavailable')) status = 'out_of_stock';
+    else if (rawStatus.includes('backorder')) status = 'backorder';
+
+    return {
+      ean_code: product.ean_code,
+      available: status === 'in_stock' || status === 'limited' || (qtyAvailable !== null && qtyAvailable > 0),
+      quantity_available: qtyAvailable,
+      lead_time_days: leadTime,
+      status,
+    };
+  });
+}
+
 function escapeXml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -163,4 +243,8 @@ function escapeXml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

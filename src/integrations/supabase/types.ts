@@ -2634,6 +2634,7 @@ export type Database = {
           tradeplace_enabled: boolean | null
           tradeplace_endpoint: string | null
           tradeplace_gln: string | null
+          tradeplace_tp_id: string | null
         }
         Insert: {
           code: string
@@ -2651,6 +2652,7 @@ export type Database = {
           tradeplace_enabled?: boolean | null
           tradeplace_endpoint?: string | null
           tradeplace_gln?: string | null
+          tradeplace_tp_id?: string | null
         }
         Update: {
           code?: string
@@ -2668,6 +2670,7 @@ export type Database = {
           tradeplace_enabled?: boolean | null
           tradeplace_endpoint?: string | null
           tradeplace_gln?: string | null
+          tradeplace_tp_id?: string | null
         }
         Relationships: []
       }

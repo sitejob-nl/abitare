@@ -28,6 +28,7 @@ import type { Supplier } from "@/hooks/useSuppliers";
 const formSchema = z.object({
   tradeplace_enabled: z.boolean(),
   tradeplace_gln: z.string().optional().nullable(),
+  tradeplace_tp_id: z.string().optional().nullable(),
   tradeplace_endpoint: z.string().url().optional().nullable().or(z.literal("")),
 });
 
@@ -52,6 +53,7 @@ export function SupplierTradeplaceDialog({
     defaultValues: {
       tradeplace_enabled: supplier.tradeplace_enabled ?? false,
       tradeplace_gln: supplier.tradeplace_gln ?? "",
+      tradeplace_tp_id: (supplier as any).tradeplace_tp_id ?? "",
       tradeplace_endpoint: supplier.tradeplace_endpoint ?? "",
     },
   });
@@ -62,6 +64,7 @@ export function SupplierTradeplaceDialog({
         id: supplier.id,
         tradeplace_enabled: values.tradeplace_enabled,
         tradeplace_gln: values.tradeplace_gln || null,
+        tradeplace_tp_id: values.tradeplace_tp_id || null,
         tradeplace_endpoint: values.tradeplace_endpoint || null,
       },
       {
@@ -87,9 +90,9 @@ export function SupplierTradeplaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{supplier.name} - Tradeplace</DialogTitle>
+          <DialogTitle>{supplier.name} - Tradeplace TMH2</DialogTitle>
           <DialogDescription>
-            Configureer de Tradeplace koppeling voor deze leverancier
+            Configureer de TMH2 koppeling voor deze fabrikant
           </DialogDescription>
         </DialogHeader>
 
@@ -103,7 +106,7 @@ export function SupplierTradeplaceDialog({
                   <div className="space-y-0.5">
                     <FormLabel>Tradeplace koppeling</FormLabel>
                     <FormDescription>
-                      Schakel in om bestellingen via Tradeplace te plaatsen
+                      Schakel in om bestellingen via TMH2 te plaatsen
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -138,13 +141,34 @@ export function SupplierTradeplaceDialog({
 
             <FormField
               control={form.control}
+              name="tradeplace_tp_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>TP-ID (Tradeplace ID)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="bijv. bsh@tradeplace.com"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Het Tradeplace ID van de fabrikant, te vinden in TMH2 Admin. 
+                    Dit wordt gebruikt in de API URL voor het routeren van berichten.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="tradeplace_endpoint"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>API Endpoint (optioneel)</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="https://api.tradeplace.com/..."
+                      placeholder="Standaard TMH2 endpoint wordt gebruikt"
                       {...field}
                       value={field.value ?? ""}
                     />
