@@ -20,6 +20,7 @@ import {
 import { useCreateQuoteSection, SECTION_TYPES, SectionType } from "@/hooks/useQuoteSections";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProductRanges } from "@/hooks/useProductRanges";
+import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { toast } from "@/hooks/use-toast";
 
 interface AddSectionDialogProps {
@@ -40,21 +41,40 @@ export function AddSectionDialog({
   const [title, setTitle] = useState("");
   const [supplierId, setSupplierId] = useState<string>("");
   const [rangeId, setRangeId] = useState<string>("");
+  const [priceGroupId, setPriceGroupId] = useState<string>("");
 
   const { data: suppliers } = useSuppliers();
   const { data: ranges } = useProductRanges(supplierId || undefined);
+  
+  // Check if selected supplier has price groups
+  const selectedSupplier = suppliers?.find(s => s.id === supplierId);
+  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
+  
+  const { data: priceGroups } = usePriceGroups(
+    hasPriceGroups ? supplierId : undefined
+  );
 
   const handleSupplierChange = (value: string) => {
     setSupplierId(value);
-    setRangeId(""); // Reset range when supplier changes
+    setRangeId("");
+    setPriceGroupId("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Get range name for default title
     const selectedRange = ranges?.find(r => r.id === rangeId);
-    const defaultTitle = selectedRange?.name || title.trim() || null;
+    const selectedPriceGroup = priceGroups?.find(pg => pg.id === priceGroupId);
+    
+    // Build default title from model + price group
+    let defaultTitle = title.trim() || null;
+    if (!defaultTitle) {
+      const parts: string[] = [];
+      if (selectedRange?.name) parts.push(selectedRange.name);
+      else if (selectedRange?.code) parts.push(selectedRange.code);
+      if (selectedPriceGroup) parts.push(selectedPriceGroup.code);
+      defaultTitle = parts.length > 0 ? parts.join(" - ") : null;
+    }
 
     try {
       await createSection.mutateAsync({
@@ -64,6 +84,7 @@ export function AddSectionDialog({
         sort_order: existingSectionsCount,
         subtotal: 0,
         range_id: rangeId || null,
+        price_group_id: priceGroupId || null,
       });
 
       toast({
@@ -76,6 +97,7 @@ export function AddSectionDialog({
       setTitle("");
       setSupplierId("");
       setRangeId("");
+      setPriceGroupId("");
       onOpenChange(false);
     } catch (error) {
       console.error("Error creating section:", error);
@@ -132,15 +154,33 @@ export function AddSectionDialog({
 
           {supplierId && (
             <div className="space-y-2">
-              <Label>Prijsgroep</Label>
+              <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
               <Select value={rangeId} onValueChange={setRangeId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecteer prijsgroep" />
+                  <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
                 </SelectTrigger>
                 <SelectContent>
                   {ranges?.map((range) => (
                     <SelectItem key={range.id} value={range.id}>
                       {range.name || range.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {hasPriceGroups && (
+            <div className="space-y-2">
+              <Label>Prijsgroep</Label>
+              <Select value={priceGroupId} onValueChange={setPriceGroupId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecteer prijsgroep (E1-E10, A, B, C)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {priceGroups?.map((pg) => (
+                    <SelectItem key={pg.id} value={pg.id}>
+                      {pg.code} - {pg.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
