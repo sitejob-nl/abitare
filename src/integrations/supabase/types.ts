@@ -742,6 +742,7 @@ export type Database = {
           id: string
           order_id: string
           plinth_color: string | null
+          price_group_id: string | null
           quote_section_id: string | null
           range_id: string | null
           section_type: string
@@ -772,6 +773,7 @@ export type Database = {
           id?: string
           order_id: string
           plinth_color?: string | null
+          price_group_id?: string | null
           quote_section_id?: string | null
           range_id?: string | null
           section_type: string
@@ -802,6 +804,7 @@ export type Database = {
           id?: string
           order_id?: string
           plinth_color?: string | null
+          price_group_id?: string | null
           quote_section_id?: string | null
           range_id?: string | null
           section_type?: string
@@ -832,6 +835,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
             referencedColumns: ["id"]
           },
           {
@@ -1046,6 +1056,132 @@ export type Database = {
           },
         ]
       }
+      plinth_options: {
+        Row: {
+          code: string
+          created_at: string | null
+          height_mm: number | null
+          id: string
+          is_active: boolean | null
+          material: string | null
+          name: string
+          price_per_meter: number | null
+          supplier_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          height_mm?: number | null
+          id?: string
+          is_active?: boolean | null
+          material?: string | null
+          name: string
+          price_per_meter?: number | null
+          supplier_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          height_mm?: number | null
+          id?: string
+          is_active?: boolean | null
+          material?: string | null
+          name?: string
+          price_per_meter?: number | null
+          supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plinth_options_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_group_colors: {
+        Row: {
+          color_code: string
+          color_name: string
+          created_at: string | null
+          finish: string | null
+          id: string
+          is_available: boolean | null
+          material_type: string | null
+          price_group_id: string | null
+        }
+        Insert: {
+          color_code: string
+          color_name: string
+          created_at?: string | null
+          finish?: string | null
+          id?: string
+          is_available?: boolean | null
+          material_type?: string | null
+          price_group_id?: string | null
+        }
+        Update: {
+          color_code?: string
+          color_name?: string
+          created_at?: string | null
+          finish?: string | null
+          id?: string
+          is_available?: boolean | null
+          material_type?: string | null
+          price_group_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_group_colors_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_groups: {
+        Row: {
+          code: string
+          collection: string | null
+          created_at: string | null
+          id: string
+          is_glass: boolean | null
+          name: string
+          sort_order: number | null
+          supplier_id: string | null
+        }
+        Insert: {
+          code: string
+          collection?: string | null
+          created_at?: string | null
+          id?: string
+          is_glass?: boolean | null
+          name: string
+          sort_order?: number | null
+          supplier_id?: string | null
+        }
+        Update: {
+          code?: string
+          collection?: string | null
+          created_at?: string | null
+          id?: string
+          is_glass?: boolean | null
+          name?: string
+          sort_order?: number | null
+          supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_groups_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_categories: {
         Row: {
           code: string
@@ -1172,7 +1308,9 @@ export type Database = {
       }
       product_ranges: {
         Row: {
+          available_price_groups: string[] | null
           code: string
+          collection: string | null
           description: string | null
           door_type: string | null
           id: string
@@ -1184,7 +1322,9 @@ export type Database = {
           type: string | null
         }
         Insert: {
+          available_price_groups?: string[] | null
           code: string
+          collection?: string | null
           description?: string | null
           door_type?: string | null
           id?: string
@@ -1196,7 +1336,9 @@ export type Database = {
           type?: string | null
         }
         Update: {
+          available_price_groups?: string[] | null
           code?: string
+          collection?: string | null
           description?: string | null
           door_type?: string | null
           id?: string
@@ -1469,6 +1611,7 @@ export type Database = {
           hinge_color: string | null
           id: string
           plinth_color: string | null
+          price_group_id: string | null
           quote_id: string | null
           range_id: string | null
           section_type: string
@@ -1498,6 +1641,7 @@ export type Database = {
           hinge_color?: string | null
           id?: string
           plinth_color?: string | null
+          price_group_id?: string | null
           quote_id?: string | null
           range_id?: string | null
           section_type: string
@@ -1527,6 +1671,7 @@ export type Database = {
           hinge_color?: string | null
           id?: string
           plinth_color?: string | null
+          price_group_id?: string | null
           quote_id?: string | null
           range_id?: string | null
           section_type?: string
@@ -1543,6 +1688,13 @@ export type Database = {
             columns: ["color_id"]
             isOneToOne: false
             referencedRelation: "product_colors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_sections_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
             referencedColumns: ["id"]
           },
           {
@@ -2455,10 +2607,13 @@ export type Database = {
           contact_email: string | null
           contact_phone: string | null
           created_at: string | null
+          has_price_groups: boolean | null
           id: string
           is_active: boolean | null
           lead_time_weeks: number | null
           name: string
+          points_to_eur: number | null
+          price_system: string | null
           supplier_type: string | null
           tradeplace_enabled: boolean | null
           tradeplace_endpoint: string | null
@@ -2469,10 +2624,13 @@ export type Database = {
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string | null
+          has_price_groups?: boolean | null
           id?: string
           is_active?: boolean | null
           lead_time_weeks?: number | null
           name: string
+          points_to_eur?: number | null
+          price_system?: string | null
           supplier_type?: string | null
           tradeplace_enabled?: boolean | null
           tradeplace_endpoint?: string | null
@@ -2483,10 +2641,13 @@ export type Database = {
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string | null
+          has_price_groups?: boolean | null
           id?: string
           is_active?: boolean | null
           lead_time_weeks?: number | null
           name?: string
+          points_to_eur?: number | null
+          price_system?: string | null
           supplier_type?: string | null
           tradeplace_enabled?: boolean | null
           tradeplace_endpoint?: string | null
@@ -2709,6 +2870,53 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      worktop_materials: {
+        Row: {
+          code: string
+          created_at: string | null
+          edge_type: string | null
+          id: string
+          is_active: boolean | null
+          material_type: string | null
+          name: string
+          price_per_meter: number | null
+          supplier_id: string | null
+          thickness_mm: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          edge_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          material_type?: string | null
+          name: string
+          price_per_meter?: number | null
+          supplier_id?: string | null
+          thickness_mm?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          edge_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          material_type?: string | null
+          name?: string
+          price_per_meter?: number | null
+          supplier_id?: string | null
+          thickness_mm?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worktop_materials_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]

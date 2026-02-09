@@ -22,6 +22,8 @@ import { QuoteSection, useUpdateQuoteSection } from "@/hooks/useQuoteSections";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProductRanges } from "@/hooks/useProductRanges";
 import { useProductColors } from "@/hooks/useProductColors";
+import { usePriceGroups } from "@/hooks/usePriceGroups";
+import { usePriceGroupColors } from "@/hooks/usePriceGroupColors";
 import { toast } from "@/hooks/use-toast";
 
 interface QuoteSectionConfigProps {
@@ -37,6 +39,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     description: section.description || "",
     range_id: section.range_id || "",
     color_id: section.color_id || "",
+    price_group_id: (section as any).price_group_id || "",
     front_number: section.front_number || "",
     front_color: section.front_color || "",
     plinth_color: section.plinth_color || "",
@@ -52,13 +55,23 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     workbench_color: section.workbench_color || "",
   });
 
-  // State to track selected supplier (derived from selected range)
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
 
   // Fetch data
   const { data: suppliers = [] } = useSuppliers();
   const { data: allRanges = [] } = useProductRanges();
   const { data: allColors = [] } = useProductColors(formData.range_id || null);
+  
+  // Check if selected supplier has price groups
+  const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
+  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
+  
+  const { data: priceGroups = [] } = usePriceGroups(
+    hasPriceGroups ? selectedSupplierId : undefined
+  );
+  const { data: priceGroupColors = [] } = usePriceGroupColors(
+    formData.price_group_id || undefined
+  );
 
   // Filter colors by type
   const frontColors = allColors.filter((c) => (c as any).color_type === "front" || !(c as any).color_type);
@@ -77,6 +90,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
       description: section.description || "",
       range_id: section.range_id || "",
       color_id: section.color_id || "",
+      price_group_id: (section as any).price_group_id || "",
       front_number: section.front_number || "",
       front_color: section.front_color || "",
       plinth_color: section.plinth_color || "",
@@ -92,7 +106,6 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
       workbench_color: section.workbench_color || "",
     });
 
-    // Determine supplier from existing range
     if (section.range_id) {
       const existingRange = allRanges.find((r) => r.id === section.range_id);
       if (existingRange?.supplier_id) {
@@ -107,11 +120,11 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
 
   const handleSupplierChange = (supplierId: string) => {
     setSelectedSupplierId(supplierId);
-    // Reset range and color when supplier changes
     setFormData((prev) => ({
       ...prev,
       range_id: "",
       color_id: "",
+      price_group_id: "",
     }));
   };
 
@@ -120,9 +133,17 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     setFormData((prev) => ({
       ...prev,
       range_id: rangeId,
-      color_id: "", // Reset color when range changes
-      // Auto-fill front_number from range code
+      color_id: "",
       front_number: selectedRange?.code || prev.front_number,
+    }));
+  };
+
+  const handlePriceGroupChange = (pgId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      price_group_id: pgId,
+      // Reset front color when price group changes (colors differ per group)
+      front_color: "",
     }));
   };
 
@@ -131,8 +152,15 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     setFormData((prev) => ({
       ...prev,
       color_id: colorId,
-      // Auto-fill front_color from color name
       front_color: selectedColor?.name || prev.front_color,
+    }));
+  };
+
+  const handlePriceGroupColorSelect = (colorCode: string) => {
+    const pgColor = priceGroupColors.find(c => c.color_code === colorCode);
+    setFormData((prev) => ({
+      ...prev,
+      front_color: pgColor?.color_name || colorCode,
     }));
   };
 
@@ -175,6 +203,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
         description: formData.description || null,
         range_id: formData.range_id || null,
         color_id: formData.color_id || null,
+        price_group_id: formData.price_group_id || null,
         front_number: formData.front_number || null,
         front_color: formData.front_color || null,
         plinth_color: formData.plinth_color || null,
@@ -230,11 +259,13 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
             />
           </div>
 
-          {/* Supplier, Range, Color selection (for meubelen) */}
+          {/* Supplier, Range, Price Group, Color selection (for meubelen) */}
           {isMeubelen && (
             <div className="border-t pt-4">
-              <h4 className="text-sm font-medium mb-3 text-muted-foreground">Prijsgroep & Kleur</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <h4 className="text-sm font-medium mb-3 text-muted-foreground">
+                {hasPriceGroups ? "Model, Prijsgroep & Kleur" : "Prijsgroep & Kleur"}
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Leverancier</Label>
                   <Select value={selectedSupplierId} onValueChange={handleSupplierChange}>
@@ -251,15 +282,16 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Prijsgroep</Label>
+                  <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
                   <Select
                     value={formData.range_id}
                     onValueChange={handleRangeChange}
                     disabled={!selectedSupplierId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecteer prijsgroep" />
+                      <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Geen</SelectItem>
@@ -273,34 +305,87 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Kleur (uit prijsgroep)</Label>
-                  <Select
-                    value={formData.color_id}
-                    onValueChange={handleColorChange}
-                    disabled={!formData.range_id}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecteer kleur" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Geen</SelectItem>
-                      {frontColors.map((color) => (
-                        <SelectItem key={color.id} value={color.id}>
-                          <div className="flex items-center gap-2">
-                            {color.hex_color && (
-                              <div
-                                className="w-3 h-3 rounded border"
-                                style={{ backgroundColor: color.hex_color }}
-                              />
-                            )}
-                            {color.code} - {color.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {/* Price Group dropdown for suppliers with price groups */}
+                {hasPriceGroups && (
+                  <div className="space-y-2">
+                    <Label>Prijsgroep</Label>
+                    <Select
+                      value={formData.price_group_id}
+                      onValueChange={handlePriceGroupChange}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer prijsgroep (E1-E10)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Geen</SelectItem>
+                        {priceGroups.map((pg) => (
+                          <SelectItem key={pg.id} value={pg.id}>
+                            {pg.code} - {pg.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Front color: from price_group_colors if available, otherwise from product_colors */}
+                {hasPriceGroups && formData.price_group_id ? (
+                  <div className="space-y-2">
+                    <Label>Kleur (uit prijsgroep)</Label>
+                    <Select
+                      value={priceGroupColors.find(c => c.color_name === formData.front_color)?.color_code || ""}
+                      onValueChange={handlePriceGroupColorSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer kleur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Geen</SelectItem>
+                        {priceGroupColors.map((color) => (
+                          <SelectItem key={color.id} value={color.color_code}>
+                            {color.color_code} - {color.color_name}
+                            {color.material_type ? ` (${color.material_type})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {priceGroupColors.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Nog geen kleuren geconfigureerd voor deze prijsgroep
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Kleur (uit prijsgroep)</Label>
+                    <Select
+                      value={formData.color_id}
+                      onValueChange={handleColorChange}
+                      disabled={!formData.range_id}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer kleur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Geen</SelectItem>
+                        {frontColors.map((color) => (
+                          <SelectItem key={color.id} value={color.id}>
+                            <div className="flex items-center gap-2">
+                              {color.hex_color && (
+                                <div
+                                  className="w-3 h-3 rounded border"
+                                  style={{ backgroundColor: color.hex_color }}
+                                />
+                              )}
+                              {color.code} - {color.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -321,7 +406,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                   </div>
                   <div className="space-y-2">
                     <Label>Kleur front</Label>
-                    {frontColors.length > 0 ? (
+                    {frontColors.length > 0 && !hasPriceGroups ? (
                       <Select
                         value={frontColors.find((c) => c.name === formData.front_color)?.id || ""}
                         onValueChange={(id) => {
