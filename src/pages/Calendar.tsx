@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ServiceTicketSidebar } from "@/components/calendar/ServiceTicketSidebar";
+import { useScheduleServiceTicket } from "@/hooks/useServiceTicketMutations";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -228,12 +230,14 @@ const CalendarPage = () => {
   const [view, setView] = useState<CalendarView>("month");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [draggingEvent, setDraggingEvent] = useState<CalendarEventData | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { data: events, isLoading } = useCalendarEvents(currentDate);
   const { data: conflicts } = useCalendarConflicts(currentDate);
   const { data: microsoftEvents } = useMicrosoftCalendarEvents(currentDate);
   const { data: msConnection } = useMicrosoftConnection();
   const updateEventDate = useUpdateEventDate();
+  const scheduleTicket = useScheduleServiceTicket();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -304,9 +308,30 @@ const CalendarPage = () => {
     
     if (!over) return;
 
-    const draggedEvent = active.data.current?.event as CalendarEventData;
+    const activeId = active.id.toString();
     const newDate = over.id as string;
 
+    // Handle service ticket drop
+    if (activeId.startsWith("service-ticket-")) {
+      const ticketId = activeId.replace("service-ticket-", "");
+      try {
+        await scheduleTicket.mutateAsync({ ticketId, plannedDate: newDate });
+        toast({
+          title: "Ticket ingepland",
+          description: `Serviceticket ingepland op ${format(new Date(newDate), "d MMMM yyyy", { locale: nl })}.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Fout bij inplannen",
+          description: "Het ticket kon niet worden ingepland.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    // Handle order event drop
+    const draggedEvent = active.data.current?.event as CalendarEventData;
     if (draggedEvent.date === newDate) return;
 
     try {
@@ -404,75 +429,87 @@ const CalendarPage = () => {
         </Button>
       </div>
 
-      {/* Calendar Content */}
+      {/* Calendar Content + Sidebar */}
       <DndContext 
         sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
-          </div>
-        ) : view === "month" ? (
-          <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 border-b border-border bg-muted/50">
-              {desktopDayNames.map((day, index) => (
-                <div
-                  key={day}
-                  className="px-1 sm:px-2 py-2 sm:py-3 text-center text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  <span className="hidden sm:inline">{day}</span>
-                  <span className="sm:hidden">{mobileDayNames[index]}</span>
+        <div className="flex gap-4">
+          <div className="flex-1 min-w-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Laden...</span>
+              </div>
+            ) : view === "month" ? (
+              <div className="animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+                {/* Day Headers */}
+                <div className="grid grid-cols-7 border-b border-border bg-muted/50">
+                  {desktopDayNames.map((day, index) => (
+                    <div
+                      key={day}
+                      className="px-1 sm:px-2 py-2 sm:py-3 text-center text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                    >
+                      <span className="hidden sm:inline">{day}</span>
+                      <span className="sm:hidden">{mobileDayNames[index]}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {/* Calendar Days */}
-            <div className="grid grid-cols-7">
-              {days.map((day, index) => {
-                const dayEvents = getEventsForDay(day);
-                const dayMsEvents = getMsEventsForDay(day);
-                const isCurrentMonth = isSameMonth(day, currentDate);
-                const isTodayDate = isToday(day);
-                const dateStr = format(day, "yyyy-MM-dd");
-                const dayConflict = conflicts?.find((c) => c.date === dateStr);
+                {/* Calendar Days */}
+                <div className="grid grid-cols-7">
+                  {days.map((day, index) => {
+                    const dayEvents = getEventsForDay(day);
+                    const dayMsEvents = getMsEventsForDay(day);
+                    const isCurrentMonth = isSameMonth(day, currentDate);
+                    const isTodayDate = isToday(day);
+                    const dateStr = format(day, "yyyy-MM-dd");
+                    const dayConflict = conflicts?.find((c) => c.date === dateStr);
 
-                return (
-                  <DroppableMonthDay
-                    key={index}
-                    day={day}
-                    dayEvents={dayEvents}
-                    microsoftEvents={dayMsEvents}
-                    isCurrentMonth={isCurrentMonth}
-                    isTodayDate={isTodayDate}
-                    dayConflict={dayConflict}
-                    onDayClick={handleDayClick}
-                  />
-                );
-              })}
-            </div>
+                    return (
+                      <DroppableMonthDay
+                        key={index}
+                        day={day}
+                        dayEvents={dayEvents}
+                        microsoftEvents={dayMsEvents}
+                        isCurrentMonth={isCurrentMonth}
+                        isTodayDate={isTodayDate}
+                        dayConflict={dayConflict}
+                        onDayClick={handleDayClick}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ) : view === "week" ? (
+              <CalendarWeekView
+                currentDate={currentDate}
+                events={eventsWithConflicts}
+                conflicts={conflicts || []}
+                onDayClick={handleDayClick}
+              />
+            ) : (
+              <CalendarDayView
+                currentDate={currentDate}
+                events={eventsWithConflicts.filter((e) => e.date === format(currentDate, "yyyy-MM-dd")).map((e) => ({
+                  ...e,
+                  customerPhone: undefined,
+                  customerAddress: undefined,
+                }))}
+                conflicts={conflicts || []}
+              />
+            )}
           </div>
-        ) : view === "week" ? (
-          <CalendarWeekView
-            currentDate={currentDate}
-            events={eventsWithConflicts}
-            conflicts={conflicts || []}
-            onDayClick={handleDayClick}
-          />
-        ) : (
-          <CalendarDayView
-            currentDate={currentDate}
-            events={eventsWithConflicts.filter((e) => e.date === format(currentDate, "yyyy-MM-dd")).map((e) => ({
-              ...e,
-              customerPhone: undefined,
-              customerAddress: undefined,
-            }))}
-            conflicts={conflicts || []}
-          />
-        )}
+
+          {/* Service Ticket Sidebar */}
+          <div className="hidden lg:block">
+            <ServiceTicketSidebar
+              isOpen={sidebarOpen}
+              onToggle={() => setSidebarOpen(!sidebarOpen)}
+            />
+          </div>
+        </div>
 
         {/* Drag Overlay */}
         <DragOverlay>

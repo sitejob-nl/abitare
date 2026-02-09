@@ -268,6 +268,46 @@ export function useAddTicketNote() {
   });
 }
 
+export function useScheduleServiceTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ ticketId, plannedDate }: { ticketId: string; plannedDate: string }) => {
+      const { error: updateError } = await supabase
+        .from("service_tickets")
+        .update({ status: "ingepland" as TicketStatus, planned_date: plannedDate })
+        .eq("id", ticketId);
+
+      if (updateError) throw updateError;
+
+      // Create status history entry
+      if (user?.id) {
+        await supabase.from("service_ticket_status_history").insert({
+          ticket_id: ticketId,
+          from_status: "wacht_op_onderdelen",
+          to_status: "ingepland",
+          changed_by: user.id,
+          notes: `Ingepland op ${plannedDate}`,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["service-tickets-count"] });
+      toast({ title: "Ticket ingepland" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fout bij inplannen ticket",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 export function useDeleteTicketNote() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
