@@ -242,9 +242,9 @@ async function handlePriceGroupImport(
       name: p.name,
       supplier_id: supplierId,
       category_id: categoryId || null,
-      width_mm: p.width_mm || null,
-      height_mm: p.height_mm || null,
-      depth_mm: p.depth_mm || null,
+      width_mm: p.width_mm ? Math.round(p.width_mm) : null,
+      height_mm: p.height_mm ? Math.round(p.height_mm) : null,
+      depth_mm: p.depth_mm ? Math.round(p.depth_mm) : null,
       discount_group: p.discount_group || null,
       catalog_code: p.catalog_code || null,
       vat_rate: 21,
@@ -252,6 +252,8 @@ async function handlePriceGroupImport(
       is_active: true,
     }))
 
+    let batchesSucceeded = 0
+    let batchesFailed = 0
     for (let i = 0; i < allProductsToUpsert.length; i += chunkSize) {
       const chunk = allProductsToUpsert.slice(i, i + chunkSize)
       const { error: upsertError } = await supabase
@@ -259,9 +261,14 @@ async function handlePriceGroupImport(
         .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
       
       if (upsertError) {
+        batchesFailed++
+        console.error(`Product upsert error batch ${Math.floor(i/chunkSize)}: ${upsertError.message}`)
         errors.push(`Product upsert error batch ${Math.floor(i/chunkSize)}: ${upsertError.message}`)
+      } else {
+        batchesSucceeded++
       }
     }
+    console.log(`Product upsert summary: ${batchesSucceeded} batches succeeded, ${batchesFailed} batches failed out of ${Math.ceil(allProductsToUpsert.length / chunkSize)} total`)
 
     // CRITICAL FIX: Paginated re-fetch of ALL products for this supplier
     // This bypasses both the 1000-row query limit and incomplete upsert responses
