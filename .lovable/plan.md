@@ -1,47 +1,32 @@
 
-# Fix: productMap volledig vullen na upsert
+
+# Fix: Stosa producten worden niet opgeslagen (12.000+ stilletjes gefaald)
 
 ## Probleem
-De edge function's `productMap` bevat maar 3.000 van de 15.123 geuploadde producten. Dit komt door twee bugs:
 
-1. **Supabase 1000-rij limiet**: De query `allExistingProducts` haalt maximaal 1.000 rijen op
-2. **Upsert response incompleet**: Bij duplicaten binnen een batch geeft de `.select()` minder rijen terug dan verwacht
+Van de 15.123 producten die naar de server worden gestuurd, worden er slechts 3.000 opgeslagen. De overige 12.000+ falen stilletjes omdat:
 
-Daardoor matchen prijzen met article codes als `200BA00001` niet, terwijl die producten WEL in de database staan.
+1. **Upsert errors worden niet gelogd** - De errors worden in een array verzameld maar nooit naar `console.error` geschreven, waardoor ze onzichtbaar zijn in de Supabase logs
+2. **`name` kolom is `varchar(255)`** - Als een productnaam langer is dan 255 tekens, faalt de hele batch van 500 producten
+3. **Dimensie-kolommen zijn `integer`** - De velden `width_mm`, `height_mm`, `depth_mm` accepteren geen decimalen, maar `parsePrice()` kan floats teruggeven
+
+Omdat de producten in batches van 500 worden verwerkt, zorgt 1 ongeldige rij ervoor dat de hele batch faalt. De eerste 6 batches (3.000 producten) slagen, de rest faalt.
 
 ## Oplossing
 
-### Edge function (`import-products/index.ts`)
+### 1. Database migratie
+- Verander `name` van `varchar(255)` naar `text` (geen lengtebeperking meer)
 
-Na alle product-upserts, vervang de huidige `existingProductMap` merge door een **volledige herquery** van alle producten voor deze leverancier, met paginatie:
+### 2. Edge function (`import-products/index.ts`)
+- Voeg `console.error` toe bij upsert errors zodat ze zichtbaar zijn in de logs
+- Rond dimensie-waarden af naar integers met `Math.round()` voordat ze worden opgeslagen
+- Voeg een samenvatting-log toe die toont hoeveel batches zijn geslaagd vs. gefaald
 
-```
-// Na alle upserts: haal ALLE producten op met paginatie
-const productMap = new Map()
-let offset = 0
-const pageSize = 1000
-while (true) {
-  const { data } = await supabase
-    .from('products')
-    .select('id, article_code')
-    .eq('supplier_id', supplierId)
-    .range(offset, offset + pageSize - 1)
-  
-  if (!data || data.length === 0) break
-  data.forEach(p => productMap.set(p.article_code, p.id))
-  offset += pageSize
-  if (data.length < pageSize) break
-}
-```
+### 3. Testen
+- Na de fix opnieuw importeren
+- In de logs controleren of er nu WEL foutmeldingen verschijnen (of dat alles slaagt)
 
-Dit vervangt zowel de `existingProductMap` als de `productMap` vulling uit upsert responses, en garandeert dat ALLE product IDs beschikbaar zijn voor prijs-matching.
-
-### Wijzigingen
-1. **`supabase/functions/import-products/index.ts`**: Vervang de productMap-vulling na upsert door een paginated re-fetch
-2. Voeg logging toe: sample van product article codes in productMap om te verifieren dat `200BA...` codes er nu WEL in zitten
-3. Deploy en test
-
-### Verwacht resultaat
-- productMap bevat alle ~15.000 producten (incl. `200BA...` codes)
-- Alle 2.632 prijzen matchen met productMap
-- Prijzen worden succesvol opgeslagen
+## Verwacht resultaat
+- Alle 15.123 producten worden succesvol opgeslagen
+- De 2.632 prijzen matchen met de productMap en worden ook opgeslagen
+- Eventuele resterende problemen worden zichtbaar via de console logs
