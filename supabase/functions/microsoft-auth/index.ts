@@ -9,7 +9,7 @@ serve(async (req) => {
 
   try {
     const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID");
-    const MICROSOFT_TENANT_ID = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
+    const MICROSOFT_TENANT_ID = "common";
 
     if (!MICROSOFT_CLIENT_ID) {
       throw new Error("MICROSOFT_CLIENT_ID is not configured");
