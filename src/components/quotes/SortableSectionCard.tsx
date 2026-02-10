@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Pencil, Trash2, GripVertical, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { QuoteSection, useDeleteQuoteSection, SECTION_TYPES, useUpdateQuoteSecti
 import { QuoteLine, useUpdateQuoteLine } from "@/hooks/useQuoteLines";
 import { EditableLineRow } from "./EditableLineRow";
 import { AddProductDialog } from "./AddProductDialog";
+import { useProductRange } from "@/hooks/useProductRanges";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -52,6 +53,10 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
   const [showConfig, setShowConfig] = useState(false);
   const deleteSection = useDeleteQuoteSection();
   const updateLine = useUpdateQuoteLine();
+
+  // Derive supplier ID from section's range
+  const { data: sectionRange } = useProductRange(section.range_id);
+  const sectionSupplierId = sectionRange?.supplier_id || null;
 
   const {
     attributes,
@@ -263,6 +268,7 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
         sectionId={section.id}
         sectionRangeId={section.range_id}
         quoteDefaultRangeId={quoteDefaultRangeId}
+        sectionSupplierId={sectionSupplierId}
       />
 
       <QuoteSectionConfig
