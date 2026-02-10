@@ -6,11 +6,18 @@ interface ConvertQuoteToOrderResult {
   orderNumber: number;
 }
 
+interface ConvertQuoteToOrderParams {
+  quoteId: string;
+  depositRequired: boolean;
+  depositInvoiceSent: boolean;
+  depositReminderDate: string | null;
+}
+
 export function useConvertQuoteToOrder() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (quoteId: string): Promise<ConvertQuoteToOrderResult> => {
+    mutationFn: async ({ quoteId, depositRequired, depositInvoiceSent, depositReminderDate }: ConvertQuoteToOrderParams): Promise<ConvertQuoteToOrderResult> => {
       // 1. Fetch the quote with all related data
       const { data: quote, error: quoteError } = await supabase
         .from("quotes")
@@ -51,6 +58,9 @@ export function useConvertQuoteToOrder() {
           total_vat: quote.total_vat,
           total_incl_vat: quote.total_incl_vat,
           payment_condition: quote.payment_condition,
+          deposit_required: depositRequired,
+          deposit_invoice_sent: depositInvoiceSent,
+          deposit_reminder_date: depositReminderDate,
           internal_notes: [
             quote.internal_notes,
             quote.reference ? `Ref: ${quote.reference}` : null,

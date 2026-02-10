@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Loader2, ArrowRight } from "lucide-react";
 import {
   AlertDialog,
@@ -9,11 +10,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+
+export interface DepositChoice {
+  depositRequired: boolean;
+  depositInvoiceSent: boolean;
+  depositReminderDate: string | null;
+}
 
 interface ConvertToOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: (depositChoice: DepositChoice) => void;
   quoteNumber: number;
   customerName: string;
   totalAmount: number;
@@ -29,6 +39,9 @@ export function ConvertToOrderDialog({
   totalAmount,
   isPending,
 }: ConvertToOrderDialogProps) {
+  const [depositNow, setDepositNow] = useState<string>("yes");
+  const [reminderDate, setReminderDate] = useState<string>("");
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("nl-NL", {
       style: "currency",
@@ -36,8 +49,26 @@ export function ConvertToOrderDialog({
     }).format(amount);
   };
 
+  const canConfirm = depositNow === "yes" || (depositNow === "no" && reminderDate !== "");
+
+  const handleConfirm = () => {
+    onConfirm({
+      depositRequired: true,
+      depositInvoiceSent: depositNow === "yes",
+      depositReminderDate: depositNow === "no" ? reminderDate : null,
+    });
+  };
+
+  const handleOpenChange = (value: boolean) => {
+    if (!value) {
+      setDepositNow("yes");
+      setReminderDate("");
+    }
+    onOpenChange(value);
+  };
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
@@ -45,7 +76,7 @@ export function ConvertToOrderDialog({
             <ArrowRight className="h-4 w-4" />
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p>
                 Weet je zeker dat je offerte #{quoteNumber} wilt omzetten naar een order?
               </p>
@@ -59,6 +90,41 @@ export function ConvertToOrderDialog({
                   <span className="font-medium text-foreground">{formatCurrency(totalAmount)}</span>
                 </div>
               </div>
+
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-sm font-medium text-foreground">Aanbetaling nu versturen?</p>
+                <RadioGroup value={depositNow} onValueChange={setDepositNow}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="yes" id="deposit-yes" />
+                    <Label htmlFor="deposit-yes" className="text-sm">
+                      Ja, aanbetalingsfactuur direct versturen
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="no" id="deposit-no" />
+                    <Label htmlFor="deposit-no" className="text-sm">
+                      Nee, later versturen
+                    </Label>
+                  </div>
+                </RadioGroup>
+
+                {depositNow === "no" && (
+                  <div className="space-y-1.5 pl-6">
+                    <Label htmlFor="reminder-date" className="text-xs text-muted-foreground">
+                      Wanneer opnieuw vragen? (verplicht)
+                    </Label>
+                    <Input
+                      id="reminder-date"
+                      type="date"
+                      value={reminderDate}
+                      onChange={(e) => setReminderDate(e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 Na conversie wordt de offerte gemarkeerd als "geaccepteerd" en wordt een nieuwe order aangemaakt met alle offerteregels.
               </p>
@@ -70,9 +136,9 @@ export function ConvertToOrderDialog({
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
-              onConfirm();
+              handleConfirm();
             }}
-            disabled={isPending}
+            disabled={isPending || !canConfirm}
             className="bg-primary"
           >
             {isPending ? (
