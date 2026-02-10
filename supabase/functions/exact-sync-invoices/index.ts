@@ -550,6 +550,9 @@ async function getDefaultSalesJournal(
 }
 
 /**
+ * Map order to Exact SalesEntry (financiele boeking).
+ * Uses SalesEntries endpoint instead of SalesInvoices - no Item required.
+ */
 function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountId: string, journalCode: string): ExactSalesEntry {
   const lines: ExactSalesEntryLine[] = [];
   
