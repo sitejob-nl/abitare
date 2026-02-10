@@ -917,6 +917,9 @@ export type Database = {
           customer_notes: string | null
           delivery_method: string | null
           delivery_notes: string | null
+          deposit_invoice_sent: boolean
+          deposit_reminder_date: string | null
+          deposit_required: boolean
           discount_amount: number | null
           division_id: string | null
           exact_customer_id: string | null
@@ -959,6 +962,9 @@ export type Database = {
           customer_notes?: string | null
           delivery_method?: string | null
           delivery_notes?: string | null
+          deposit_invoice_sent?: boolean
+          deposit_reminder_date?: string | null
+          deposit_required?: boolean
           discount_amount?: number | null
           division_id?: string | null
           exact_customer_id?: string | null
@@ -1001,6 +1007,9 @@ export type Database = {
           customer_notes?: string | null
           delivery_method?: string | null
           delivery_notes?: string | null
+          deposit_invoice_sent?: boolean
+          deposit_reminder_date?: string | null
+          deposit_required?: boolean
           discount_amount?: number | null
           division_id?: string | null
           exact_customer_id?: string | null

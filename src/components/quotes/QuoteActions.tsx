@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { DepositChoice } from "./ConvertToOrderDialog";
 import { useNavigate } from "react-router-dom";
 import { Copy, Trash2, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,9 +87,9 @@ export function QuoteActions({
     }
   };
 
-  const handleConvert = async () => {
+  const handleConvert = async (depositChoice: DepositChoice) => {
     try {
-      const result = await convertToOrder.mutateAsync(quoteId);
+      const result = await convertToOrder.mutateAsync({ quoteId, ...depositChoice });
       toast({
         title: "Order aangemaakt",
         description: `Order #${result.orderNumber} is succesvol aangemaakt.`,
