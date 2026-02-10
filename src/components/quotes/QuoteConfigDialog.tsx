@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Truck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProductRanges } from "@/hooks/useProductRanges";
 import { useProductColors } from "@/hooks/useProductColors";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 
 const CATEGORIES = [
@@ -42,6 +43,8 @@ interface QuoteConfigDialogProps {
   currentColorId?: string | null;
   currentPriceGroupId?: string | null;
   currentCorpusColorId?: string | null;
+  currentRequiresTransport?: boolean;
+  currentRequiresKooiaap?: boolean;
 }
 
 export function QuoteConfigDialog({
@@ -55,6 +58,8 @@ export function QuoteConfigDialog({
   currentColorId,
   currentPriceGroupId,
   currentCorpusColorId,
+  currentRequiresTransport,
+  currentRequiresKooiaap,
 }: QuoteConfigDialogProps) {
   const updateQuote = useUpdateQuote();
 
@@ -65,6 +70,8 @@ export function QuoteConfigDialog({
   const [colorId, setColorId] = useState(currentColorId || "");
   const [priceGroupId, setPriceGroupId] = useState(currentPriceGroupId || "");
   const [corpusColorId, setCorpusColorId] = useState(currentCorpusColorId || "");
+  const [requiresTransport, setRequiresTransport] = useState(currentRequiresTransport ?? false);
+  const [requiresKooiaap, setRequiresKooiaap] = useState(currentRequiresKooiaap ?? false);
 
   const { data: suppliers = [] } = useSuppliers();
   const { data: ranges = [] } = useProductRanges(supplierId || undefined);
@@ -104,8 +111,10 @@ export function QuoteConfigDialog({
       setPriceGroupId(currentPriceGroupId || "");
       setCorpusColorId(currentCorpusColorId || "");
       setSelectedCollection("");
+      setRequiresTransport(currentRequiresTransport ?? false);
+      setRequiresKooiaap(currentRequiresKooiaap ?? false);
     }
-  }, [open, currentCategory, currentReference, currentSupplierId, currentRangeId, currentColorId, currentPriceGroupId, currentCorpusColorId]);
+  }, [open, currentCategory, currentReference, currentSupplierId, currentRangeId, currentColorId, currentPriceGroupId, currentCorpusColorId, currentRequiresTransport, currentRequiresKooiaap]);
 
   const handleSupplierChange = (value: string) => {
     setSupplierId(value);
@@ -137,6 +146,8 @@ export function QuoteConfigDialog({
         default_color_id: colorId || null,
         default_price_group_id: priceGroupId || null,
         default_corpus_color_id: corpusColorId || null,
+        requires_transport: requiresTransport,
+        requires_kooiaap: requiresKooiaap,
       });
 
       toast({
@@ -296,6 +307,37 @@ export function QuoteConfigDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Transport options for tegels */}
+          {category === "tegels" && (
+            <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Truck className="h-4 w-4 text-muted-foreground" />
+                Transportopties
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="transport" className="text-sm font-normal">Transport nodig</Label>
+                <Switch
+                  id="transport"
+                  checked={requiresTransport}
+                  onCheckedChange={(checked) => {
+                    setRequiresTransport(checked);
+                    if (!checked) setRequiresKooiaap(false);
+                  }}
+                />
+              </div>
+              {requiresTransport && (
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="kooiaap" className="text-sm font-normal">Kooiaap (hydraulische laadklep)</Label>
+                  <Switch
+                    id="kooiaap"
+                    checked={requiresKooiaap}
+                    onCheckedChange={setRequiresKooiaap}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
