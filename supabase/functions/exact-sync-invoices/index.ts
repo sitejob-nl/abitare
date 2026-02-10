@@ -228,8 +228,11 @@ async function pushInvoicesInternal(
         continue;
       }
 
+      // Get default sales journal (suitable for SalesEntries)
+      const journalCode = await getDefaultSalesJournal(accessToken, exactDivision);
+
       // Build sales entry (financiële boeking)
-      const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId);
+      const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId, journalCode);
 
       // Create sales entry in Exact (financieel endpoint - geen artikel vereist)
       const response = await fetch(
@@ -336,7 +339,7 @@ async function pullPaymentStatusInternal(
       let paymentStatus: "open" | "deels_betaald" | "betaald" = "open";
 
       if (receivable) {
-        const originalAmount = receivable.OriginalAmountDC || 0;
+        const originalAmount = receivable.Amount || 0;
         const outstandingAmount = receivable.AmountDC || 0;
         amountPaid = Math.round((originalAmount - outstandingAmount) * 100) / 100;
 
@@ -381,14 +384,14 @@ async function pullPaymentStatusInternal(
 async function fetchReceivablesList(
   accessToken: string,
   exactDivision: number
-): Promise<Map<string, { AmountDC: number; OriginalAmountDC: number; EntryNumber: number }>> {
-  const receivablesMap = new Map<string, { AmountDC: number; OriginalAmountDC: number; EntryNumber: number }>();
+): Promise<Map<string, { AmountDC: number; Amount: number; EntryNumber: number }>> {
+  const receivablesMap = new Map<string, { AmountDC: number; Amount: number; EntryNumber: number }>();
 
   let hasMore = true;
   let skipToken = "";
 
   while (hasMore) {
-    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/read/financial/ReceivablesList?$select=EntryNumber,AmountDC,OriginalAmountDC&$top=1000${skipToken}`;
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/read/financial/ReceivablesList?$select=EntryNumber,AmountDC,Amount&$top=1000${skipToken}`;
 
     const response = await fetch(url, {
       headers: {
@@ -412,12 +415,12 @@ async function fetchReceivablesList(
         const existing = receivablesMap.get(key);
         if (existing) {
           existing.AmountDC += item.AmountDC || 0;
-          existing.OriginalAmountDC += item.OriginalAmountDC || 0;
+          existing.Amount += item.Amount || 0;
         } else {
           receivablesMap.set(key, {
             EntryNumber: item.EntryNumber,
             AmountDC: item.AmountDC || 0,
-            OriginalAmountDC: item.OriginalAmountDC || 0,
+            Amount: item.Amount || 0,
           });
         }
       }
@@ -501,10 +504,53 @@ async function getDefaultRevenueGLAccount(
 }
 
 /**
- * Map order to Exact SalesEntry (financiële boeking)
- * Uses SalesEntries endpoint instead of SalesInvoices - no Item required
+ * Get default sales journal suitable for SalesEntries.
+ * Queries financial/Journals and filters for Type 50 (General journal) or Type 20 (Sales).
+ * Prefers journals with "verkoop" in the description.
  */
-function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountId: string): ExactSalesEntry {
+async function getDefaultSalesJournal(
+  accessToken: string,
+  exactDivision: number
+): Promise<string> {
+  try {
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/financial/Journals?$filter=Type eq 50 or Type eq 20&$select=Code,Description,Type&$orderby=Type,Code`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch Journals:", await response.text());
+      return "70"; // fallback
+    }
+
+    const data = await response.json();
+    const journals = data.d?.results || [];
+
+    if (journals.length === 0) {
+      console.warn("No suitable journals found (Type 50/20), falling back to '70'");
+      return "70";
+    }
+
+    // Prefer journals with "verkoop" in the description
+    const preferred = journals.find((j: any) =>
+      j.Description?.toLowerCase().includes("verkoop")
+    );
+
+    const selected = preferred || journals[0];
+    console.log(`Using Journal: ${selected.Code} - ${selected.Description} (Type ${selected.Type})`);
+    return selected.Code;
+  } catch (err) {
+    console.error("Error fetching journals:", err);
+    return "70"; // fallback
+  }
+}
+
+/**
+function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountId: string, journalCode: string): ExactSalesEntry {
   const lines: ExactSalesEntryLine[] = [];
   
   const orderLines = order.order_lines || (order as any).order_lines || [];
@@ -534,7 +580,7 @@ function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountI
   return {
     Customer: accountId,
     EntryDate: order.order_date || new Date().toISOString().split("T")[0],
-    Journal: "70", // Standaard verkoopboek
+    Journal: journalCode,
     Description: `Factuur order #${order.order_number}`,
     YourRef: `ORD-${order.order_number}`,
     Currency: "EUR",
