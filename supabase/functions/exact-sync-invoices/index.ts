@@ -306,7 +306,7 @@ async function pullPaymentStatusInternal(
     errors: [] as string[],
   };
 
-  // Get orders with Exact invoice IDs
+  // Get orders with Exact invoice IDs (EntryNumber from SalesEntries)
   let query = supabase
     .from("orders")
     .select("id, order_number, exact_invoice_id, total_incl_vat, amount_paid, payment_status")
@@ -321,74 +321,38 @@ async function pullPaymentStatusInternal(
 
   if (error) throw error;
 
+  // Fetch the full ReceivablesList in bulk (pagesize 1000) and build a lookup map
+  // This is much more efficient than querying per order
+  const receivablesMap = await fetchReceivablesList(accessToken, exactDivision);
+
   for (const order of orders) {
     try {
-      // Fetch invoice status from Exact
-      // Try to find by invoice number
-      const filterValue = order.exact_invoice_id;
-      const url = `${EXACT_API_URL}/api/v1/${exactDivision}/salesinvoice/SalesInvoices?$filter=InvoiceNumber eq ${filterValue}&$select=InvoiceID,InvoiceNumber,AmountDC,Status,PaymentReference`;
-      
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
-      });
+      const entryNumber = order.exact_invoice_id;
 
-      if (!response.ok) {
-        results.skipped++;
-        continue;
-      }
-
-      const data = await response.json();
-      const invoices = data.d?.results || [];
-
-      if (invoices.length === 0) {
-        results.skipped++;
-        continue;
-      }
-
-      const exactInvoice = invoices[0];
-      
-      // Get outstanding amount from receivables
-      const receivablesUrl = `${EXACT_API_URL}/api/v1/${exactDivision}/read/financial/Receivables?$filter=InvoiceNumber eq ${filterValue}&$select=AmountDC,OriginalAmountDC`;
-      
-      const receivablesResponse = await fetch(receivablesUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
-      });
+      // Look up this entry in the receivables map (keyed by EntryNumber)
+      const receivable = receivablesMap.get(String(entryNumber));
 
       let amountPaid = 0;
       let paymentStatus: "open" | "deels_betaald" | "betaald" = "open";
 
-      if (receivablesResponse.ok) {
-        const receivablesData = await receivablesResponse.json();
-        const receivables = receivablesData.d?.results || [];
-        
-        if (receivables.length > 0) {
-          const originalAmount = receivables[0].OriginalAmountDC || 0;
-          const outstandingAmount = receivables[0].AmountDC || 0;
-          amountPaid = originalAmount - outstandingAmount;
-          
-          if (outstandingAmount <= 0) {
-            paymentStatus = "betaald";
-          } else if (amountPaid > 0) {
-            paymentStatus = "deels_betaald";
-          }
+      if (receivable) {
+        const originalAmount = receivable.OriginalAmountDC || 0;
+        const outstandingAmount = receivable.AmountDC || 0;
+        amountPaid = Math.round((originalAmount - outstandingAmount) * 100) / 100;
+
+        if (outstandingAmount <= 0.01) {
+          paymentStatus = "betaald";
+        } else if (amountPaid > 0.01) {
+          paymentStatus = "deels_betaald";
         }
       } else {
-        // Fallback: check invoice status
-        // Status 50 = Paid in Exact
-        if (exactInvoice.Status === 50) {
-          paymentStatus = "betaald";
-          amountPaid = order.total_incl_vat || 0;
-        }
+        // Not found in receivables – could be fully paid (cleared) or not yet synced
+        results.skipped++;
+        continue;
       }
 
       // Update order if status changed
-      if (paymentStatus !== order.payment_status || amountPaid !== order.amount_paid) {
+      if (paymentStatus !== order.payment_status || Math.abs(amountPaid - (order.amount_paid || 0)) > 0.01) {
         await supabase
           .from("orders")
           .update({
@@ -407,6 +371,74 @@ async function pullPaymentStatusInternal(
   }
 
   return results;
+}
+
+/**
+ * Fetch the full ReceivablesList from Exact Online using pagination ($top=1000).
+ * Returns a Map keyed by EntryNumber (string) for fast lookup.
+ * The ReceivablesList endpoint contains all open receivables (outstanding invoices).
+ */
+async function fetchReceivablesList(
+  accessToken: string,
+  exactDivision: number
+): Promise<Map<string, { AmountDC: number; OriginalAmountDC: number; EntryNumber: number }>> {
+  const receivablesMap = new Map<string, { AmountDC: number; OriginalAmountDC: number; EntryNumber: number }>();
+
+  let hasMore = true;
+  let skipToken = "";
+
+  while (hasMore) {
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/read/financial/ReceivablesList?$select=EntryNumber,AmountDC,OriginalAmountDC&$top=1000${skipToken}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch ReceivablesList:", await response.text());
+      break;
+    }
+
+    const data = await response.json();
+    const items = data.d?.results || [];
+
+    for (const item of items) {
+      if (item.EntryNumber != null) {
+        const key = String(item.EntryNumber);
+        // If multiple receivable lines exist for the same entry, sum them
+        const existing = receivablesMap.get(key);
+        if (existing) {
+          existing.AmountDC += item.AmountDC || 0;
+          existing.OriginalAmountDC += item.OriginalAmountDC || 0;
+        } else {
+          receivablesMap.set(key, {
+            EntryNumber: item.EntryNumber,
+            AmountDC: item.AmountDC || 0,
+            OriginalAmountDC: item.OriginalAmountDC || 0,
+          });
+        }
+      }
+    }
+
+    // Check for next page
+    const nextUrl = data.d?.__next;
+    if (nextUrl && items.length > 0) {
+      const tokenMatch = nextUrl.match(/\$skiptoken='([^']+)'/);
+      if (tokenMatch) {
+        skipToken = `&$skiptoken='${tokenMatch[1]}'`;
+      } else {
+        hasMore = false;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  console.log(`Fetched ${receivablesMap.size} receivables from Exact Online`);
+  return receivablesMap;
 }
 
 /**
