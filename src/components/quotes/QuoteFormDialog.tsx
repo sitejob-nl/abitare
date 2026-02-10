@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format, addDays } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
 import { nl } from "date-fns/locale";
 import {
   Dialog,
@@ -89,6 +90,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const [newCustomerDialogOpen, setNewCustomerDialogOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [selectedCollection, setSelectedCollection] = useState<string>("");
+  const [priceGroupId, setPriceGroupId] = useState<string>("");
+  const [colorId, setColorId] = useState<string>("");
+  const [corpusColorId, setCorpusColorId] = useState<string>("");
   const [step, setStep] = useState(1);
 
   const { data: customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers({
@@ -158,14 +162,32 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
     return customers?.find((c) => c.id === selectedCustomerId);
   }, [customers, selectedCustomerId]);
 
-  // Auto-generate reference when customer or category changes
+  // Auto-generate reference with sequence number via RPC
   useEffect(() => {
     if (selectedCustomer && watchedCategory) {
       const name = selectedCustomer.company_name || 
         [selectedCustomer.first_name, selectedCustomer.last_name].filter(Boolean).join(" ");
       const catLabel = CATEGORIES.find(c => c.value === watchedCategory)?.label || watchedCategory;
-      const year = new Date().getFullYear();
-      setValue("reference", `${name} - ${catLabel} - ${year}`);
+
+      const generateRef = async () => {
+        try {
+          const { data, error } = await supabase.rpc("generate_quote_reference", {
+            p_customer_name: name,
+            p_category: catLabel,
+          });
+          if (!error && data) {
+            setValue("reference", data);
+          } else {
+            // Fallback
+            const year = new Date().getFullYear();
+            setValue("reference", `${name} - ${catLabel} - ${year}`);
+          }
+        } catch {
+          const year = new Date().getFullYear();
+          setValue("reference", `${name} - ${catLabel} - ${year}`);
+        }
+      };
+      generateRef();
     }
   }, [selectedCustomer?.id, watchedCategory]);
 
@@ -186,6 +208,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
     setValue("supplier_id", value);
     setValue("range_id", "");
     setSelectedCollection("");
+    setPriceGroupId("");
+    setColorId("");
+    setCorpusColorId("");
   };
 
   const handleCollectionChange = (value: string) => {
@@ -207,6 +232,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
         division_id: profile?.division_id || null,
         created_by: user?.id || null,
         default_range_id: data.range_id || null,
+        default_price_group_id: priceGroupId || null,
+        default_color_id: colorId || null,
+        default_corpus_color_id: corpusColorId || null,
         // New fields
         category: data.category || "keuken",
         reference: data.reference || null,
@@ -239,6 +267,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
       reset();
       setSelectedSupplierId("");
       setSelectedCollection("");
+      setPriceGroupId("");
+      setColorId("");
+      setCorpusColorId("");
       setStep(1);
       onOpenChange(false);
       navigate(`/quotes/${quote.id}`);
@@ -257,6 +288,9 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
     setCustomerSearch("");
     setSelectedSupplierId("");
     setSelectedCollection("");
+    setPriceGroupId("");
+    setColorId("");
+    setCorpusColorId("");
     setStep(1);
     onOpenChange(false);
   };
@@ -504,7 +538,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                 {hasPriceGroups && (
                   <div className="space-y-2">
                     <Label>Prijsgroep</Label>
-                    <Select defaultValue="">
+                    <Select value={priceGroupId} onValueChange={setPriceGroupId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecteer prijsgroep..." />
                       </SelectTrigger>
@@ -517,6 +551,43 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                       </SelectContent>
                     </Select>
                   </div>
+                )}
+
+                {/* Front color & Corpus color */}
+                {selectedSupplierId && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Frontkleur</Label>
+                      <Select value={colorId} onValueChange={setColorId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer frontkleur..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {colors.filter(c => c.color_type !== "corpus").map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Korpuskleur</Label>
+                      <Select value={corpusColorId} onValueChange={setCorpusColorId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer korpuskleur..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {colors.filter(c => c.color_type !== "front").map((color) => (
+                            <SelectItem key={color.id} value={color.id}>
+                              {color.code} - {color.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
                 )}
 
                 {/* Section Type */}

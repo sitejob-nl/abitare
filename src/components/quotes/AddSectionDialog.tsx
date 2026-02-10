@@ -30,6 +30,7 @@ interface AddSectionDialogProps {
   existingSectionsCount: number;
   quoteDefaultSupplierId?: string | null;
   quoteDefaultRangeId?: string | null;
+  quoteDefaultPriceGroupId?: string | null;
 }
 
 export function AddSectionDialog({
@@ -39,6 +40,7 @@ export function AddSectionDialog({
   existingSectionsCount,
   quoteDefaultSupplierId,
   quoteDefaultRangeId,
+  quoteDefaultPriceGroupId,
 }: AddSectionDialogProps) {
   const createSection = useCreateQuoteSection();
   const [sectionType, setSectionType] = useState<SectionType>("meubelen");
@@ -52,8 +54,9 @@ export function AddSectionDialog({
     if (open) {
       setSupplierId(quoteDefaultSupplierId || "");
       setRangeId(quoteDefaultRangeId || "");
+      setPriceGroupId(quoteDefaultPriceGroupId || "");
     }
-  }, [open, quoteDefaultSupplierId, quoteDefaultRangeId]);
+  }, [open, quoteDefaultSupplierId, quoteDefaultRangeId, quoteDefaultPriceGroupId]);
 
   const { data: suppliers } = useSuppliers();
   const { data: ranges } = useProductRanges(supplierId || undefined);

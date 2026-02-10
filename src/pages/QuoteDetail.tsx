@@ -358,6 +358,7 @@ const QuoteDetail = () => {
         existingSectionsCount={sections?.length || 0}
         quoteDefaultSupplierId={quote.default_supplier_id}
         quoteDefaultRangeId={quote.default_range_id}
+        quoteDefaultPriceGroupId={quote.default_price_group_id}
       />
 
       <QuoteConfigDialog
