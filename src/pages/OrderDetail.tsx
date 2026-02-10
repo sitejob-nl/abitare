@@ -14,6 +14,7 @@ import { NotesCard } from "@/components/orders/NotesCard";
 import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
 import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
 import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
+import { ChecklistCard } from "@/components/orders/ChecklistCard";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -347,6 +348,8 @@ const OrderDetail = () => {
             onRegisterPayment={handleRegisterPayment}
             isUpdating={registerPayment.isPending}
           />
+
+          <ChecklistCard orderId={order.id} />
 
           <DocumentsCard
             documents={documents}

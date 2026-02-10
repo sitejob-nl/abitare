@@ -489,6 +489,54 @@ export type Database = {
         }
         Relationships: []
       }
+      order_checklist_items: {
+        Row: {
+          checked: boolean
+          checked_at: string | null
+          checked_by: string | null
+          created_at: string
+          id: string
+          label: string
+          order_id: string
+          sort_order: number
+        }
+        Insert: {
+          checked?: boolean
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          id?: string
+          label: string
+          order_id: string
+          sort_order?: number
+        }
+        Update: {
+          checked?: boolean
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          order_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_checklist_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_checklist_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_documents: {
         Row: {
           created_at: string | null
