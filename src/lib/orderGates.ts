@@ -7,6 +7,7 @@ export interface OrderGateContext {
   paymentStatus: string | null;
   depositRequired: boolean;
   depositInvoiceSent: boolean;
+  checklistComplete?: boolean;
 }
 
 export interface GateResult {
@@ -25,7 +26,17 @@ export function validateStatusTransition(
   targetStatus: OrderStatus,
   context: OrderGateContext
 ): GateResult {
-  const { currentStatus, paymentStatus, depositRequired } = context;
+  const { currentStatus, paymentStatus, depositRequired, checklistComplete } = context;
+
+  // Gate: checklist must be complete before bestel_klaar
+  if (targetStatus === "bestel_klaar") {
+    if (checklistComplete === false) {
+      return {
+        allowed: false,
+        reason: "Niet alle checklist-items zijn afgevinkt.",
+      };
+    }
+  }
 
   // Gate: deposit payment required before bestel_klaar or besteld
   if (targetStatus === "bestel_klaar" || targetStatus === "besteld") {

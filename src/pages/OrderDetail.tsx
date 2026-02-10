@@ -16,6 +16,7 @@ import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
 import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
 import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
 import { ChecklistCard } from "@/components/orders/ChecklistCard";
+import { useOrderChecklist } from "@/hooks/useOrderChecklist";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -49,6 +50,7 @@ const OrderDetail = () => {
   const deleteNote = useDeleteOrderNote();
   const updateDates = useUpdateOrderDates();
   const updateAddresses = useUpdateOrderAddresses();
+  const { allChecked: checklistComplete } = useOrderChecklist(id);
 
   useEffect(() => {
     if (error) {
@@ -286,6 +288,7 @@ const OrderDetail = () => {
                   paymentStatus: order.payment_status,
                   depositRequired: (order as any).deposit_required !== false,
                   depositInvoiceSent: !!(order as any).deposit_invoice_sent,
+                  checklistComplete: checklistComplete ?? undefined,
                 }}
               />
             </div>
