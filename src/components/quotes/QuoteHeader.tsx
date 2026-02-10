@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ArrowLeft, Calendar, Settings2 } from "lucide-react";
+import { ArrowLeft, Calendar, Settings2, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,6 +30,8 @@ interface QuoteHeaderProps {
   defaultRangeId?: string | null;
   defaultColorId?: string | null;
   onConfigClick?: () => void;
+  requiresTransport?: boolean;
+  requiresKooiaap?: boolean;
 }
 
 const statusConfig: Record<QuoteStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -62,6 +64,8 @@ export function QuoteHeader({
   defaultRangeId,
   defaultColorId,
   onConfigClick,
+  requiresTransport,
+  requiresKooiaap,
 }: QuoteHeaderProps) {
   const { data: supplier } = useSupplier(defaultSupplierId);
   const { data: range } = useProductRange(defaultRangeId);
@@ -103,6 +107,12 @@ export function QuoteHeader({
             {category && (
               <Badge variant="outline" className="text-xs">
                 {categoryLabels[category] || category}
+              </Badge>
+            )}
+            {requiresTransport && (
+              <Badge variant="outline" className="text-xs gap-1">
+                <Truck className="h-3 w-3" />
+                Transport{requiresKooiaap ? " + Kooiaap" : ""}
               </Badge>
             )}
           </div>

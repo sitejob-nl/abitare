@@ -238,6 +238,8 @@ const QuoteDetail = () => {
           defaultRangeId={quote.default_range_id}
           defaultColorId={quote.default_color_id}
           onConfigClick={() => setShowConfig(true)}
+          requiresTransport={(quote as any).requires_transport ?? false}
+          requiresKooiaap={(quote as any).requires_kooiaap ?? false}
         />
         <QuoteActions 
           quoteId={id!} 
@@ -372,6 +374,8 @@ const QuoteDetail = () => {
         currentColorId={quote.default_color_id}
         currentPriceGroupId={quote.default_price_group_id}
         currentCorpusColorId={quote.default_corpus_color_id}
+        currentRequiresTransport={(quote as any).requires_transport ?? false}
+        currentRequiresKooiaap={(quote as any).requires_kooiaap ?? false}
       />
     </AppLayout>
   );

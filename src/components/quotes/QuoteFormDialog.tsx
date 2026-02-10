@@ -38,8 +38,9 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, ArrowRight, ArrowLeft } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, ArrowRight, ArrowLeft, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomers, type Customer } from "@/hooks/useCustomers";
 import { useCreateQuote } from "@/hooks/useQuotes";
@@ -94,6 +95,8 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const [colorId, setColorId] = useState<string>("");
   const [corpusColorId, setCorpusColorId] = useState<string>("");
   const [step, setStep] = useState(1);
+  const [requiresTransport, setRequiresTransport] = useState(false);
+  const [requiresKooiaap, setRequiresKooiaap] = useState(false);
 
   const { data: customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers({
     search: customerSearch || undefined,
@@ -235,10 +238,11 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
         default_price_group_id: priceGroupId || null,
         default_color_id: colorId || null,
         default_corpus_color_id: corpusColorId || null,
-        // New fields
         category: data.category || "keuken",
         reference: data.reference || null,
         default_supplier_id: selectedSupplierId || null,
+        requires_transport: data.category === "tegels" ? requiresTransport : false,
+        requires_kooiaap: data.category === "tegels" ? requiresKooiaap : false,
       });
 
       // If supplier/range selected, create first section automatically
@@ -292,6 +296,8 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
     setColorId("");
     setCorpusColorId("");
     setStep(1);
+    setRequiresTransport(false);
+    setRequiresKooiaap(false);
     onOpenChange(false);
   };
 
@@ -410,6 +416,37 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                     ))}
                   </div>
                 </div>
+
+                {/* Transport options for tegels */}
+                {watchedCategory === "tegels" && (
+                  <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      Transportopties
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="form-transport" className="text-sm font-normal">Transport nodig</Label>
+                      <Switch
+                        id="form-transport"
+                        checked={requiresTransport}
+                        onCheckedChange={(checked) => {
+                          setRequiresTransport(checked);
+                          if (!checked) setRequiresKooiaap(false);
+                        }}
+                      />
+                    </div>
+                    {requiresTransport && (
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="form-kooiaap" className="text-sm font-normal">Kooiaap (hydraulische laadklep)</Label>
+                        <Switch
+                          id="form-kooiaap"
+                          checked={requiresKooiaap}
+                          onCheckedChange={setRequiresKooiaap}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Reference */}
                 <div className="space-y-2">

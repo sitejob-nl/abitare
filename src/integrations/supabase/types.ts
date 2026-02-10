@@ -1841,6 +1841,8 @@ export type Database = {
           quote_date: string | null
           quote_number: number
           reference: string | null
+          requires_kooiaap: boolean | null
+          requires_transport: boolean | null
           salesperson_id: string | null
           sent_at: string | null
           status: Database["public"]["Enums"]["quote_status"] | null
@@ -1877,6 +1879,8 @@ export type Database = {
           quote_date?: string | null
           quote_number?: number
           reference?: string | null
+          requires_kooiaap?: boolean | null
+          requires_transport?: boolean | null
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
@@ -1913,6 +1917,8 @@ export type Database = {
           quote_date?: string | null
           quote_number?: number
           reference?: string | null
+          requires_kooiaap?: boolean | null
+          requires_transport?: boolean | null
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
