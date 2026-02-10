@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.exact-sync-purchase-orders]
 verify_jwt = false
+
+[functions.portal-data]
+verify_jwt = false

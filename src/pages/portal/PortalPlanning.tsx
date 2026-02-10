@@ -11,9 +11,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format, addDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { useSubmitPlanningPreference, useHasSubmittedPreferences } from "@/hooks/usePlanningPreferences";
+import { usePortalSubmitPlanning, usePortalHasSubmitted } from "@/hooks/usePortalData";
 import { toast } from "@/hooks/use-toast";
-import type { PortalData } from "@/hooks/usePortalToken";
+import type { PortalData } from "@/hooks/usePortalData";
 
 interface PortalContext {
   portalData: PortalData;
@@ -23,9 +23,7 @@ interface PortalContext {
 export default function PortalPlanning() {
   const { portalData, token } = useOutletContext<PortalContext>();
   const { orders } = portalData;
-  const tokenId = portalData.token.id;
 
-  // Orders that need planning
   const ordersNeedingPlanning = orders.filter(
     (o) => !o.expected_installation_date && o.status !== "afgehandeld" && o.status !== "geannuleerd"
   );
@@ -37,23 +35,19 @@ export default function PortalPlanning() {
   const [timePreference, setTimePreference] = useState<"ochtend" | "middag" | "geen_voorkeur">("geen_voorkeur");
   const [remarks, setRemarks] = useState("");
 
-  const submitPreference = useSubmitPlanningPreference();
-  const { data: hasSubmitted } = useHasSubmittedPreferences(selectedOrderId, tokenId);
+  const submitPlanning = usePortalSubmitPlanning();
+  const { data: hasSubmitted } = usePortalHasSubmitted(token, selectedOrderId);
 
   const handleSubmit = async () => {
     if (!selectedOrderId || !date1) {
-      toast({
-        title: "Selecteer een datum",
-        description: "Kies minimaal één voorkeursdatum.",
-        variant: "destructive",
-      });
+      toast({ title: "Selecteer een datum", description: "Kies minimaal één voorkeursdatum.", variant: "destructive" });
       return;
     }
 
     try {
-      await submitPreference.mutateAsync({
+      await submitPlanning.mutateAsync({
+        token,
         orderId: selectedOrderId,
-        tokenId,
         preferredDate1: date1 ? format(date1, "yyyy-MM-dd") : undefined,
         preferredDate2: date2 ? format(date2, "yyyy-MM-dd") : undefined,
         preferredDate3: date3 ? format(date3, "yyyy-MM-dd") : undefined,
@@ -61,47 +55,33 @@ export default function PortalPlanning() {
         remarks: remarks || undefined,
       });
 
-      toast({
-        title: "Voorkeur opgeslagen",
-        description: "Uw voorkeursdatums zijn doorgegeven. Wij nemen contact met u op.",
-      });
-
-      // Reset form
+      toast({ title: "Voorkeur opgeslagen", description: "Uw voorkeursdatums zijn doorgegeven. Wij nemen contact met u op." });
       setDate1(undefined);
       setDate2(undefined);
       setDate3(undefined);
       setTimePreference("geen_voorkeur");
       setRemarks("");
-    } catch (error) {
-      toast({
-        title: "Fout bij opslaan",
-        description: "Er is iets misgegaan. Probeer het opnieuw.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Fout bij opslaan", description: "Er is iets misgegaan. Probeer het opnieuw.", variant: "destructive" });
     }
   };
 
-  const minDate = addDays(new Date(), 7); // Minimum 1 week in advance
+  const minDate = addDays(new Date(), 7);
 
   if (ordersNeedingPlanning.length === 0) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Montageplanning</h1>
-          <p className="text-muted-foreground mt-1">
-            Geef uw voorkeursdatums door voor de montage.
-          </p>
+          <p className="text-muted-foreground mt-1">Geef uw voorkeursdatums door voor de montage.</p>
         </div>
-
         <Card>
           <CardContent className="pt-6 text-center">
             <div className="rounded-full bg-green-100 p-4 w-fit mx-auto mb-4">
               <Check className="h-8 w-8 text-green-600" />
             </div>
             <h2 className="text-lg font-medium text-foreground">Alles ingepland</h2>
-            <p className="text-muted-foreground mt-1">
-              Al uw orders hebben een geplande montagedatum.
-            </p>
+            <p className="text-muted-foreground mt-1">Al uw orders hebben een geplande montagedatum.</p>
           </CardContent>
         </Card>
       </div>
@@ -119,14 +99,11 @@ export default function PortalPlanning() {
         </p>
       </div>
 
-      {/* Order selection */}
       {ordersNeedingPlanning.length > 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Selecteer order</CardTitle>
-            <CardDescription>
-              Kies de order waarvoor u een montagedatum wilt doorgeven.
-            </CardDescription>
+            <CardDescription>Kies de order waarvoor u een montagedatum wilt doorgeven.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -136,9 +113,7 @@ export default function PortalPlanning() {
                   onClick={() => setSelectedOrderId(order.id)}
                   className={cn(
                     "w-full text-left p-3 rounded-lg border transition-colors",
-                    selectedOrderId === order.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-muted/50"
+                    selectedOrderId === order.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
                   )}
                 >
                   <p className="font-medium">Order #{order.order_number}</p>
@@ -159,28 +134,22 @@ export default function PortalPlanning() {
               <Check className="h-5 w-5 text-green-600" />
               <div>
                 <p className="font-medium text-green-800">Voorkeur reeds doorgegeven</p>
-                <p className="text-sm text-green-700">
-                  U heeft al voorkeursdatums doorgegeven voor deze order. U kunt ook nieuwe voorkeuren indienen.
-                </p>
+                <p className="text-sm text-green-700">U heeft al voorkeursdatums doorgegeven voor deze order. U kunt ook nieuwe voorkeuren indienen.</p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Planning form */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Calendar className="h-5 w-5" />
             Voorkeursdatums voor Order #{selectedOrder?.order_number}
           </CardTitle>
-          <CardDescription>
-            Kies maximaal 3 datums waarop de montage zou kunnen plaatsvinden.
-          </CardDescription>
+          <CardDescription>Kies maximaal 3 datums waarop de montage zou kunnen plaatsvinden.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Date pickers */}
           <div className="grid gap-4 sm:grid-cols-3">
             {[
               { label: "1e voorkeur", date: date1, setDate: setDate1 },
@@ -193,10 +162,7 @@ export default function PortalPlanning() {
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !item.date && "text-muted-foreground"
-                      )}
+                      className={cn("w-full justify-start text-left font-normal", !item.date && "text-muted-foreground")}
                     >
                       <Calendar className="mr-2 h-4 w-4" />
                       {item.date ? format(item.date, "d MMMM yyyy", { locale: nl }) : "Kies datum"}
@@ -217,7 +183,6 @@ export default function PortalPlanning() {
             ))}
           </div>
 
-          {/* Time preference */}
           <div>
             <Label className="mb-3 block">Tijdsvoorkeur</Label>
             <RadioGroup
@@ -240,7 +205,6 @@ export default function PortalPlanning() {
             </RadioGroup>
           </div>
 
-          {/* Remarks */}
           <div>
             <Label htmlFor="remarks" className="mb-2 block">Opmerkingen (optioneel)</Label>
             <Textarea
@@ -252,13 +216,8 @@ export default function PortalPlanning() {
             />
           </div>
 
-          {/* Submit button */}
-          <Button
-            onClick={handleSubmit}
-            disabled={!date1 || submitPreference.isPending}
-            className="w-full sm:w-auto"
-          >
-            {submitPreference.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button onClick={handleSubmit} disabled={!date1 || submitPlanning.isPending} className="w-full sm:w-auto">
+            {submitPlanning.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Voorkeur doorgeven
           </Button>
         </CardContent>

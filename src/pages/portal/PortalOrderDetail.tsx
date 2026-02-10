@@ -1,11 +1,10 @@
 import { useOutletContext, useParams, Link } from "react-router-dom";
-import { ArrowLeft, Package, Truck, Wrench, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, Package, Truck, Wrench, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import type { PortalData } from "@/hooks/usePortalToken";
+import { usePortalOrderDetail } from "@/hooks/usePortalData";
+import type { PortalData } from "@/hooks/usePortalData";
 
 interface PortalContext {
   portalData: PortalData;
@@ -37,36 +36,11 @@ const statusColors: Record<string, string> = {
 export default function PortalOrderDetail() {
   const { portalData, token } = useOutletContext<PortalContext>();
   const { orderId } = useParams<{ orderId: string }>();
-
   const order = portalData.orders.find((o) => o.id === orderId);
 
-  // Fetch order lines (without prices for portal)
-  const { data: orderLines } = useQuery({
-    queryKey: ["portal-order-lines", orderId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("order_lines")
-        .select("id, description, quantity, unit, article_code")
-        .eq("order_id", orderId)
-        .order("sort_order");
-      return data || [];
-    },
-    enabled: !!orderId,
-  });
-
-  // Fetch status history
-  const { data: statusHistory } = useQuery({
-    queryKey: ["portal-status-history", orderId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("order_status_history")
-        .select("id, to_status, created_at")
-        .eq("order_id", orderId)
-        .order("created_at", { ascending: false });
-      return data || [];
-    },
-    enabled: !!orderId,
-  });
+  const { data: detail } = usePortalOrderDetail(token, orderId);
+  const orderLines = detail?.lines || [];
+  const statusHistory = detail?.statusHistory || [];
 
   if (!order) {
     return (
@@ -75,8 +49,7 @@ export default function PortalOrderDetail() {
         <h2 className="text-lg font-medium text-foreground">Order niet gevonden</h2>
         <Link to={`/portal/${token}/orders`}>
           <Button variant="outline" className="mt-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Terug naar orders
+            <ArrowLeft className="mr-2 h-4 w-4" /> Terug naar orders
           </Button>
         </Link>
       </div>
@@ -85,129 +58,65 @@ export default function PortalOrderDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={`/portal/${token}/orders`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-foreground">
-              Order #{order.order_number}
-            </h1>
+            <h1 className="text-2xl font-semibold text-foreground">Order #{order.order_number}</h1>
             <Badge className={statusColors[order.status || ""] || "bg-muted"}>
               {statusLabels[order.status || ""] || order.status}
             </Badge>
           </div>
           <p className="text-muted-foreground">
             Geplaatst op {order.order_date && new Date(order.order_date).toLocaleDateString("nl-NL", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
+              weekday: "long", year: "numeric", month: "long", day: "numeric",
             })}
           </p>
         </div>
       </div>
 
-      {/* Planning dates */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-cyan-100 p-2">
-                <Truck className="h-5 w-5 text-cyan-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Verwachte levering</p>
-                <p className="font-medium">
-                  {order.expected_delivery_date
-                    ? new Date(order.expected_delivery_date).toLocaleDateString("nl-NL")
-                    : "Nog niet gepland"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-emerald-100 p-2">
-                <Wrench className="h-5 w-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Verwachte montage</p>
-                <p className="font-medium">
-                  {order.expected_installation_date
-                    ? new Date(order.expected_installation_date).toLocaleDateString("nl-NL")
-                    : "Nog niet gepland"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-blue-100 p-2">
-                <Calendar className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Geleverd op</p>
-                <p className="font-medium">
-                  {order.actual_delivery_date
-                    ? new Date(order.actual_delivery_date).toLocaleDateString("nl-NL")
-                    : "-"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-green-100 p-2">
-                <Calendar className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gemonteerd op</p>
-                <p className="font-medium">
-                  {order.actual_installation_date
-                    ? new Date(order.actual_installation_date).toLocaleDateString("nl-NL")
-                    : "-"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {[
+          { label: "Verwachte levering", value: order.expected_delivery_date, icon: Truck, bg: "bg-cyan-100", fg: "text-cyan-600" },
+          { label: "Verwachte montage", value: order.expected_installation_date, icon: Wrench, bg: "bg-emerald-100", fg: "text-emerald-600" },
+          { label: "Geleverd op", value: order.actual_delivery_date, icon: Calendar, bg: "bg-blue-100", fg: "text-blue-600" },
+          { label: "Gemonteerd op", value: order.actual_installation_date, icon: Calendar, bg: "bg-green-100", fg: "text-green-600" },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.label}>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-full ${item.bg} p-2`}>
+                    <Icon className={`h-5 w-5 ${item.fg}`} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{item.label}</p>
+                    <p className="font-medium">
+                      {item.value ? new Date(item.value).toLocaleDateString("nl-NL") : item.label.startsWith("Verwachte") ? "Nog niet gepland" : "-"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
-      {/* Order lines */}
       <Card>
-        <CardHeader>
-          <CardTitle>Producten</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Producten</CardTitle></CardHeader>
         <CardContent>
-          {orderLines && orderLines.length > 0 ? (
+          {orderLines.length > 0 ? (
             <div className="divide-y">
-              {orderLines.map((line) => (
+              {orderLines.map((line: { id: string; description: string; quantity: number; unit: string; article_code: string | null }) => (
                 <div key={line.id} className="py-3 flex items-start justify-between">
                   <div>
                     <p className="font-medium">{line.description}</p>
-                    {line.article_code && (
-                      <p className="text-xs text-muted-foreground">
-                        Art.nr: {line.article_code}
-                      </p>
-                    )}
+                    {line.article_code && <p className="text-xs text-muted-foreground">Art.nr: {line.article_code}</p>}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {line.quantity} {line.unit}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{line.quantity} {line.unit}</p>
                 </div>
               ))}
             </div>
@@ -217,12 +126,9 @@ export default function PortalOrderDetail() {
         </CardContent>
       </Card>
 
-      {/* Notes */}
       {(order.customer_notes || order.delivery_notes) && (
         <Card>
-          <CardHeader>
-            <CardTitle>Opmerkingen</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Opmerkingen</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {order.customer_notes && (
               <div>
@@ -240,33 +146,22 @@ export default function PortalOrderDetail() {
         </Card>
       )}
 
-      {/* Status history */}
-      {statusHistory && statusHistory.length > 0 && (
+      {statusHistory.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Statusgeschiedenis</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Statusgeschiedenis</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {statusHistory.map((entry, index) => (
+              {statusHistory.map((entry: { id: string; to_status: string; created_at: string }, index: number) => (
                 <div key={entry.id} className="flex items-start gap-3">
                   <div className="flex flex-col items-center">
                     <div className={`h-2.5 w-2.5 rounded-full ${index === 0 ? "bg-primary" : "bg-muted-foreground/30"}`} />
-                    {index < statusHistory.length - 1 && (
-                      <div className="w-px h-8 bg-border" />
-                    )}
+                    {index < statusHistory.length - 1 && <div className="w-px h-8 bg-border" />}
                   </div>
                   <div className="flex-1 pb-2">
-                    <p className="font-medium text-sm">
-                      {statusLabels[entry.to_status] || entry.to_status}
-                    </p>
+                    <p className="font-medium text-sm">{statusLabels[entry.to_status] || entry.to_status}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(entry.created_at).toLocaleDateString("nl-NL", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
+                        day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
                       })}
                     </p>
                   </div>
@@ -277,22 +172,16 @@ export default function PortalOrderDetail() {
         </Card>
       )}
 
-      {/* Planning CTA */}
       {!order.expected_installation_date && order.status !== "afgehandeld" && order.status !== "geannuleerd" && (
         <Card className="border-primary/50 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">Montageplanning</p>
-                <p className="text-sm text-muted-foreground">
-                  Geef uw voorkeursdatums door voor de montage.
-                </p>
+                <p className="text-sm text-muted-foreground">Geef uw voorkeursdatums door voor de montage.</p>
               </div>
               <Link to={`/portal/${token}/planning`}>
-                <Button>
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Planning doorgeven
-                </Button>
+                <Button><Calendar className="h-4 w-4 mr-2" /> Planning doorgeven</Button>
               </Link>
             </div>
           </CardContent>

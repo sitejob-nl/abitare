@@ -2,7 +2,7 @@ import { useOutletContext, Link } from "react-router-dom";
 import { Package, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { PortalData } from "@/hooks/usePortalToken";
+import type { PortalData } from "@/hooks/usePortalData";
 
 interface PortalContext {
   portalData: PortalData;
@@ -40,9 +40,7 @@ export default function PortalOrders() {
       <div className="text-center py-12">
         <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h2 className="text-lg font-medium text-foreground">Geen orders</h2>
-        <p className="text-muted-foreground">
-          U heeft nog geen orders geplaatst.
-        </p>
+        <p className="text-muted-foreground">U heeft nog geen orders geplaatst.</p>
       </div>
     );
   }
@@ -51,9 +49,7 @@ export default function PortalOrders() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Uw orders</h1>
-        <p className="text-muted-foreground mt-1">
-          Bekijk de status en details van al uw orders.
-        </p>
+        <p className="text-muted-foreground mt-1">Bekijk de status en details van al uw orders.</p>
       </div>
 
       <div className="space-y-4">
@@ -66,10 +62,7 @@ export default function PortalOrders() {
                     <CardTitle className="text-lg">Order #{order.order_number}</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       {order.order_date && new Date(order.order_date).toLocaleDateString("nl-NL", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
+                        weekday: "long", year: "numeric", month: "long", day: "numeric",
                       })}
                     </p>
                   </div>
@@ -83,33 +76,25 @@ export default function PortalOrders() {
                   <div>
                     <p className="text-xs text-muted-foreground">Verwachte levering</p>
                     <p className="text-sm font-medium">
-                      {order.expected_delivery_date
-                        ? new Date(order.expected_delivery_date).toLocaleDateString("nl-NL")
-                        : "Nog niet gepland"}
+                      {order.expected_delivery_date ? new Date(order.expected_delivery_date).toLocaleDateString("nl-NL") : "Nog niet gepland"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Verwachte montage</p>
                     <p className="text-sm font-medium">
-                      {order.expected_installation_date
-                        ? new Date(order.expected_installation_date).toLocaleDateString("nl-NL")
-                        : "Nog niet gepland"}
+                      {order.expected_installation_date ? new Date(order.expected_installation_date).toLocaleDateString("nl-NL") : "Nog niet gepland"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Geleverd op</p>
                     <p className="text-sm font-medium">
-                      {order.actual_delivery_date
-                        ? new Date(order.actual_delivery_date).toLocaleDateString("nl-NL")
-                        : "-"}
+                      {order.actual_delivery_date ? new Date(order.actual_delivery_date).toLocaleDateString("nl-NL") : "-"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Gemonteerd op</p>
                     <p className="text-sm font-medium">
-                      {order.actual_installation_date
-                        ? new Date(order.actual_installation_date).toLocaleDateString("nl-NL")
-                        : "-"}
+                      {order.actual_installation_date ? new Date(order.actual_installation_date).toLocaleDateString("nl-NL") : "-"}
                     </p>
                   </div>
                 </div>
