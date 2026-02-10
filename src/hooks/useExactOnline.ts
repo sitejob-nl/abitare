@@ -175,6 +175,82 @@ export function useSyncCustomers() {
   });
 }
 
+export function useSyncSalesOrders() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+      orderId,
+    }: {
+      action: "push";
+      divisionId: string;
+      orderId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-sales-orders", {
+        body: { action, divisionId, orderId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+      const msg = `Verkooporders gepusht: ${data.created} aangemaakt`;
+      if (data.failed > 0) {
+        toast.warning(`${msg}, ${data.failed} mislukt`);
+      } else {
+        toast.success(msg);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Verkooporder sync fout: ${error.message}`);
+    },
+  });
+}
+
+export function useSyncPurchaseOrders() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+      supplierOrderId,
+    }: {
+      action: "push";
+      divisionId: string;
+      supplierOrderId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-purchase-orders", {
+        body: { action, divisionId, supplierOrderId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["supplier-orders"] });
+
+      const msg = `Inkooporders gepusht: ${data.created} aangemaakt`;
+      if (data.failed > 0) {
+        toast.warning(`${msg}, ${data.failed} mislukt`);
+      } else {
+        toast.success(msg);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Inkooporder sync fout: ${error.message}`);
+    },
+  });
+}
+
 export function useSyncInvoices() {
   const queryClient = useQueryClient();
 

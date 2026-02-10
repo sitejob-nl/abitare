@@ -976,6 +976,7 @@ export type Database = {
           exact_customer_id: string | null
           exact_invoice_id: string | null
           exact_sales_order_id: string | null
+          exact_sales_order_number: string | null
           expected_delivery_date: string | null
           expected_installation_date: string | null
           id: string
@@ -1030,6 +1031,7 @@ export type Database = {
           exact_customer_id?: string | null
           exact_invoice_id?: string | null
           exact_sales_order_id?: string | null
+          exact_sales_order_number?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string
@@ -1084,6 +1086,7 @@ export type Database = {
           exact_customer_id?: string | null
           exact_invoice_id?: string | null
           exact_sales_order_id?: string | null
+          exact_sales_order_number?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string
@@ -2680,6 +2683,7 @@ export type Database = {
         Row: {
           confirmed_at: string | null
           created_at: string | null
+          exact_purchase_order_id: string | null
           expected_delivery_date: string | null
           external_order_id: string | null
           id: string
@@ -2696,6 +2700,7 @@ export type Database = {
         Insert: {
           confirmed_at?: string | null
           created_at?: string | null
+          exact_purchase_order_id?: string | null
           expected_delivery_date?: string | null
           external_order_id?: string | null
           id?: string
@@ -2712,6 +2717,7 @@ export type Database = {
         Update: {
           confirmed_at?: string | null
           created_at?: string | null
+          exact_purchase_order_id?: string | null
           expected_delivery_date?: string | null
           external_order_id?: string | null
           id?: string
@@ -2755,6 +2761,7 @@ export type Database = {
           contact_email: string | null
           contact_phone: string | null
           created_at: string | null
+          exact_supplier_id: string | null
           has_price_groups: boolean | null
           id: string
           is_active: boolean | null
@@ -2774,6 +2781,7 @@ export type Database = {
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string | null
+          exact_supplier_id?: string | null
           has_price_groups?: boolean | null
           id?: string
           is_active?: boolean | null
@@ -2793,6 +2801,7 @@ export type Database = {
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string | null
+          exact_supplier_id?: string | null
           has_price_groups?: boolean | null
           id?: string
           is_active?: boolean | null

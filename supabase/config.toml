@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.microsoft-api]
 verify_jwt = false
+
+[functions.exact-sync-sales-orders]
+verify_jwt = false
+
+[functions.exact-sync-purchase-orders]
+verify_jwt = false
