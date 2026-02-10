@@ -1,37 +1,53 @@
 
-# Offerte Flow -- Opschonen van `as any` casts
+# Fix Model/Collectie Cascade en Prijsgroep Volgorde
 
-## Huidige situatie
+## Gevonden problemen
 
-De vorige implementatie heeft alle 6 fases van het offerte-flow plan succesvol uitgevoerd:
-- Database migratie (category, reference, default_supplier_id, default_price_group_id, default_corpus_color_id)
-- QuoteFormDialog met 2-stappen wizard
-- QuoteConfigDialog voor wijzigen na aanmaak
-- QuoteHeader met referentie, categorie-badge en config-samenvatting
-- 4-tier prijshierarchie in useProductPrices
-- Dupliceren en converteren met nieuwe velden
+### 1. Verkeerde bron voor collecties en modellen
+De collectie-dropdown haalt collecties op uit `product_ranges`, maar voor Stosa bevat die tabel 100+ technische entries (element finishes, top types, leg finishes, etc.) waarvan slechts 1 een `collection` heeft ("evolution"). De `price_groups` tabel bevat de juiste collecties: "evolution" EN "look".
 
-De Supabase types zijn correct gegenereerd met alle nieuwe kolommen. Echter, op meerdere plekken worden nog `as any` casts gebruikt terwijl de types nu correct zijn.
+### 2. "Prijsgroep / Model" toont verkeerde data
+Voor leveranciers met `has_price_groups=true` (Stosa) toont de dropdown alle `product_ranges` -- dat zijn geen prijsgroepen maar technische metadata. De echte prijsgroepen staan in de `price_groups` tabel (E1-E10, L1-L10).
 
-## Wat er gedaan moet worden
+### 3. Prijsgroepen niet gegroepeerd op collectie
+De `price_groups` worden opgehaald gesorteerd op `sort_order`, maar dat mixt collecties door elkaar: E1, L1, E2, L2, E3, L3... Ze moeten eerst op collectie en dan op `sort_order` gesorteerd worden.
 
-Verwijderen van onnodige `as any` casts in de volgende bestanden:
+### 4. Korpuskleur afhankelijk van onbestaande data
+De korpuskleur dropdown filtert op `rangeId`, maar er zijn nog geen `product_colors` in de database. Dit is geen bug om nu te fixen, maar de UI moet er wel mee overweg kunnen.
 
-### 1. `src/pages/QuoteDetail.tsx`
-- Regel 209: `as any` bij createQuote -- niet meer nodig, types bevatten nu `category`, `reference`, `default_supplier_id`
-- Regels 225, 235-239, 359-360, 367-373: `(quote as any).reference`, `(quote as any).category`, etc. -- vervangen door directe property access (`quote.reference`, `quote.category`, etc.)
+---
 
-### 2. `src/components/quotes/QuoteFormDialog.tsx`
-- Regel 209: `as any` bij het insert-object voor createQuote
+## Oplossing
 
-### 3. `src/hooks/useQuoteDuplicate.ts`
-- Regels 27, 56-60: `(original as any).reference`, `(original as any).category`, etc.
-- Regel 61: `as any` bij het hele insert-object
+### Stap 1: `usePriceGroups` hook -- sortering fixen
+Sorteren op `collection` + `sort_order` zodat prijsgroepen gegroepeerd worden per collectie.
 
-### 4. `src/hooks/useConvertQuoteToOrder.ts`
-- Regels 56-57: `(quote as any).reference`, `(quote as any).category`
+```
+ORDER BY collection ASC, sort_order ASC
+```
 
-### 5. `src/components/quotes/QuoteConfigDialog.tsx`
-- Regel 135: `as any` bij updateQuote call
+### Stap 2: QuoteConfigDialog -- cascade logica fixen
+- **Collectie dropdown**: ophalen uit `price_groups` (distinct collection) in plaats van `product_ranges`
+- **Prijsgroep dropdown**: altijd tonen voor `has_price_groups` leveranciers, gefilterd op geselecteerde collectie
+- **"Prijsgroep / Model" dropdown** (product_ranges): verbergen voor leveranciers met `has_price_groups=true` -- die hebben immers de `price_groups` dropdown
+- Kleuren: korpuskleur dropdown graceful tonen (lege lijst is OK)
 
-Dit is puur een code-kwaliteitsverbetering -- geen functionele wijzigingen. Alle `as any` casts zijn overbodig geworden doordat de types correct zijn gegenereerd.
+### Stap 3: QuoteFormDialog -- zelfde cascade logica
+Identieke fixes als QuoteConfigDialog:
+- Collecties uit `price_groups` halen
+- Product ranges dropdown verbergen voor `has_price_groups` leveranciers
+- Prijsgroepen gefilterd op collectie tonen
+
+### Stap 4: `useProductRanges` -- sortering verbeteren
+Sorteren op `code` in plaats van `price_group` (dat veld is null voor de meeste ranges).
+
+---
+
+## Bestanden die wijzigen
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/usePriceGroups.ts` | Sortering: `collection ASC, sort_order ASC` |
+| `src/hooks/useProductRanges.ts` | Sortering: `code ASC` i.p.v. `price_group ASC` |
+| `src/components/quotes/QuoteConfigDialog.tsx` | Collecties uit price_groups; ranges verbergen bij has_price_groups; prijsgroep gefilterd op collectie |
+| `src/components/quotes/QuoteFormDialog.tsx` | Zelfde cascade-fixes als QuoteConfigDialog |
