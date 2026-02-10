@@ -1,102 +1,44 @@
 
-# Offerte Flow - 5 Openstaande Taken
+# Producten filteren op leverancier in AddProductDialog
 
-## Overzicht
+## Huidige situatie
 
-Er zijn 5 taken die de offerte flow compleet maken. De meeste wijzigingen zitten in `QuoteFormDialog.tsx`.
+De AddProductDialog toont **alle** producten uit de catalogus, ongeacht de sectie-configuratie. Er zijn 14.623 Stosa-producten en 528 Siemens-producten. Dat maakt zoeken onoverzichtelijk.
 
----
+## Wat gaan we doen
 
-## Taak 1: Prijsgroep koppelen aan state (QuoteFormDialog)
+De productlijst in de "Product toevoegen" dialog automatisch filteren op de **leverancier** van de sectie. De leverancier wordt afgeleid uit de `range_id` van de sectie (via `product_ranges.supplier_id`).
 
-De prijsgroep dropdown op regel 507 gebruikt `defaultValue=""` zonder state-binding. Dit wordt gekoppeld aan een `priceGroupId` state variabele zodat de selectie daadwerkelijk wordt opgeslagen.
+Prijsgroepen filteren producten niet rechtstreeks -- een prijsgroep bepaalt alleen welke **prijs** wordt gehanteerd, niet welke producten beschikbaar zijn. De leverancier is de juiste filter.
 
-## Taak 2: Front- en korpuskleur dropdowns toevoegen (QuoteFormDialog)
+## Technische aanpak
 
-Twee nieuwe dropdowns in Stap 2 van de wizard:
-- **Frontkleur** -- gefilterd op range of prijsgroep
-- **Korpuskleur** -- zelfde bron
+### 1. Leverancier-info meegeven aan AddProductDialog
 
-Worden alleen getoond als er een leverancier is geselecteerd.
+In `SortableSectionCard.tsx` en `QuoteSectionCard.tsx` wordt de `range_id` van de sectie al meegegeven als `sectionRangeId`. We voegen een nieuwe prop `sectionSupplierId` toe, die wordt afgeleid uit de sectie-configuratie of de quote defaults.
 
-## Taak 3: Alle defaults opslaan in onSubmit (QuoteFormDialog)
+### 2. AddProductDialog: leverancier-filter toepassen
 
-Drie ontbrekende velden toevoegen aan het `createQuote.mutateAsync()` call:
-- `default_price_group_id`
-- `default_color_id`
-- `default_corpus_color_id`
+- Nieuwe prop: `sectionSupplierId?: string | null`
+- De `useProducts()` call krijgt `supplierId: sectionSupplierId` mee
+- De bestaande hook ondersteunt dit filter al (`query.eq("supplier_id", supplierId)`)
+- Er wordt een "Alle leveranciers" toggle toegevoegd zodat je ook buiten de leverancier kunt zoeken
 
-Deze database-kolommen bestaan al en zijn correct getypeerd.
+### 3. Leverancier bepalen vanuit range_id
 
-## Taak 4: Referentie met volgnummer
-
-Huidige output: `"Jansen - Keuken - 2026"`
-Gewenste output: `"Jansen - Keuken - 2026-001"`
-
-Aanpak:
-1. Database functie `generate_quote_reference(p_customer_name, p_category)` aanmaken die het volgende volgnummer berekent op basis van bestaande offertes
-2. Frontend: RPC-call in de `useEffect` die de referentie genereert
-
-## Taak 5: AddSectionDialog erft prijsgroep default
-
-- Prop `quoteDefaultPriceGroupId` toevoegen aan `AddSectionDialog`
-- State initialiseren met deze default bij openen
-- In `QuoteDetail.tsx` de prop meegeven: `quote.default_price_group_id`
+In de SortableSectionCard en QuoteSectionCard halen we de leverancier op via de al beschikbare `product_ranges` data, of we voegen een lookup toe op basis van `section.range_id`.
 
 ---
 
-## Technisch Detail
+## Bestanden die wijzigen
 
-### Bestanden die wijzigen
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/components/quotes/AddProductDialog.tsx` | Nieuwe prop `sectionSupplierId`, filter in useProducts, toggle voor alle leveranciers |
+| `src/components/quotes/SortableSectionCard.tsx` | Supplier ID afleiden uit range en meegeven aan AddProductDialog |
+| `src/components/quotes/QuoteSectionCard.tsx` | Idem |
 
-| Bestand | Taken |
-|---------|-------|
-| `src/components/quotes/QuoteFormDialog.tsx` | 1, 2, 3, 4 |
-| `src/components/quotes/AddSectionDialog.tsx` | 5 |
-| `src/pages/QuoteDetail.tsx` | 5 |
-| Nieuwe SQL migratie | 4 |
+## Gebruikerservaring
 
-### Database migratie (Taak 4)
-
-```sql
-CREATE OR REPLACE FUNCTION generate_quote_reference(
-  p_customer_name TEXT,
-  p_category TEXT DEFAULT 'Keuken'
-) RETURNS TEXT AS $$
-DECLARE
-  v_year TEXT;
-  v_seq INTEGER;
-  v_clean_name TEXT;
-BEGIN
-  v_year := TO_CHAR(CURRENT_DATE, 'YYYY');
-  v_clean_name := TRIM(SPLIT_PART(p_customer_name, ',', 1));
-
-  SELECT COALESCE(MAX(
-    CASE 
-      WHEN reference ~ (v_year || '-[0-9]+$')
-      THEN SUBSTRING(reference FROM '[0-9]+$')::INTEGER
-      ELSE 0
-    END
-  ), 0) + 1 INTO v_seq
-  FROM quotes
-  WHERE reference LIKE v_clean_name || ' - ' || p_category || ' - ' || v_year || '-%';
-
-  RETURN v_clean_name || ' - ' || p_category || ' - ' || v_year || '-' || LPAD(v_seq::TEXT, 3, '0');
-END;
-$$ LANGUAGE plpgsql;
-```
-
-### QuoteFormDialog wijzigingen
-
-- Nieuwe state: `priceGroupId`, `colorId`, `corpusColorId`
-- Prijsgroep Select: `value={priceGroupId} onValueChange={setPriceGroupId}`
-- Twee kleur-dropdowns toevoegen na prijsgroep (alleen zichtbaar bij leverancier)
-- `onSubmit`: drie velden toevoegen aan createQuote call
-- `useEffect` referentie: async RPC call i.p.v. lokale string-concatenatie
-- Reset states bij `handleClose` en `handleSupplierChange`
-
-### AddSectionDialog wijzigingen
-
-- Nieuwe prop: `quoteDefaultPriceGroupId?: string | null`
-- `useEffect` bij open: `setPriceGroupId(quoteDefaultPriceGroupId || "")`
-- QuoteDetail.tsx: prop doorgeven
+- Bij het openen van "Product toevoegen" in een Stosa-sectie zie je alleen Stosa-producten
+- Een checkbox of knop "Toon alle leveranciers" laat je de filter uitschakelen als je iets van een andere leverancier wilt toevoegen
