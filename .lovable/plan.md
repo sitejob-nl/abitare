@@ -1,53 +1,102 @@
 
-# Fix Model/Collectie Cascade en Prijsgroep Volgorde
+# Offerte Flow - 5 Openstaande Taken
 
-## Gevonden problemen
+## Overzicht
 
-### 1. Verkeerde bron voor collecties en modellen
-De collectie-dropdown haalt collecties op uit `product_ranges`, maar voor Stosa bevat die tabel 100+ technische entries (element finishes, top types, leg finishes, etc.) waarvan slechts 1 een `collection` heeft ("evolution"). De `price_groups` tabel bevat de juiste collecties: "evolution" EN "look".
-
-### 2. "Prijsgroep / Model" toont verkeerde data
-Voor leveranciers met `has_price_groups=true` (Stosa) toont de dropdown alle `product_ranges` -- dat zijn geen prijsgroepen maar technische metadata. De echte prijsgroepen staan in de `price_groups` tabel (E1-E10, L1-L10).
-
-### 3. Prijsgroepen niet gegroepeerd op collectie
-De `price_groups` worden opgehaald gesorteerd op `sort_order`, maar dat mixt collecties door elkaar: E1, L1, E2, L2, E3, L3... Ze moeten eerst op collectie en dan op `sort_order` gesorteerd worden.
-
-### 4. Korpuskleur afhankelijk van onbestaande data
-De korpuskleur dropdown filtert op `rangeId`, maar er zijn nog geen `product_colors` in de database. Dit is geen bug om nu te fixen, maar de UI moet er wel mee overweg kunnen.
+Er zijn 5 taken die de offerte flow compleet maken. De meeste wijzigingen zitten in `QuoteFormDialog.tsx`.
 
 ---
 
-## Oplossing
+## Taak 1: Prijsgroep koppelen aan state (QuoteFormDialog)
 
-### Stap 1: `usePriceGroups` hook -- sortering fixen
-Sorteren op `collection` + `sort_order` zodat prijsgroepen gegroepeerd worden per collectie.
+De prijsgroep dropdown op regel 507 gebruikt `defaultValue=""` zonder state-binding. Dit wordt gekoppeld aan een `priceGroupId` state variabele zodat de selectie daadwerkelijk wordt opgeslagen.
 
-```
-ORDER BY collection ASC, sort_order ASC
-```
+## Taak 2: Front- en korpuskleur dropdowns toevoegen (QuoteFormDialog)
 
-### Stap 2: QuoteConfigDialog -- cascade logica fixen
-- **Collectie dropdown**: ophalen uit `price_groups` (distinct collection) in plaats van `product_ranges`
-- **Prijsgroep dropdown**: altijd tonen voor `has_price_groups` leveranciers, gefilterd op geselecteerde collectie
-- **"Prijsgroep / Model" dropdown** (product_ranges): verbergen voor leveranciers met `has_price_groups=true` -- die hebben immers de `price_groups` dropdown
-- Kleuren: korpuskleur dropdown graceful tonen (lege lijst is OK)
+Twee nieuwe dropdowns in Stap 2 van de wizard:
+- **Frontkleur** -- gefilterd op range of prijsgroep
+- **Korpuskleur** -- zelfde bron
 
-### Stap 3: QuoteFormDialog -- zelfde cascade logica
-Identieke fixes als QuoteConfigDialog:
-- Collecties uit `price_groups` halen
-- Product ranges dropdown verbergen voor `has_price_groups` leveranciers
-- Prijsgroepen gefilterd op collectie tonen
+Worden alleen getoond als er een leverancier is geselecteerd.
 
-### Stap 4: `useProductRanges` -- sortering verbeteren
-Sorteren op `code` in plaats van `price_group` (dat veld is null voor de meeste ranges).
+## Taak 3: Alle defaults opslaan in onSubmit (QuoteFormDialog)
+
+Drie ontbrekende velden toevoegen aan het `createQuote.mutateAsync()` call:
+- `default_price_group_id`
+- `default_color_id`
+- `default_corpus_color_id`
+
+Deze database-kolommen bestaan al en zijn correct getypeerd.
+
+## Taak 4: Referentie met volgnummer
+
+Huidige output: `"Jansen - Keuken - 2026"`
+Gewenste output: `"Jansen - Keuken - 2026-001"`
+
+Aanpak:
+1. Database functie `generate_quote_reference(p_customer_name, p_category)` aanmaken die het volgende volgnummer berekent op basis van bestaande offertes
+2. Frontend: RPC-call in de `useEffect` die de referentie genereert
+
+## Taak 5: AddSectionDialog erft prijsgroep default
+
+- Prop `quoteDefaultPriceGroupId` toevoegen aan `AddSectionDialog`
+- State initialiseren met deze default bij openen
+- In `QuoteDetail.tsx` de prop meegeven: `quote.default_price_group_id`
 
 ---
 
-## Bestanden die wijzigen
+## Technisch Detail
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `src/hooks/usePriceGroups.ts` | Sortering: `collection ASC, sort_order ASC` |
-| `src/hooks/useProductRanges.ts` | Sortering: `code ASC` i.p.v. `price_group ASC` |
-| `src/components/quotes/QuoteConfigDialog.tsx` | Collecties uit price_groups; ranges verbergen bij has_price_groups; prijsgroep gefilterd op collectie |
-| `src/components/quotes/QuoteFormDialog.tsx` | Zelfde cascade-fixes als QuoteConfigDialog |
+### Bestanden die wijzigen
+
+| Bestand | Taken |
+|---------|-------|
+| `src/components/quotes/QuoteFormDialog.tsx` | 1, 2, 3, 4 |
+| `src/components/quotes/AddSectionDialog.tsx` | 5 |
+| `src/pages/QuoteDetail.tsx` | 5 |
+| Nieuwe SQL migratie | 4 |
+
+### Database migratie (Taak 4)
+
+```sql
+CREATE OR REPLACE FUNCTION generate_quote_reference(
+  p_customer_name TEXT,
+  p_category TEXT DEFAULT 'Keuken'
+) RETURNS TEXT AS $$
+DECLARE
+  v_year TEXT;
+  v_seq INTEGER;
+  v_clean_name TEXT;
+BEGIN
+  v_year := TO_CHAR(CURRENT_DATE, 'YYYY');
+  v_clean_name := TRIM(SPLIT_PART(p_customer_name, ',', 1));
+
+  SELECT COALESCE(MAX(
+    CASE 
+      WHEN reference ~ (v_year || '-[0-9]+$')
+      THEN SUBSTRING(reference FROM '[0-9]+$')::INTEGER
+      ELSE 0
+    END
+  ), 0) + 1 INTO v_seq
+  FROM quotes
+  WHERE reference LIKE v_clean_name || ' - ' || p_category || ' - ' || v_year || '-%';
+
+  RETURN v_clean_name || ' - ' || p_category || ' - ' || v_year || '-' || LPAD(v_seq::TEXT, 3, '0');
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### QuoteFormDialog wijzigingen
+
+- Nieuwe state: `priceGroupId`, `colorId`, `corpusColorId`
+- Prijsgroep Select: `value={priceGroupId} onValueChange={setPriceGroupId}`
+- Twee kleur-dropdowns toevoegen na prijsgroep (alleen zichtbaar bij leverancier)
+- `onSubmit`: drie velden toevoegen aan createQuote call
+- `useEffect` referentie: async RPC call i.p.v. lokale string-concatenatie
+- Reset states bij `handleClose` en `handleSupplierChange`
+
+### AddSectionDialog wijzigingen
+
+- Nieuwe prop: `quoteDefaultPriceGroupId?: string | null`
+- `useEffect` bij open: `setPriceGroupId(quoteDefaultPriceGroupId || "")`
+- QuoteDetail.tsx: prop doorgeven
