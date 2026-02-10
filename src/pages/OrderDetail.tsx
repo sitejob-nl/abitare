@@ -14,6 +14,7 @@ import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
 import { NotesCard } from "@/components/orders/NotesCard";
 import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
 import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
+import { SupplierLineGroups } from "@/components/orders/SupplierLineGroups";
 import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
 import { ChecklistCard } from "@/components/orders/ChecklistCard";
 import { useOrderChecklist } from "@/hooks/useOrderChecklist";
@@ -329,6 +330,10 @@ const OrderDetail = () => {
           <OrderLinesTable 
             lines={orderLines} 
             sections={(order as any).order_sections || []}
+          />
+          <SupplierLineGroups
+            orderId={order.id}
+            lines={orderLines}
           />
           <SupplierOrdersCard 
             orderId={order.id} 

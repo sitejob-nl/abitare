@@ -65,7 +65,10 @@ export function useOrder(id: string | undefined) {
           customer:customers(*),
           division:divisions(*),
           quote:quotes(id, quote_number),
-          order_lines(*),
+          order_lines(
+            *,
+            supplier:suppliers(id, name, code)
+          ),
           order_documents(*),
           order_notes(*),
           order_status_history(
