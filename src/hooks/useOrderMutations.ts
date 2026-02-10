@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { validateStatusTransition, type OrderGateContext } from "@/lib/orderGates";
 
 type OrderStatus = Database["public"]["Enums"]["order_status"];
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -9,6 +10,7 @@ interface UpdateOrderStatusParams {
   orderId: string;
   status: OrderStatus;
   notes?: string;
+  gateContext?: OrderGateContext;
 }
 
 interface RegisterPaymentParams {
@@ -37,7 +39,15 @@ export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ orderId, status, notes }: UpdateOrderStatusParams) => {
+    mutationFn: async ({ orderId, status, notes, gateContext }: UpdateOrderStatusParams) => {
+      // Validate gates if context is provided
+      if (gateContext) {
+        const gate = validateStatusTransition(status, gateContext);
+        if (!gate.allowed) {
+          throw new Error(gate.reason || "Statuswijziging geblokkeerd.");
+        }
+      }
+
       // Get current order status for history
       const { data: currentOrder } = await supabase
         .from("orders")
