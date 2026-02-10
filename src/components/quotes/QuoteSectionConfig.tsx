@@ -59,7 +59,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
 
   // Fetch data
   const { data: suppliers = [] } = useSuppliers();
-  const { data: allRanges = [] } = useProductRanges();
+  const { data: allRanges = [] } = useProductRanges(selectedSupplierId || undefined);
   const { data: allColors = [] } = useProductColors(formData.range_id || null);
   
   // Check if selected supplier has price groups
@@ -80,10 +80,8 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
   const drawerColors = allColors.filter((c) => (c as any).color_type === "drawer");
   const plinthColors = allColors.filter((c) => (c as any).color_type === "plinth");
 
-  // Filter ranges by selected supplier
-  const filteredRanges = selectedSupplierId
-    ? allRanges.filter((r) => r.supplier_id === selectedSupplierId)
-    : allRanges;
+  // Ranges are already filtered by supplier via the hook
+  const filteredRanges = allRanges;
 
   useEffect(() => {
     setFormData({
@@ -283,28 +281,30 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
-                  <Select
-                    value={formData.range_id}
-                    onValueChange={handleRangeChange}
-                    disabled={!selectedSupplierId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Geen</SelectItem>
-                      {filteredRanges.map((range) => (
-                        <SelectItem key={range.id} value={range.id}>
-                          {range.code}
-                          {range.name ? ` - ${range.name}` : ""}
-                          {range.price_group ? ` (Groep ${range.price_group})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {filteredRanges.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
+                    <Select
+                      value={formData.range_id}
+                      onValueChange={handleRangeChange}
+                      disabled={!selectedSupplierId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Geen</SelectItem>
+                        {filteredRanges.map((range) => (
+                          <SelectItem key={range.id} value={range.id}>
+                            {range.code}
+                            {range.name ? ` - ${range.name}` : ""}
+                            {range.price_group ? ` (Groep ${range.price_group})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Price Group dropdown for suppliers with price groups */}
                 {hasPriceGroups && (

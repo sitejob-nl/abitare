@@ -167,7 +167,7 @@ export function AddSectionDialog({
             </Select>
           </div>
 
-          {supplierId && (
+          {supplierId && (ranges?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
               <Select value={rangeId} onValueChange={setRangeId}>

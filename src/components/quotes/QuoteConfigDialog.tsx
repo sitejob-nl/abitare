@@ -232,8 +232,8 @@ export function QuoteConfigDialog({
             </div>
           )}
 
-          {/* Range/Model -- hidden for has_price_groups suppliers */}
-          {supplierId && supplierId !== "none" && !hasPriceGroups && (
+          {/* Range/Model -- hidden for has_price_groups suppliers and suppliers without ranges */}
+          {supplierId && supplierId !== "none" && !hasPriceGroups && filteredRanges.length > 0 && (
             <div className="space-y-2">
               <Label>Model</Label>
               <Select value={rangeId} onValueChange={handleRangeChange}>
@@ -270,8 +270,8 @@ export function QuoteConfigDialog({
             </div>
           )}
 
-          {/* Front Color */}
-          {rangeId && rangeId !== "none" && (
+          {/* Front Color - only show when colors are available */}
+          {rangeId && rangeId !== "none" && colors.length > 0 && (
             <div className="space-y-2">
               <Label>Standaard frontkleur</Label>
               <Select value={colorId} onValueChange={setColorId}>
@@ -290,8 +290,8 @@ export function QuoteConfigDialog({
             </div>
           )}
 
-          {/* Corpus Color */}
-          {supplierId && supplierId !== "none" && (
+          {/* Corpus Color - only show when colors are available */}
+          {supplierId && supplierId !== "none" && colors.length > 0 && (
             <div className="space-y-2">
               <Label>Standaard korpuskleur</Label>
               <Select value={corpusColorId} onValueChange={setCorpusColorId}>

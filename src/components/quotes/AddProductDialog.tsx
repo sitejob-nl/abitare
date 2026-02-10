@@ -102,8 +102,8 @@ export function AddProductDialog({
     enabled: open,
   });
 
-  // Fetch all active ranges for override dropdown
-  const { data: ranges } = useProductRanges();
+  // Fetch ranges for override dropdown - filtered by section supplier
+  const { data: ranges } = useProductRanges(sectionSupplierId || undefined);
 
   const selectedProduct = useMemo(() => {
     return products?.find((p) => p.id === selectedProductId);
@@ -451,26 +451,28 @@ export function AddProductDialog({
 
             {selectedProduct && (
               <>
-                {/* Override prijsgroep dropdown */}
-                <div className="space-y-2">
-                  <Label>Override prijsgroep (optioneel)</Label>
-                  <Select
-                    value={overrideRangeId || "none"}
-                    onValueChange={handleOverrideChange}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Sectie-default gebruiken" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Geen override (sectie-default)</SelectItem>
-                      {ranges?.map((range) => (
-                        <SelectItem key={range.id} value={range.id}>
-                          {range.code} - {range.name || range.collection || ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Override prijsgroep dropdown - only show when ranges exist for this supplier */}
+                {(ranges?.length ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <Label>Override prijsgroep (optioneel)</Label>
+                    <Select
+                      value={overrideRangeId || "none"}
+                      onValueChange={handleOverrideChange}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Sectie-default gebruiken" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Geen override (sectie-default)</SelectItem>
+                        {ranges?.map((range) => (
+                          <SelectItem key={range.id} value={range.id}>
+                            {range.code} - {range.name || range.collection || ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Price type selector */}
                 <div className="space-y-2">
