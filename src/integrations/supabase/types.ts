@@ -3230,6 +3230,10 @@ export type Database = {
       }
     }
     Functions: {
+      generate_quote_reference: {
+        Args: { p_category?: string; p_customer_name: string }
+        Returns: string
+      }
       get_user_division_id: { Args: { _user_id: string }; Returns: string }
       has_role:
         | {
