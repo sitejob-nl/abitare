@@ -71,7 +71,7 @@ export function QuoteConfigDialog({
   const { data: colors = [] } = useProductColors(rangeId || undefined);
 
   const selectedSupplier = suppliers.find(s => s.id === supplierId);
-  const hasPriceGroups = (selectedSupplier as any)?.has_price_groups === true;
+  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
   const { data: priceGroups = [] } = usePriceGroups(hasPriceGroups ? supplierId : undefined);
 
   // Get distinct collections from price_groups (not product_ranges)

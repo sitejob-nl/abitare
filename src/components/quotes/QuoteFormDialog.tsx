@@ -102,7 +102,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const { data: colors = [] } = useProductColors(colorRangeId || undefined);
 
   const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
-  const hasPriceGroups = (selectedSupplier as any)?.has_price_groups === true;
+  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
   const { data: priceGroups = [] } = usePriceGroups(hasPriceGroups ? selectedSupplierId : undefined);
 
   // Distinct collections from price_groups (not product_ranges)
