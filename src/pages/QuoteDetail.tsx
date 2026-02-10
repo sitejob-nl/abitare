@@ -222,7 +222,7 @@ const QuoteDetail = () => {
   const customer = quote.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
 
   return (
-    <AppLayout title={`Offerte ${(quote as any).reference || `#${quote.quote_number}`}`} breadcrumb={`Offertes / ${(quote as any).reference || `#${quote.quote_number}`}`}>
+    <AppLayout title={`Offerte ${quote.reference || `#${quote.quote_number}`}`} breadcrumb={`Offertes / ${quote.reference || `#${quote.quote_number}`}`}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
         <QuoteHeader
           quoteNumber={quote.quote_number}
@@ -232,9 +232,9 @@ const QuoteDetail = () => {
           quoteDate={quote.quote_date}
           onStatusChange={handleStatusChange}
           isUpdating={updateQuote.isPending}
-          reference={(quote as any).reference}
-          category={(quote as any).category}
-          defaultSupplierId={(quote as any).default_supplier_id}
+          reference={quote.reference}
+          category={quote.category}
+          defaultSupplierId={quote.default_supplier_id}
           defaultRangeId={quote.default_range_id}
           defaultColorId={quote.default_color_id}
           onConfigClick={() => setShowConfig(true)}
@@ -356,7 +356,7 @@ const QuoteDetail = () => {
         onOpenChange={setShowAddSection}
         quoteId={id!}
         existingSectionsCount={sections?.length || 0}
-        quoteDefaultSupplierId={(quote as any).default_supplier_id}
+        quoteDefaultSupplierId={quote.default_supplier_id}
         quoteDefaultRangeId={quote.default_range_id}
       />
 
@@ -364,13 +364,13 @@ const QuoteDetail = () => {
         open={showConfig}
         onOpenChange={setShowConfig}
         quoteId={id!}
-        currentCategory={(quote as any).category}
-        currentReference={(quote as any).reference}
-        currentSupplierId={(quote as any).default_supplier_id}
+        currentCategory={quote.category}
+        currentReference={quote.reference}
+        currentSupplierId={quote.default_supplier_id}
         currentRangeId={quote.default_range_id}
         currentColorId={quote.default_color_id}
-        currentPriceGroupId={(quote as any).default_price_group_id}
-        currentCorpusColorId={(quote as any).default_corpus_color_id}
+        currentPriceGroupId={quote.default_price_group_id}
+        currentCorpusColorId={quote.default_corpus_color_id}
       />
     </AppLayout>
   );
