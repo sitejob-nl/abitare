@@ -264,7 +264,8 @@ async function pullCustomersInternal(
   let skipToken = "";
   
   while (hasMore) {
-    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/crm/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status${skipToken}`;
+    // Use sync endpoint for bulk retrieval (pagesize up to 1000 vs 60 on standard)
+    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000${skipToken}`;
     
     const fetchResponse = await fetch(url, {
       headers: {
