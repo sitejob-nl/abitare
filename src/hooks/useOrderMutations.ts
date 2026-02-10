@@ -35,6 +35,11 @@ interface UpdateOrderDatesParams {
   expectedInstallationDate?: string | null;
 }
 
+interface UpdateOrderAddressesParams {
+  orderId: string;
+  addresses: Record<string, string | null>;
+}
+
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
 
@@ -272,6 +277,26 @@ export function useUpdateOrderDates() {
 
       if (error) throw error;
 
+      return { orderId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["order", data.orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+}
+
+export function useUpdateOrderAddresses() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, addresses }: UpdateOrderAddressesParams) => {
+      const { error } = await supabase
+        .from("orders")
+        .update({ ...addresses, updated_at: new Date().toISOString() })
+        .eq("id", orderId);
+
+      if (error) throw error;
       return { orderId };
     },
     onSuccess: (data) => {

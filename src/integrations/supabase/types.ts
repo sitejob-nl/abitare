@@ -963,8 +963,11 @@ export type Database = {
           created_by: string | null
           customer_id: string
           customer_notes: string | null
+          delivery_city: string | null
           delivery_method: string | null
           delivery_notes: string | null
+          delivery_postal_code: string | null
+          delivery_street_address: string | null
           deposit_invoice_sent: boolean
           deposit_reminder_date: string | null
           deposit_required: boolean
@@ -976,8 +979,14 @@ export type Database = {
           expected_delivery_date: string | null
           expected_installation_date: string | null
           id: string
+          installation_city: string | null
+          installation_postal_code: string | null
+          installation_street_address: string | null
           installer_id: string | null
           internal_notes: string | null
+          invoice_city: string | null
+          invoice_postal_code: string | null
+          invoice_street_address: string | null
           is_standalone_invoice: boolean | null
           margin_amount: number | null
           margin_percentage: number | null
@@ -1008,8 +1017,11 @@ export type Database = {
           created_by?: string | null
           customer_id: string
           customer_notes?: string | null
+          delivery_city?: string | null
           delivery_method?: string | null
           delivery_notes?: string | null
+          delivery_postal_code?: string | null
+          delivery_street_address?: string | null
           deposit_invoice_sent?: boolean
           deposit_reminder_date?: string | null
           deposit_required?: boolean
@@ -1021,8 +1033,14 @@ export type Database = {
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string
+          installation_city?: string | null
+          installation_postal_code?: string | null
+          installation_street_address?: string | null
           installer_id?: string | null
           internal_notes?: string | null
+          invoice_city?: string | null
+          invoice_postal_code?: string | null
+          invoice_street_address?: string | null
           is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null
@@ -1053,8 +1071,11 @@ export type Database = {
           created_by?: string | null
           customer_id?: string
           customer_notes?: string | null
+          delivery_city?: string | null
           delivery_method?: string | null
           delivery_notes?: string | null
+          delivery_postal_code?: string | null
+          delivery_street_address?: string | null
           deposit_invoice_sent?: boolean
           deposit_reminder_date?: string | null
           deposit_required?: boolean
@@ -1066,8 +1087,14 @@ export type Database = {
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
           id?: string
+          installation_city?: string | null
+          installation_postal_code?: string | null
+          installation_street_address?: string | null
           installer_id?: string | null
           internal_notes?: string | null
+          invoice_city?: string | null
+          invoice_postal_code?: string | null
+          invoice_street_address?: string | null
           is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null

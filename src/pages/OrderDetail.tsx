@@ -4,11 +4,12 @@ import { ArrowLeft, Loader2, ExternalLink } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
-import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates } from "@/hooks/useOrderMutations";
+import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates, useUpdateOrderAddresses } from "@/hooks/useOrderMutations";
 import { OrderStatusSelect } from "@/components/orders/OrderStatusSelect";
 import { PaymentCard } from "@/components/orders/PaymentCard";
 import { DocumentsCard } from "@/components/orders/DocumentsCard";
 import { OrderInfoCard } from "@/components/orders/OrderInfoCard";
+import { OrderAddressesCard, type OrderAddresses } from "@/components/orders/OrderAddressesCard";
 import { OrderLinesTable } from "@/components/orders/OrderLinesTable";
 import { NotesCard } from "@/components/orders/NotesCard";
 import { StatusHistoryCard } from "@/components/orders/StatusHistoryCard";
@@ -47,6 +48,7 @@ const OrderDetail = () => {
   const addNote = useAddOrderNote();
   const deleteNote = useDeleteOrderNote();
   const updateDates = useUpdateOrderDates();
+  const updateAddresses = useUpdateOrderAddresses();
 
   useEffect(() => {
     if (error) {
@@ -227,6 +229,16 @@ const OrderDetail = () => {
     }
   };
 
+  const handleSaveAddresses = async (addressUpdate: Partial<OrderAddresses>) => {
+    if (!id) return;
+    try {
+      await updateAddresses.mutateAsync({ orderId: id, addresses: addressUpdate });
+      toast({ title: "Adres bijgewerkt", description: "Het adres is opgeslagen." });
+    } catch {
+      toast({ title: "Fout bij opslaan", description: "Het adres kon niet worden opgeslagen.", variant: "destructive" });
+    }
+  };
+
   if (isLoading) {
     return (
       <AppLayout title="Order" breadcrumb="Order laden...">
@@ -339,6 +351,23 @@ const OrderDetail = () => {
             onUpdateDeliveryDate={handleUpdateDeliveryDate}
             onUpdateInstallationDate={handleUpdateInstallationDate}
             isUpdating={updateDates.isPending}
+          />
+
+          <OrderAddressesCard
+            addresses={{
+              installation_street_address: (order as any).installation_street_address,
+              installation_postal_code: (order as any).installation_postal_code,
+              installation_city: (order as any).installation_city,
+              delivery_street_address: (order as any).delivery_street_address,
+              delivery_postal_code: (order as any).delivery_postal_code,
+              delivery_city: (order as any).delivery_city,
+              invoice_street_address: (order as any).invoice_street_address,
+              invoice_postal_code: (order as any).invoice_postal_code,
+              invoice_city: (order as any).invoice_city,
+            }}
+            customer={customer}
+            onSave={handleSaveAddresses}
+            isSaving={updateAddresses.isPending}
           />
 
           <PaymentCard
