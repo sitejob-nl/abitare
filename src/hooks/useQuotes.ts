@@ -40,16 +40,39 @@ export function useQuotes(options: UseQuotesOptions = {}) {
       }
 
       if (search) {
-        // Search on quote number - can't search on joined tables in Supabase
-        const quoteNum = parseInt(search);
-        if (!isNaN(quoteNum)) {
+        const trimmed = search.trim();
+        const quoteNum = parseInt(trimmed);
+        if (!isNaN(quoteNum) && String(quoteNum) === trimmed) {
+          // Pure number: search on quote_number
           query = query.eq("quote_number", quoteNum);
+        } else {
+          // Text search: search on reference (ilike) and filter client-side for customer name
+          query = query.or(`reference.ilike.%${trimmed}%`);
         }
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
+      
+      // Client-side filter for customer name (can't filter joined tables in Supabase)
+      if (search && data) {
+        const trimmed = search.trim().toLowerCase();
+        const quoteNum = parseInt(trimmed);
+        if (isNaN(quoteNum) || String(quoteNum) !== trimmed) {
+          return data.filter(q => {
+            // Already matched by reference via ilike, check if it's in results
+            // Also match on customer name
+            const customer = q.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
+            if (!customer) return true; // keep reference-matched results
+            const name = [customer.company_name, customer.first_name, customer.last_name]
+              .filter(Boolean).join(" ").toLowerCase();
+            const refMatch = q.reference?.toLowerCase().includes(trimmed);
+            return refMatch || name.includes(trimmed);
+          });
+        }
+      }
+      
       return data;
     },
     enabled,

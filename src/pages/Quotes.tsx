@@ -135,7 +135,7 @@ const Quotes = () => {
         <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Zoek op offertenummer of klant..."
+            placeholder="Zoek op referentie, klant of nummer..."
             className="h-9 pl-9 text-[13px]"
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
@@ -157,24 +157,27 @@ const Quotes = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Offerte
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Klant
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Bedrag
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Datum
-                    </th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Geldig tot
-                    </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Offerte
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Klant
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hidden lg:table-cell">
+                       Referentie
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Bedrag
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Status
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Datum
+                     </th>
+                     <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                       Geldig tot
+                     </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,11 +197,16 @@ const Quotes = () => {
                             #{quote.quote_number}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
-                          <span className="text-sm text-foreground">
-                            {getCustomerName(customer)}
-                          </span>
-                        </td>
+                         <td className="px-5 py-4">
+                           <span className="text-sm text-foreground">
+                             {getCustomerName(customer)}
+                           </span>
+                         </td>
+                         <td className="px-5 py-4 hidden lg:table-cell">
+                           <span className="text-sm text-muted-foreground truncate max-w-[200px] block">
+                             {quote.reference || "-"}
+                           </span>
+                         </td>
                         <td className="px-5 py-4">
                           <span className="text-sm font-medium text-foreground">
                             {formatCurrency(quote.total_incl_vat)}
