@@ -11,13 +11,14 @@ interface ServiceKanbanBoardProps {
   isLoading: boolean;
 }
 
-type TicketStatus = "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "ingepland" | "afgerond" | "geannuleerd";
+type TicketStatus = "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "klaar_voor_planning" | "ingepland" | "afgerond" | "geannuleerd";
 
 const statusColumns: { status: TicketStatus; title: string; color: string }[] = [
   { status: "nieuw", title: "Nieuw", color: "bg-blue-500" },
   { status: "in_behandeling", title: "In behandeling", color: "bg-yellow-500" },
   { status: "wacht_op_klant", title: "Wacht op klant", color: "bg-orange-500" },
   { status: "wacht_op_onderdelen", title: "Wacht op onderdelen", color: "bg-purple-500" },
+  { status: "klaar_voor_planning", title: "Klaar voor planning", color: "bg-teal-500" },
   { status: "ingepland", title: "Ingepland", color: "bg-cyan-500" },
   { status: "afgerond", title: "Afgerond", color: "bg-green-500" },
   { status: "geannuleerd", title: "Geannuleerd", color: "bg-gray-500" },

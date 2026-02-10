@@ -16,21 +16,21 @@ interface ServiceTicket {
   customer: { first_name: string | null; last_name: string; company_name: string | null } | null;
 }
 
-function useWaitingServiceTickets() {
+function usePlanningServiceTickets() {
   return useQuery({
-    queryKey: ["service-tickets", "wacht_op_onderdelen"],
+    queryKey: ["service-tickets", "planning-sidebar"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("service_tickets")
         .select(`
-          id, ticket_number, subject, priority, submitter_name,
+          id, ticket_number, subject, priority, submitter_name, status,
           customer:customers(first_name, last_name, company_name)
         `)
-        .eq("status", "wacht_op_onderdelen")
+        .in("status", ["wacht_op_onderdelen", "klaar_voor_planning"])
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as unknown as ServiceTicket[];
+      return data as unknown as (ServiceTicket & { status: string })[];
     },
   });
 }
@@ -101,7 +101,7 @@ interface ServiceTicketSidebarProps {
 }
 
 export function ServiceTicketSidebar({ isOpen, onToggle }: ServiceTicketSidebarProps) {
-  const { data: tickets, isLoading } = useWaitingServiceTickets();
+  const { data: tickets, isLoading } = usePlanningServiceTickets();
 
   const ticketCount = tickets?.length || 0;
 
@@ -128,7 +128,7 @@ export function ServiceTicketSidebar({ isOpen, onToggle }: ServiceTicketSidebarP
           {/* Header */}
           <div className="flex items-center gap-2 border-b border-border px-4 py-3 bg-muted/50">
             <Wrench className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Wacht op onderdelen</h3>
+            <h3 className="text-sm font-semibold">Klaar voor planning</h3>
             {ticketCount > 0 && (
               <Badge variant="secondary" className="ml-auto text-[11px] px-1.5">
                 {ticketCount}
@@ -143,7 +143,7 @@ export function ServiceTicketSidebar({ isOpen, onToggle }: ServiceTicketSidebarP
                 <p className="text-xs text-muted-foreground text-center py-4">Laden...</p>
               ) : ticketCount === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">
-                  Geen tickets wachtend op onderdelen
+                  Geen tickets klaar voor planning
                 </p>
               ) : (
                 tickets?.map((ticket) => (

@@ -314,8 +314,9 @@ const CalendarPage = () => {
     // Handle service ticket drop
     if (activeId.startsWith("service-ticket-")) {
       const ticketId = activeId.replace("service-ticket-", "");
+      const ticketData = active.data.current?.ticket as { status?: string } | undefined;
       try {
-        await scheduleTicket.mutateAsync({ ticketId, plannedDate: newDate });
+        await scheduleTicket.mutateAsync({ ticketId, plannedDate: newDate, fromStatus: ticketData?.status });
         toast({
           title: "Ticket ingepland",
           description: `Serviceticket ingepland op ${format(new Date(newDate), "d MMMM yyyy", { locale: nl })}.`,
