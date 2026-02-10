@@ -74,12 +74,12 @@ export function QuoteConfigDialog({
   const hasPriceGroups = (selectedSupplier as any)?.has_price_groups === true;
   const { data: priceGroups = [] } = usePriceGroups(hasPriceGroups ? supplierId : undefined);
 
-  // Get distinct collections from ranges
+  // Get distinct collections from price_groups (not product_ranges)
   const collections = useMemo(() => {
     const cols = new Set<string>();
-    ranges.forEach(r => { if (r.collection) cols.add(r.collection); });
+    priceGroups.forEach(pg => { if (pg.collection) cols.add(pg.collection); });
     return Array.from(cols).sort();
-  }, [ranges]);
+  }, [priceGroups]);
 
   const [selectedCollection, setSelectedCollection] = useState<string>("");
 
@@ -87,6 +87,11 @@ export function QuoteConfigDialog({
     if (!selectedCollection) return ranges;
     return ranges.filter(r => r.collection === selectedCollection);
   }, [ranges, selectedCollection]);
+
+  const filteredPriceGroups = useMemo(() => {
+    if (!selectedCollection) return priceGroups;
+    return priceGroups.filter(pg => pg.collection === selectedCollection);
+  }, [priceGroups, selectedCollection]);
 
   // Sync with props when dialog opens
   useEffect(() => {
@@ -198,7 +203,7 @@ export function QuoteConfigDialog({
             </Select>
           </div>
 
-          {/* Collection */}
+          {/* Collection (from price_groups for has_price_groups suppliers) */}
           {supplierId && supplierId !== "none" && collections.length > 0 && (
             <div className="space-y-2">
               <Label>Collectie</Label>
@@ -209,26 +214,26 @@ export function QuoteConfigDialog({
                 <SelectContent>
                   <SelectItem value="all">Alle collecties</SelectItem>
                   {collections.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                    <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          {/* Range/Model */}
-          {supplierId && supplierId !== "none" && (
+          {/* Range/Model -- hidden for has_price_groups suppliers */}
+          {supplierId && supplierId !== "none" && !hasPriceGroups && (
             <div className="space-y-2">
-              <Label>Prijsgroep / Model</Label>
+              <Label>Model</Label>
               <Select value={rangeId} onValueChange={handleRangeChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecteer prijsgroep..." />
+                  <SelectValue placeholder="Selecteer model..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Geen</SelectItem>
                   {filteredRanges.map(r => (
                     <SelectItem key={r.id} value={r.id}>
-                      {r.code} - {r.name || r.collection || `Prijsgroep ${r.price_group}`}
+                      {r.code} - {r.name || r.description}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -236,7 +241,7 @@ export function QuoteConfigDialog({
             </div>
           )}
 
-          {/* Price Group (if supplier has them) */}
+          {/* Price Group (for has_price_groups suppliers, filtered by collection) */}
           {hasPriceGroups && (
             <div className="space-y-2">
               <Label>Prijsgroep</Label>
@@ -246,7 +251,7 @@ export function QuoteConfigDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Geen</SelectItem>
-                  {priceGroups.map(pg => (
+                  {filteredPriceGroups.map(pg => (
                     <SelectItem key={pg.id} value={pg.id}>{pg.code} - {pg.name}</SelectItem>
                   ))}
                 </SelectContent>

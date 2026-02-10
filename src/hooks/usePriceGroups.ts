@@ -13,6 +13,7 @@ export function usePriceGroups(supplierId?: string, collection?: string) {
       let query = supabase
         .from("price_groups")
         .select("*")
+        .order("collection", { ascending: true })
         .order("sort_order", { ascending: true });
 
       if (supplierId) query = query.eq("supplier_id", supplierId);

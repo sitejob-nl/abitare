@@ -105,17 +105,22 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const hasPriceGroups = (selectedSupplier as any)?.has_price_groups === true;
   const { data: priceGroups = [] } = usePriceGroups(hasPriceGroups ? selectedSupplierId : undefined);
 
-  // Distinct collections
+  // Distinct collections from price_groups (not product_ranges)
   const collections = useMemo(() => {
     const cols = new Set<string>();
-    ranges.forEach(r => { if (r.collection) cols.add(r.collection); });
+    priceGroups.forEach(pg => { if (pg.collection) cols.add(pg.collection); });
     return Array.from(cols).sort();
-  }, [ranges]);
+  }, [priceGroups]);
 
   const filteredRanges = useMemo(() => {
     if (!selectedCollection) return ranges;
     return ranges.filter(r => r.collection === selectedCollection);
   }, [ranges, selectedCollection]);
+
+  const filteredPriceGroups = useMemo(() => {
+    if (!selectedCollection) return priceGroups;
+    return priceGroups.filter(pg => pg.collection === selectedCollection);
+  }, [priceGroups, selectedCollection]);
 
   const {
     handleSubmit,
@@ -454,7 +459,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                   </Select>
                 </div>
 
-                {/* Collection filter */}
+                {/* Collection filter (from price_groups) */}
                 {selectedSupplierId && collections.length > 0 && (
                   <div className="space-y-2">
                     <Label>Collectie</Label>
@@ -465,29 +470,29 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                       <SelectContent>
                         <SelectItem value="all">Alle collecties</SelectItem>
                         {collections.map(c => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                          <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
 
-                {/* Range/Price Group Selection */}
-                {selectedSupplierId && (
+                {/* Range/Model -- hidden for has_price_groups suppliers */}
+                {selectedSupplierId && !hasPriceGroups && (
                   <div className="space-y-2">
-                    <Label>Prijsgroep / Model</Label>
+                    <Label>Model</Label>
                     <Select
                       value={selectedRangeId || "none"}
                       onValueChange={(value) => setValue("range_id", value === "none" ? "" : value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecteer prijsgroep..." />
+                        <SelectValue placeholder="Selecteer model..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Geen</SelectItem>
                         {filteredRanges.map((range) => (
                           <SelectItem key={range.id} value={range.id}>
-                            {range.code} - {range.name || range.description || `Prijsgroep ${range.price_group}`}
+                            {range.code} - {range.name || range.description}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -495,16 +500,16 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                   </div>
                 )}
 
-                {/* Price Group if supplier has them */}
+                {/* Price Group (filtered by collection) */}
                 {hasPriceGroups && (
                   <div className="space-y-2">
                     <Label>Prijsgroep</Label>
                     <Select defaultValue="">
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecteer prijsgroep (E1-E10, A, B, C)" />
+                        <SelectValue placeholder="Selecteer prijsgroep..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {priceGroups.map((pg) => (
+                        {filteredPriceGroups.map((pg) => (
                           <SelectItem key={pg.id} value={pg.id}>
                             {pg.code} - {pg.name}
                           </SelectItem>

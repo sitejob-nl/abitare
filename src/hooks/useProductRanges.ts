@@ -25,7 +25,7 @@ export function useProductRanges(supplierId?: string) {
           supplier:suppliers(id, name, code)
         `)
         .eq("is_active", true)
-        .order("price_group", { ascending: true });
+        .order("code", { ascending: true });
 
       if (supplierId) {
         query = query.eq("supplier_id", supplierId);
