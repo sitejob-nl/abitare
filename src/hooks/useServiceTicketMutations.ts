@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
-type TicketStatus = "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "ingepland" | "afgerond" | "geannuleerd";
+type TicketStatus = "nieuw" | "in_behandeling" | "wacht_op_klant" | "wacht_op_onderdelen" | "klaar_voor_planning" | "ingepland" | "afgerond" | "geannuleerd";
 type TicketPriority = "laag" | "normaal" | "hoog" | "urgent";
 
 interface CreateTicketData {
@@ -274,7 +274,7 @@ export function useScheduleServiceTicket() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ ticketId, plannedDate }: { ticketId: string; plannedDate: string }) => {
+    mutationFn: async ({ ticketId, plannedDate, fromStatus }: { ticketId: string; plannedDate: string; fromStatus?: string }) => {
       const { error: updateError } = await supabase
         .from("service_tickets")
         .update({ status: "ingepland" as TicketStatus, planned_date: plannedDate })
@@ -286,7 +286,7 @@ export function useScheduleServiceTicket() {
       if (user?.id) {
         await supabase.from("service_ticket_status_history").insert({
           ticket_id: ticketId,
-          from_status: "wacht_op_onderdelen",
+          from_status: (fromStatus || "klaar_voor_planning") as TicketStatus,
           to_status: "ingepland",
           changed_by: user.id,
           notes: `Ingepland op ${plannedDate}`,

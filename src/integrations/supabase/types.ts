@@ -3373,6 +3373,7 @@ export type Database = {
         | "in_behandeling"
         | "wacht_op_klant"
         | "wacht_op_onderdelen"
+        | "klaar_voor_planning"
         | "ingepland"
         | "afgerond"
         | "geannuleerd"
@@ -3543,6 +3544,7 @@ export const Constants = {
         "in_behandeling",
         "wacht_op_klant",
         "wacht_op_onderdelen",
+        "klaar_voor_planning",
         "ingepland",
         "afgerond",
         "geannuleerd",
