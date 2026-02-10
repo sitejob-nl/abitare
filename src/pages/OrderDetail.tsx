@@ -268,6 +268,12 @@ const OrderDetail = () => {
                 status={order.status as OrderStatus}
                 onStatusChange={handleStatusChange}
                 isUpdating={updateStatus.isPending}
+                gateContext={{
+                  currentStatus: order.status,
+                  paymentStatus: order.payment_status,
+                  depositRequired: (order as any).deposit_required !== false,
+                  depositInvoiceSent: !!(order as any).deposit_invoice_sent,
+                }}
               />
             </div>
             <p className="text-sm text-muted-foreground truncate">

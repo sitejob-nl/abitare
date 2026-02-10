@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, Lock } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -7,8 +7,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
+import { getBlockedStatuses, type OrderGateContext } from "@/lib/orderGates";
 
 type OrderStatus = Database["public"]["Enums"]["order_status"];
 
@@ -31,6 +38,7 @@ interface OrderStatusSelectProps {
   onStatusChange: (status: OrderStatus) => void;
   isUpdating?: boolean;
   size?: "sm" | "default";
+  gateContext?: OrderGateContext;
 }
 
 export function OrderStatusSelect({
@@ -38,8 +46,13 @@ export function OrderStatusSelect({
   onStatusChange,
   isUpdating,
   size = "default",
+  gateContext,
 }: OrderStatusSelectProps) {
   const currentConfig = statusConfig[status] || statusConfig.nieuw;
+
+  const blockedStatuses = gateContext
+    ? getBlockedStatuses(gateContext)
+    : {};
 
   if (isUpdating) {
     return (
@@ -51,26 +64,53 @@ export function OrderStatusSelect({
   }
 
   return (
-    <Select value={status} onValueChange={(value) => onStatusChange(value as OrderStatus)}>
-      <SelectTrigger
-        className={cn(
-          "w-auto border-0 font-medium",
-          size === "sm" ? "h-7 text-xs px-2" : "h-9 text-sm px-3",
-          currentConfig.color
-        )}
+    <TooltipProvider delayDuration={200}>
+      <Select
+        value={status}
+        onValueChange={(value) => {
+          const gate = blockedStatuses[value];
+          if (gate && !gate.allowed) return;
+          onStatusChange(value as OrderStatus);
+        }}
       >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {Object.entries(statusConfig).map(([key, config]) => (
-          <SelectItem key={key} value={key}>
-            <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", config.color)}>
-              {config.label}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+        <SelectTrigger
+          className={cn(
+            "w-auto border-0 font-medium",
+            size === "sm" ? "h-7 text-xs px-2" : "h-9 text-sm px-3",
+            currentConfig.color
+          )}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(statusConfig).map(([key, config]) => {
+            const gate = blockedStatuses[key];
+            const blocked = gate && !gate.allowed;
+
+            return (
+              <SelectItem
+                key={key}
+                value={key}
+                disabled={blocked}
+                className={cn(blocked && "opacity-50")}
+              >
+                <div className="flex items-center gap-1.5">
+                  {blocked && <Lock className="h-3 w-3 text-destructive shrink-0" />}
+                  <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", config.color)}>
+                    {config.label}
+                  </span>
+                  {blocked && (
+                    <span className="text-[10px] text-muted-foreground ml-1 max-w-[180px] truncate">
+                      {gate.reason}
+                    </span>
+                  )}
+                </div>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+    </TooltipProvider>
   );
 }
 

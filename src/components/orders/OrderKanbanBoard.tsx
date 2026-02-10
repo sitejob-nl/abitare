@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 import { OrderKanbanColumn } from "./OrderKanbanColumn";
 import { OrderKanbanCard } from "./OrderKanbanCard";
 import { useUpdateOrderStatus } from "@/hooks/useOrderMutations";
+import { validateStatusTransition } from "@/lib/orderGates";
 import { toast } from "sonner";
 import type { OrderStatus } from "@/hooks/useOrders";
 
@@ -23,6 +24,8 @@ interface Order {
   expected_delivery_date: string | null;
   payment_status: string | null;
   status: string | null;
+  deposit_required?: boolean | null;
+  deposit_invoice_sent?: boolean | null;
   customer: {
     first_name?: string | null;
     last_name?: string | null;
@@ -99,19 +102,36 @@ export function OrderKanbanBoard({ orders, isLoading }: OrderKanbanBoardProps) {
 
     if (!order || order.status === newStatus) return;
 
-    // Check if dropping on a valid column
     const isValidColumn = statusColumns.some((col) => col.id === newStatus);
     if (!isValidColumn) return;
 
+    // Validate gates before allowing the transition
+    const gateContext = {
+      currentStatus: order.status as OrderStatus,
+      paymentStatus: order.payment_status,
+      depositRequired: order.deposit_required !== false,
+      depositInvoiceSent: !!order.deposit_invoice_sent,
+    };
+
+    const gate = validateStatusTransition(newStatus, gateContext);
+    if (!gate.allowed) {
+      toast.error("Statuswijziging geblokkeerd", {
+        description: gate.reason || undefined,
+      });
+      return;
+    }
+
     updateOrderStatus.mutate(
-      { orderId, status: newStatus },
+      { orderId, status: newStatus, gateContext },
       {
         onSuccess: () => {
           const statusLabel = statusColumns.find((c) => c.id === newStatus)?.title;
           toast.success(`Order #${order.order_number} verplaatst naar ${statusLabel}`);
         },
-        onError: () => {
-          toast.error("Kon status niet bijwerken");
+        onError: (error) => {
+          toast.error("Kon status niet bijwerken", {
+            description: error instanceof Error ? error.message : undefined,
+          });
         },
       }
     );
