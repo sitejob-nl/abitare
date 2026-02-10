@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ArrowLeft, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar, Settings2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { QuoteStatus } from "@/hooks/useQuotes";
+import { useSupplier } from "@/hooks/useSuppliers";
+import { useProductRange } from "@/hooks/useProductRanges";
+import { useProductColor } from "@/hooks/useProductColors";
 
 interface QuoteHeaderProps {
   quoteNumber: number;
@@ -21,6 +24,12 @@ interface QuoteHeaderProps {
   quoteDate: string | null;
   onStatusChange: (status: QuoteStatus) => void;
   isUpdating?: boolean;
+  reference?: string | null;
+  category?: string | null;
+  defaultSupplierId?: string | null;
+  defaultRangeId?: string | null;
+  defaultColorId?: string | null;
+  onConfigClick?: () => void;
 }
 
 const statusConfig: Record<QuoteStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -32,6 +41,13 @@ const statusConfig: Record<QuoteStatus, { label: string; variant: "default" | "s
   afgewezen: { label: "Afgewezen", variant: "destructive" },
 };
 
+const categoryLabels: Record<string, string> = {
+  keuken: "Keuken",
+  sanitair: "Sanitair",
+  meubels: "Meubels",
+  tegels: "Tegels",
+};
+
 export function QuoteHeader({
   quoteNumber,
   customerName,
@@ -40,7 +56,17 @@ export function QuoteHeader({
   quoteDate,
   onStatusChange,
   isUpdating,
+  reference,
+  category,
+  defaultSupplierId,
+  defaultRangeId,
+  defaultColorId,
+  onConfigClick,
 }: QuoteHeaderProps) {
+  const { data: supplier } = useSupplier(defaultSupplierId);
+  const { data: range } = useProductRange(defaultRangeId);
+  const { data: color } = useProductColor(defaultColorId);
+
   const formatDate = (date: string | null) => {
     if (!date) return "-";
     try {
@@ -49,6 +75,13 @@ export function QuoteHeader({
       return "-";
     }
   };
+
+  // Build config summary
+  const configParts: string[] = [];
+  if (supplier?.name) configParts.push(supplier.name);
+  if (range?.name || range?.code) configParts.push(range.name || range.code);
+  if (color?.name) configParts.push(`Front: ${color.name}`);
+  const configSummary = configParts.length > 0 ? configParts.join(" — ") : null;
 
   return (
     <div className="mb-6 space-y-4">
@@ -63,12 +96,36 @@ export function QuoteHeader({
       {/* Main header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-semibold text-foreground">
-            Offerte #{quoteNumber}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-[28px] font-semibold text-foreground">
+              {reference || `Offerte #${quoteNumber}`}
+            </h1>
+            {category && (
+              <Badge variant="outline" className="text-xs">
+                {categoryLabels[category] || category}
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Klant: {customerName}
+            {reference ? `Offerte #${quoteNumber} — ` : ""}Klant: {customerName}
           </p>
+          {/* Config summary */}
+          {configSummary && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <p className="text-xs text-muted-foreground">{configSummary}</p>
+              {onConfigClick && (
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onConfigClick}>
+                  <Settings2 className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          )}
+          {!configSummary && onConfigClick && (
+            <Button variant="ghost" size="sm" className="gap-1.5 mt-1 -ml-2 text-xs text-muted-foreground" onClick={onConfigClick}>
+              <Settings2 className="h-3 w-3" />
+              Configuratie instellen
+            </Button>
+          )}
         </div>
 
         <div className="flex flex-col sm:items-end gap-2">

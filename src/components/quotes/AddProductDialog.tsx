@@ -46,7 +46,8 @@ interface AddProductDialogProps {
   onOpenChange: (open: boolean) => void;
   quoteId: string;
   sectionId: string;
-  sectionRangeId?: string | null; // Pass the section's range_id for price lookup
+  sectionRangeId?: string | null;
+  quoteDefaultRangeId?: string | null;
 }
 
 export function AddProductDialog({
@@ -55,6 +56,7 @@ export function AddProductDialog({
   quoteId,
   sectionId,
   sectionRangeId,
+  quoteDefaultRangeId,
 }: AddProductDialogProps) {
   const createLine = useCreateQuoteLine();
   
@@ -70,7 +72,7 @@ export function AddProductDialog({
   const [heightMm, setHeightMm] = useState("");
   const [widthMm, setWidthMm] = useState("");
   const [extraDescription, setExtraDescription] = useState("");
-  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | null>(null);
+  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | "quote_default_price" | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [overrideRangeId, setOverrideRangeId] = useState<string | null>(null);
   
@@ -126,7 +128,7 @@ export function AddProductDialog({
 
     setIsLoadingPrice(true);
     try {
-      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId);
+      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId, quoteDefaultRangeId);
       if (priceResult.price != null) {
         setUnitPrice(priceResult.price.toString());
         setPriceSource(priceResult.source);
@@ -418,8 +420,8 @@ export function AddProductDialog({
                 {/* Price indicator */}
                 {priceSource && (
                   <div className="flex items-center gap-2">
-                    <Badge variant={priceSource === "override_price" ? "destructive" : priceSource === "range_price" ? "default" : "secondary"}>
-                      {priceSource === "override_price" ? "Override prijs" : priceSource === "range_price" ? "Prijsgroep prijs" : "Basisprijs"}
+                    <Badge variant={priceSource === "override_price" ? "destructive" : priceSource === "range_price" || priceSource === "quote_default_price" ? "default" : "secondary"}>
+                      {priceSource === "override_price" ? "Override prijs" : priceSource === "range_price" ? "Prijsgroep prijs" : priceSource === "quote_default_price" ? "Offerte-standaard prijs" : "Basisprijs"}
                     </Badge>
                     {isLoadingPrice && <Loader2 className="h-3 w-3 animate-spin" />}
                   </div>

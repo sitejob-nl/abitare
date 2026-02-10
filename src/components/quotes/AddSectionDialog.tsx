@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +28,8 @@ interface AddSectionDialogProps {
   onOpenChange: (open: boolean) => void;
   quoteId: string;
   existingSectionsCount: number;
+  quoteDefaultSupplierId?: string | null;
+  quoteDefaultRangeId?: string | null;
 }
 
 export function AddSectionDialog({
@@ -35,13 +37,23 @@ export function AddSectionDialog({
   onOpenChange,
   quoteId,
   existingSectionsCount,
+  quoteDefaultSupplierId,
+  quoteDefaultRangeId,
 }: AddSectionDialogProps) {
   const createSection = useCreateQuoteSection();
   const [sectionType, setSectionType] = useState<SectionType>("meubelen");
   const [title, setTitle] = useState("");
-  const [supplierId, setSupplierId] = useState<string>("");
-  const [rangeId, setRangeId] = useState<string>("");
+  const [supplierId, setSupplierId] = useState<string>(quoteDefaultSupplierId || "");
+  const [rangeId, setRangeId] = useState<string>(quoteDefaultRangeId || "");
   const [priceGroupId, setPriceGroupId] = useState<string>("");
+
+  // Re-sync defaults when dialog opens
+  useEffect(() => {
+    if (open) {
+      setSupplierId(quoteDefaultSupplierId || "");
+      setRangeId(quoteDefaultRangeId || "");
+    }
+  }, [open, quoteDefaultSupplierId, quoteDefaultRangeId]);
 
   const { data: suppliers } = useSuppliers();
   const { data: ranges } = useProductRanges(supplierId || undefined);

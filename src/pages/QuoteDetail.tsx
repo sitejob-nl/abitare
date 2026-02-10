@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Plus, Loader2, Send, Save, FileDown } from "lucide-react";
+import { Plus, Loader2, Send, Save, FileDown, Settings2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useQuote, useUpdateQuote, QuoteStatus } from "@/hooks/useQuotes";
 import { useQuoteSections, useUpdateQuoteSection } from "@/hooks/useQuoteSections";
 import { QuoteHeader } from "@/components/quotes/QuoteHeader";
@@ -11,6 +12,7 @@ import { QuoteTotals } from "@/components/quotes/QuoteTotals";
 import { QuoteDiscountEditor } from "@/components/quotes/QuoteDiscountEditor";
 import { QuoteActions } from "@/components/quotes/QuoteActions";
 import { AddSectionDialog } from "@/components/quotes/AddSectionDialog";
+import { QuoteConfigDialog } from "@/components/quotes/QuoteConfigDialog";
 import { generateQuotePdf } from "@/lib/generateQuotePdf";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -38,6 +40,7 @@ const QuoteDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showAddSection, setShowAddSection] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
 
   const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuote(id);
   const { data: sections, isLoading: sectionsLoading } = useQuoteSections(id);
@@ -219,7 +222,7 @@ const QuoteDetail = () => {
   const customer = quote.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null;
 
   return (
-    <AppLayout title={`Offerte #${quote.quote_number}`} breadcrumb={`Offertes / #${quote.quote_number}`}>
+    <AppLayout title={`Offerte ${(quote as any).reference || `#${quote.quote_number}`}`} breadcrumb={`Offertes / ${(quote as any).reference || `#${quote.quote_number}`}`}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
         <QuoteHeader
           quoteNumber={quote.quote_number}
@@ -229,6 +232,12 @@ const QuoteDetail = () => {
           quoteDate={quote.quote_date}
           onStatusChange={handleStatusChange}
           isUpdating={updateQuote.isPending}
+          reference={(quote as any).reference}
+          category={(quote as any).category}
+          defaultSupplierId={(quote as any).default_supplier_id}
+          defaultRangeId={quote.default_range_id}
+          defaultColorId={quote.default_color_id}
+          onConfigClick={() => setShowConfig(true)}
         />
         <QuoteActions 
           quoteId={id!} 
@@ -266,6 +275,7 @@ const QuoteDetail = () => {
                   key={section.id}
                   section={section}
                   quoteId={id!}
+                  quoteDefaultRangeId={quote.default_range_id}
                 />
               ))
             ) : (
@@ -346,6 +356,21 @@ const QuoteDetail = () => {
         onOpenChange={setShowAddSection}
         quoteId={id!}
         existingSectionsCount={sections?.length || 0}
+        quoteDefaultSupplierId={(quote as any).default_supplier_id}
+        quoteDefaultRangeId={quote.default_range_id}
+      />
+
+      <QuoteConfigDialog
+        open={showConfig}
+        onOpenChange={setShowConfig}
+        quoteId={id!}
+        currentCategory={(quote as any).category}
+        currentReference={(quote as any).reference}
+        currentSupplierId={(quote as any).default_supplier_id}
+        currentRangeId={quote.default_range_id}
+        currentColorId={quote.default_color_id}
+        currentPriceGroupId={(quote as any).default_price_group_id}
+        currentCorpusColorId={(quote as any).default_corpus_color_id}
       />
     </AppLayout>
   );

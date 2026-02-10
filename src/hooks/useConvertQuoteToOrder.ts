@@ -51,7 +51,11 @@ export function useConvertQuoteToOrder() {
           total_vat: quote.total_vat,
           total_incl_vat: quote.total_incl_vat,
           payment_condition: quote.payment_condition,
-          internal_notes: quote.internal_notes,
+          internal_notes: [
+            quote.internal_notes,
+            (quote as any).reference ? `Ref: ${(quote as any).reference}` : null,
+            (quote as any).category ? `Categorie: ${(quote as any).category}` : null,
+          ].filter(Boolean).join(' | ') || null,
         })
         .select()
         .single();

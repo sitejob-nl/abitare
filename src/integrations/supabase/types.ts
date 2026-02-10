@@ -1729,12 +1729,16 @@ export type Database = {
       quotes: {
         Row: {
           accepted_at: string | null
+          category: string | null
           closing_text: string | null
           created_at: string | null
           created_by: string | null
           customer_id: string
           default_color_id: string | null
+          default_corpus_color_id: string | null
+          default_price_group_id: string | null
           default_range_id: string | null
+          default_supplier_id: string | null
           discount_amount: number | null
           discount_description: string | null
           discount_percentage: number | null
@@ -1746,6 +1750,7 @@ export type Database = {
           payment_terms_description: string | null
           quote_date: string | null
           quote_number: number
+          reference: string | null
           salesperson_id: string | null
           sent_at: string | null
           status: Database["public"]["Enums"]["quote_status"] | null
@@ -1760,12 +1765,16 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          category?: string | null
           closing_text?: string | null
           created_at?: string | null
           created_by?: string | null
           customer_id: string
           default_color_id?: string | null
+          default_corpus_color_id?: string | null
+          default_price_group_id?: string | null
           default_range_id?: string | null
+          default_supplier_id?: string | null
           discount_amount?: number | null
           discount_description?: string | null
           discount_percentage?: number | null
@@ -1777,6 +1786,7 @@ export type Database = {
           payment_terms_description?: string | null
           quote_date?: string | null
           quote_number?: number
+          reference?: string | null
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
@@ -1791,12 +1801,16 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          category?: string | null
           closing_text?: string | null
           created_at?: string | null
           created_by?: string | null
           customer_id?: string
           default_color_id?: string | null
+          default_corpus_color_id?: string | null
+          default_price_group_id?: string | null
           default_range_id?: string | null
+          default_supplier_id?: string | null
           discount_amount?: number | null
           discount_description?: string | null
           discount_percentage?: number | null
@@ -1808,6 +1822,7 @@ export type Database = {
           payment_terms_description?: string | null
           quote_date?: string | null
           quote_number?: number
+          reference?: string | null
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
@@ -1836,10 +1851,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "quotes_default_corpus_color_id_fkey"
+            columns: ["default_corpus_color_id"]
+            isOneToOne: false
+            referencedRelation: "product_colors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_default_price_group_id_fkey"
+            columns: ["default_price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "quotes_default_range_id_fkey"
             columns: ["default_range_id"]
             isOneToOne: false
             referencedRelation: "product_ranges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_default_supplier_id_fkey"
+            columns: ["default_supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
           {

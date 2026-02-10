@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 interface SortableSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
   quoteId: string;
+  quoteDefaultRangeId?: string | null;
   onEdit?: () => void;
 }
 
@@ -46,7 +47,7 @@ function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
-export function SortableSectionCard({ section, quoteId, onEdit }: SortableSectionCardProps) {
+export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onEdit }: SortableSectionCardProps) {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const deleteSection = useDeleteQuoteSection();
@@ -222,6 +223,7 @@ export function SortableSectionCard({ section, quoteId, onEdit }: SortableSectio
                             lineNumber={line.is_group_header ? undefined : lineNumber}
                             subLines={subLines}
                             sectionRangeId={section.range_id}
+                            quoteDefaultRangeId={quoteDefaultRangeId}
                           />
                         );
                       })}
@@ -260,6 +262,7 @@ export function SortableSectionCard({ section, quoteId, onEdit }: SortableSectio
         quoteId={quoteId}
         sectionId={section.id}
         sectionRangeId={section.range_id}
+        quoteDefaultRangeId={quoteDefaultRangeId}
       />
 
       <QuoteSectionConfig
