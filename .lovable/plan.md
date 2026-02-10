@@ -1,119 +1,163 @@
 
 
-# Tradeplace Koppeling Activeren op basis van TMH2 Documentatie
+# Offerte Flow Aanpassingen - Implementatieplan
 
-## Wat het document onthult
+## Overzicht
 
-Het TMH2 (Tradeplace Message Hub 2) setup-document beschrijft het volgende:
+De offerte workflow wordt uitgebreid zodat configuratie (leverancier, collectie, prijsgroep, kleuren) op **offerte-niveau** wordt ingesteld als default, in plaats van alleen per sectie. Secties erven automatisch van de offerte, maar kunnen overriden. Daarnaast krijgt elke offerte een **categorie** (Keuken/Sanitair/Meubels/Tegels) en een **auto-gegenereerde referentie** ("Jansen - Keuken - 2026-001").
 
-- **Protocol**: TradeXML 2.0 via HTTP
-- **Authenticatie**: Basic Auth (username + password), NIET een API key
-- **API Endpoints**:
-  - TEST: `https://qhub-api.tradeplace.com/hub`
-  - LIVE: `https://hub-api.tradeplace.com/hub`
-- **IP whitelisting vereist**: TEST `20.105.183.63`, LIVE `20.76.155.18`
-- **Berichttypen**: ProductAvailabilityRequest/Reply, OrderPlacementRequest/Reply, OrderStatusRequest/Reply, ShippingNotification, BillingDocuments, etc.
-- **Webhook (outbound)**: TMH2 stuurt berichten (bevestigingen, verzendmeldingen) naar een door jou opgegeven endpoint
+## Huidige staat
 
-## Wat er mis is in de huidige code
+De `quotes` tabel heeft al `default_range_id` en `default_color_id`. De volgende kolommen ontbreken:
+- `category` -- offerte-categorie
+- `reference` -- leesbare referentie
+- `default_supplier_id` -- standaard leverancier
+- `default_price_group_id` -- standaard prijsgroep (bij leveranciers met aparte prijsgroepen)
+- `default_corpus_color_id` -- standaard korpuskleur
 
-| Probleem | Huidig | Moet zijn |
-|----------|--------|-----------|
-| Authenticatie | `TRADEPLACE_API_KEY` (enkele key) | Basic Auth met `TRADEPLACE_USERNAME` + `TRADEPLACE_PASSWORD` |
-| Endpoint | Niet geconfigureerd | `https://qhub-api.tradeplace.com/hub` (TEST) of `https://hub-api.tradeplace.com/hub` (LIVE) |
-| API calls | Geen echte HTTP calls (alleen "TODO") | Daadwerkelijke POST requests met Basic Auth naar TMH2 hub |
-| XML formaat | Vereenvoudigde placeholder XML | TradeXML 2.0 DTD-conforme berichten |
-| Settings UI | Vraagt om API key + GLN | Moet vragen om Username, Password, Environment (TEST/LIVE) |
+Product ranges hebben al een `collection` veld (bijv. "Evolution", "Look"), dus collectie hoeft niet apart op de offerte.
 
-## Stappen
+---
 
-### Stap 1: Secrets bijwerken
-De huidige `TRADEPLACE_API_KEY` secret vervangen door:
-- `TRADEPLACE_USERNAME` -- TMH2 Basic Auth username (bijv. `tradingpartner1-xxxxx`)
-- `TRADEPLACE_PASSWORD` -- TMH2 Basic Auth password
-- `TRADEPLACE_ENVIRONMENT` -- `test` of `live`
-- `TRADEPLACE_RETAILER_GLN` -- blijft behouden
+## Fase 1: Database migratie
 
-### Stap 2: Edge functions updaten
-
-**tradeplace-config** -- Controleren op de nieuwe secrets (`USERNAME`, `PASSWORD` i.p.v. `API_KEY`), environment tonen (TEST/LIVE).
-
-**tradeplace-availability** -- Echte HTTP POST naar TMH2:
-```text
-POST https://qhub-api.tradeplace.com/hub/api/messages/tp/{MANUFACTURER_TP_ID}
-Authorization: Basic base64(username:password)
-Content-Type: application/xml
-
-<ProductAvailabilityRequest> ... TradeXML 2.0 ... </ProductAvailabilityRequest>
-```
-
-**tradeplace-order** -- Echte OrderPlacementRequest versturen naar TMH2 met Basic Auth, response parsen.
-
-**tradeplace-webhook** -- Endpoint URL aanpassen zodat TMH2 bevestigingen/verzendmeldingen kan ontvangen. Authenticatie via de door TMH2 verstrekte credentials verwerken.
-
-### Stap 3: Settings UI aanpassen
-- `TradeplaceSettings.tsx`: instructies bijwerken -- geen "API key" meer, maar TMH2 login credentials
-- Environment toggle (TEST/LIVE) toevoegen
-- Webhook URL tonen die de gebruiker in TMH2 admin moet invoeren als "Outbound HTTP endpoint"
-- Link naar TMH2 admin tool toevoegen
-
-### Stap 4: Per-leverancier TMH2 configuratie
-- `SupplierTradeplaceDialog.tsx`: veld voor **TP-ID** toevoegen (bijv. `bsh@tradeplace.com`) -- dit is nodig in de API URL per fabrikant
-- Het bestaande `tradeplace_gln` veld behouden
-- Database: kolom `tradeplace_tp_id` toevoegen aan `suppliers` tabel
-
-## Technische details
-
-### Nieuwe secrets (vervangt TRADEPLACE_API_KEY)
-
-| Secret | Beschrijving | Voorbeeld |
-|--------|-------------|-----------|
-| `TRADEPLACE_USERNAME` | TMH2 Basic Auth username | `tradingpartner1-ef29293` |
-| `TRADEPLACE_PASSWORD` | TMH2 Basic Auth password | (uit approval email) |
-| `TRADEPLACE_ENVIRONMENT` | `test` of `live` | `test` |
-| `TRADEPLACE_RETAILER_GLN` | Eigen GLN (blijft) | `8712345678901` |
-
-### API call structuur
-
-```text
-Base URL (test): https://qhub-api.tradeplace.com/hub/api/messages/tp/{MANUFACTURER_TP_ID}
-Base URL (live): https://hub-api.tradeplace.com/hub/api/messages/tp/{MANUFACTURER_TP_ID}
-
-Headers:
-  Authorization: Basic base64(TRADEPLACE_USERNAME:TRADEPLACE_PASSWORD)
-  Content-Type: application/xml
-
-Body: TradeXML 2.0 XML document
-```
-
-### Database migratie
+Nieuwe kolommen op `quotes`:
 
 ```sql
-ALTER TABLE suppliers
-  ADD COLUMN IF NOT EXISTS tradeplace_tp_id VARCHAR(255);
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'keuken';
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS reference VARCHAR(255);
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS default_supplier_id UUID REFERENCES suppliers(id);
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS default_price_group_id UUID REFERENCES price_groups(id);
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS default_corpus_color_id UUID REFERENCES product_colors(id);
+
+CREATE INDEX IF NOT EXISTS idx_quotes_category ON quotes(category);
+CREATE INDEX IF NOT EXISTS idx_quotes_default_supplier ON quotes(default_supplier_id);
 ```
 
-### Bestanden die wijzigen
+Optioneel: een SQL-functie `generate_quote_reference()` voor het automatisch samenstellen van referenties vanuit klantnaam + categorie + jaar-volgnummer.
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/tradeplace-config/index.ts` | Nieuwe secrets, environment info |
-| `supabase/functions/tradeplace-availability/index.ts` | Echte HTTP POST naar TMH2 met Basic Auth |
-| `supabase/functions/tradeplace-order/index.ts` | Echte OrderPlacementRequest via TMH2 |
-| `supabase/functions/tradeplace-webhook/index.ts` | Inbound authenticatie vanuit TMH2 |
-| `src/components/settings/TradeplaceSettings.tsx` | Nieuwe instructies, environment toggle, webhook URL |
-| `src/components/suppliers/SupplierTradeplaceDialog.tsx` | TP-ID veld toevoegen |
-| `src/hooks/useTradeplace.ts` | Interface updates voor nieuwe config |
-| Nieuwe migratie | `tradeplace_tp_id` op suppliers |
+---
 
-### Webhook URL voor TMH2 configuratie
-De gebruiker moet in TMH2 admin onder "Outbound > Transport HTTP" het volgende endpoint invoeren:
+## Fase 2: QuoteFormDialog uitbreiden
+
+Het dialoog voor "Nieuwe offerte" krijgt twee stappen:
+
+**Stap 1 - Basis:**
+- Klant selectie (bestaand)
+- Categorie radio buttons: Keuken / Sanitair / Meubels / Tegels
+- Referentie (auto-gegenereerd, bewerkbaar): "Jansen - Keuken - 2026-001"
+- Geldig tot (bestaand)
+
+**Stap 2 - Standaard configuratie:**
+- Leverancier dropdown
+- Collectie dropdown (gefilterd op leverancier, uit `product_ranges.collection` distinct)
+- Prijsgroep dropdown (gefilterd op leverancier + optioneel collectie)
+- Frontkleur dropdown (uit `product_colors` gefilterd op gekozen range)
+- Korpuskleur dropdown
+
+De cascade: Leverancier --> Collectie --> Prijsgroep --> Kleuren
+
+Alle nieuwe velden worden opgeslagen op de `quotes` record. De eerste sectie wordt automatisch aangemaakt met de gekozen configuratie.
+
+**Bestanden:**
+- `src/components/quotes/QuoteFormDialog.tsx` -- uitbreiden met nieuwe velden
+- `src/hooks/useQuotes.ts` -- types updaten
+
+---
+
+## Fase 3: QuoteDetail header + configuratie dialoog
+
+**QuoteHeader.tsx** uitbreiden:
+- Toon referentie als hoofdtitel i.p.v. "Offerte #123"
+- Categorie badge
+- Configuratie-samenvatting tonen: "Stosa Evolution -- E5 Lak Mat / Front: Cachemere Opaco / Korpus: Rose"
+
+**Nieuw bestand: QuoteConfigDialog.tsx**
+- Dialoog om offerte-niveau configuratie te wijzigen na aanmaak
+- Zelfde cascade dropdowns als in QuoteFormDialog
+- Optie: "Bestaande secties bijwerken naar nieuwe standaard?"
+
+**Bestanden:**
+- `src/components/quotes/QuoteHeader.tsx` -- referentie, categorie, config samenvatting
+- `src/components/quotes/QuoteConfigDialog.tsx` -- nieuw
+- `src/pages/QuoteDetail.tsx` -- integratie config dialoog + "Configuratie wijzigen" knop
+
+---
+
+## Fase 4: Sectie inheritance
+
+Secties erven automatisch van de offerte defaults. Alleen als een sectie expliciet een override heeft, wijkt deze af.
+
+**Logica:**
 ```text
-https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/tradeplace-webhook
+effectiveRangeId = section.range_id || quote.default_range_id
+effectiveColorId = section.color_id || quote.default_color_id
+hasOverride = section.range_id !== null
 ```
 
-## Vereisten voordat we beginnen
-1. Je hebt TMH2 inloggegevens nodig (username + password uit de approval email)
-2. Je GLN-code moet bekend zijn
-3. In TMH2 admin moeten de gewenste message types (ProductAvailability, OrderPlacement, etc.) al zijn geconfigureerd en goedgekeurd door de fabrikant(en)
+**UI:**
+- Geen override: badge "Gebruikt offerte-standaard"
+- Override: waarschuwingsbadge "Afwijkende configuratie" met details
+
+**AddSectionDialog.tsx**: bij aanmaken nieuwe sectie, defaults overnemen van offerte als de velden leeg zijn.
+
+**Bestanden:**
+- `src/components/quotes/SortableSectionCard.tsx` -- inherit/override badges
+- `src/components/quotes/AddSectionDialog.tsx` -- inherit quote defaults
+
+---
+
+## Fase 5: Prijshierarchie uitbreiden
+
+Huidige hierarchie (3 niveaus):
+1. Regel override
+2. Sectie range
+3. Product base_price
+
+Nieuwe hierarchie (4 niveaus):
+1. Regel override (`range_override_id`)
+2. Sectie range (`section.range_id`)
+3. **Offerte default range** (`quote.default_range_id`) -- NIEUW
+4. Product base_price
+
+`fetchProductPrice` uitbreiden met een optionele `quoteDefaultRangeId` parameter.
+
+**Bestanden:**
+- `src/hooks/useProductPrices.ts` -- extra parameter
+- `src/components/quotes/AddProductDialog.tsx` -- quote default doorgeven
+- `src/components/quotes/EditableLineRow.tsx` -- quote default doorgeven
+- `src/components/quotes/SortableSectionCard.tsx` -- quote default doorgeven aan children
+
+---
+
+## Fase 6: Dupliceren en converteren
+
+**useDuplicateQuote.ts**: de nieuwe velden (`category`, `reference`, `default_supplier_id`, `default_price_group_id`, `default_corpus_color_id`) meekopieren. Referentie krijgt suffix "(kopie)".
+
+**useConvertQuoteToOrder.ts**: de nieuwe offerte defaults meenemen naar het order (opslaan in bestaande velden of `configuration` JSONB).
+
+**Bestanden:**
+- `src/hooks/useQuoteDuplicate.ts`
+- `src/hooks/useConvertQuoteToOrder.ts`
+
+---
+
+## Samenvatting bestanden
+
+| Bestand | Actie |
+|---------|-------|
+| Nieuwe SQL migratie | `category`, `reference`, `default_supplier_id`, `default_price_group_id`, `default_corpus_color_id` op quotes |
+| `src/integrations/supabase/types.ts` | Regenerated |
+| `src/components/quotes/QuoteFormDialog.tsx` | Categorie, referentie, cascade defaults |
+| `src/components/quotes/QuoteHeader.tsx` | Referentie als titel, config samenvatting |
+| `src/components/quotes/QuoteConfigDialog.tsx` | **Nieuw** -- config wijzigen na aanmaak |
+| `src/pages/QuoteDetail.tsx` | Config dialoog integratie |
+| `src/components/quotes/SortableSectionCard.tsx` | Inherit/override badges, quote default doorgeven |
+| `src/components/quotes/AddSectionDialog.tsx` | Inherit quote defaults |
+| `src/components/quotes/AddProductDialog.tsx` | Quote default range in prijsberekening |
+| `src/components/quotes/EditableLineRow.tsx` | Quote default range in prijsberekening |
+| `src/hooks/useProductPrices.ts` | 4e niveau in prijshierarchie |
+| `src/hooks/useQuoteDuplicate.ts` | Nieuwe velden kopieren |
+| `src/hooks/useConvertQuoteToOrder.ts` | Nieuwe velden meenemen |
+| `src/hooks/useQuotes.ts` | Types bijwerken |
 
