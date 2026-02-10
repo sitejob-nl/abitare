@@ -132,7 +132,7 @@ export function QuoteConfigDialog({
         default_color_id: colorId || null,
         default_price_group_id: priceGroupId || null,
         default_corpus_color_id: corpusColorId || null,
-      } as any);
+      });
 
       toast({
         title: "Configuratie bijgewerkt",

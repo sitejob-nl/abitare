@@ -53,8 +53,8 @@ export function useConvertQuoteToOrder() {
           payment_condition: quote.payment_condition,
           internal_notes: [
             quote.internal_notes,
-            (quote as any).reference ? `Ref: ${(quote as any).reference}` : null,
-            (quote as any).category ? `Categorie: ${(quote as any).category}` : null,
+            quote.reference ? `Ref: ${quote.reference}` : null,
+            quote.category ? `Categorie: ${quote.category}` : null,
           ].filter(Boolean).join(' | ') || null,
         })
         .select()

@@ -206,7 +206,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
         category: data.category || "keuken",
         reference: data.reference || null,
         default_supplier_id: selectedSupplierId || null,
-      } as any);
+      });
 
       // If supplier/range selected, create first section automatically
       if (data.supplier_id || data.range_id) {
