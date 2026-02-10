@@ -180,12 +180,36 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
     // Refetch the price if there's a product
     if (line.product_id) {
       try {
-        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId, quoteDefaultRangeId);
+        const currentPriceType = ((line as any).price_type || "abitare") as "abitare" | "boekprijs";
+        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId, quoteDefaultRangeId, currentPriceType);
         if (priceResult.price != null) {
           updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, range_override_id: newOverrideId } as any);
         }
       } catch (error) {
         console.error("Error fetching override price:", error);
+      }
+    }
+  };
+
+  const handlePriceTypeChange = async (newType: string) => {
+    // Update price_type in DB
+    updateLine.mutate({ id: line.id, quoteId, price_type: newType } as any);
+
+    // Refetch price with new type
+    if (line.product_id) {
+      try {
+        const priceResult = await fetchProductPrice(
+          line.product_id, 
+          sectionRangeId || null, 
+          overrideRangeId, 
+          quoteDefaultRangeId,
+          newType as "abitare" | "boekprijs"
+        );
+        if (priceResult.price != null) {
+          updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, price_type: newType } as any);
+        }
+      } catch (error) {
+        console.error("Error fetching price for type change:", error);
       }
     }
   };
@@ -356,49 +380,73 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
                   </span>
                 )}
               </div>
-              {/* Override badge */}
+              {/* Override badge and price type badge */}
               {line.product_id && (
-                <Popover open={showOverridePopover} onOpenChange={setShowOverridePopover}>
-                  <PopoverTrigger asChild>
-                    <button
-                      className="inline-flex items-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {overrideRangeId ? (
-                        <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100">
-                          <Palette className="h-3 w-3" />
-                          Override: {overrideRange?.code || "..."}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer opacity-0 group-hover:opacity-60 hover:!opacity-100">
-                          <Palette className="h-3 w-3" />
-                          Prijsgroep
-                        </Badge>
-                      )}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-3" align="start" onClick={(e) => e.stopPropagation()}>
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium">Override prijsgroep</p>
-                      <Select
-                        value={overrideRangeId || "none"}
-                        onValueChange={handleOverrideChange}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Popover open={showOverridePopover} onOpenChange={setShowOverridePopover}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="inline-flex items-center"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Geen override</SelectItem>
-                          {ranges?.map((range) => (
-                            <SelectItem key={range.id} value={range.id}>
-                              {range.code} - {range.name || range.collection || ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                        {overrideRangeId ? (
+                          <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100">
+                            <Palette className="h-3 w-3" />
+                            Override: {overrideRange?.code || "..."}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] h-5 gap-1 cursor-pointer opacity-0 group-hover:opacity-60 hover:!opacity-100">
+                            <Palette className="h-3 w-3" />
+                            Prijsgroep
+                          </Badge>
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-3" align="start" onClick={(e) => e.stopPropagation()}>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium">Override prijsgroep</p>
+                        <Select
+                          value={overrideRangeId || "none"}
+                          onValueChange={handleOverrideChange}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Geen override</SelectItem>
+                            {ranges?.map((range) => (
+                              <SelectItem key={range.id} value={range.id}>
+                                {range.code} - {range.name || range.collection || ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {/* Price type toggle */}
+                  <button
+                    className="inline-flex items-center"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const currentType = ((line as any).price_type || "abitare") as string;
+                      const newType = currentType === "abitare" ? "boekprijs" : "abitare";
+                      handlePriceTypeChange(newType);
+                    }}
+                  >
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "text-[10px] h-5 cursor-pointer",
+                        (line as any).price_type === "boekprijs" 
+                          ? "border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100" 
+                          : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                      )}
+                    >
+                      {(line as any).price_type === "boekprijs" ? "Boekprijs" : "Abitare"}
+                    </Badge>
+                  </button>
+                </div>
               )}
             </div>
           )}

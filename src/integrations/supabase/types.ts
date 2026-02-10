@@ -1447,6 +1447,7 @@ export type Database = {
         Row: {
           article_code: string
           base_price: number | null
+          book_price: number | null
           catalog_code: string | null
           category_id: string | null
           cost_price: number | null
@@ -1471,6 +1472,7 @@ export type Database = {
         Insert: {
           article_code: string
           base_price?: number | null
+          book_price?: number | null
           catalog_code?: string | null
           category_id?: string | null
           cost_price?: number | null
@@ -1495,6 +1497,7 @@ export type Database = {
         Update: {
           article_code?: string
           base_price?: number | null
+          book_price?: number | null
           catalog_code?: string | null
           category_id?: string | null
           cost_price?: number | null
@@ -1586,6 +1589,7 @@ export type Database = {
           is_group_header: boolean | null
           line_total: number | null
           parent_line_id: string | null
+          price_type: string | null
           product_id: string | null
           quantity: number | null
           quote_id: string | null
@@ -1612,6 +1616,7 @@ export type Database = {
           is_group_header?: boolean | null
           line_total?: number | null
           parent_line_id?: string | null
+          price_type?: string | null
           product_id?: string | null
           quantity?: number | null
           quote_id?: string | null
@@ -1638,6 +1643,7 @@ export type Database = {
           is_group_header?: boolean | null
           line_total?: number | null
           parent_line_id?: string | null
+          price_type?: string | null
           product_id?: string | null
           quantity?: number | null
           quote_id?: string | null
@@ -2749,6 +2755,7 @@ export type Database = {
           lead_time_weeks: number | null
           name: string
           points_to_eur: number | null
+          price_factor: number | null
           price_system: string | null
           supplier_type: string | null
           tradeplace_enabled: boolean | null
@@ -2767,6 +2774,7 @@ export type Database = {
           lead_time_weeks?: number | null
           name: string
           points_to_eur?: number | null
+          price_factor?: number | null
           price_system?: string | null
           supplier_type?: string | null
           tradeplace_enabled?: boolean | null
@@ -2785,6 +2793,7 @@ export type Database = {
           lead_time_weeks?: number | null
           name?: string
           points_to_eur?: number | null
+          price_factor?: number | null
           price_system?: string | null
           supplier_type?: string | null
           tradeplace_enabled?: boolean | null

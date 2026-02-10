@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ export function AddProductDialog({
   const [extraDescription, setExtraDescription] = useState("");
   const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | "quote_default_price" | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [priceType, setPriceType] = useState<"abitare" | "boekprijs">("abitare");
   const [overrideRangeId, setOverrideRangeId] = useState<string | null>(null);
   
   // Free line fields
@@ -127,10 +129,12 @@ export function AddProductDialog({
     await refetchPrice(productId, overrideRangeId);
   };
 
-  // Refetch price when override changes
-  const refetchPrice = async (productId: string, overrideId: string | null) => {
+  // Refetch price when override changes or price type changes
+  const refetchPrice = async (productId: string, overrideId: string | null, selectedPriceType?: "abitare" | "boekprijs") => {
     const product = products?.find(p => p.id === productId);
     if (!product) return;
+
+    const currentPriceType = selectedPriceType || priceType;
 
     setIsLoadingPrice(true);
     try {
@@ -138,9 +142,16 @@ export function AddProductDialog({
       if (priceResult.price != null) {
         setUnitPrice(priceResult.price.toString());
         setPriceSource(priceResult.source);
-      } else if (product.base_price) {
-        setUnitPrice(product.base_price.toString());
-        setPriceSource("base_price");
+      } else {
+        // Fallback: use book_price or base_price based on selected type
+        const bookPrice = (product as any).book_price;
+        if (currentPriceType === "boekprijs" && bookPrice != null) {
+          setUnitPrice(bookPrice.toString());
+          setPriceSource("base_price");
+        } else if (product.base_price) {
+          setUnitPrice(product.base_price.toString());
+          setPriceSource("base_price");
+        }
       }
     } catch (error) {
       console.error("Error fetching price:", error);
@@ -150,6 +161,27 @@ export function AddProductDialog({
       }
     } finally {
       setIsLoadingPrice(false);
+    }
+  };
+
+  // Handle price type toggle
+  const handlePriceTypeChange = (value: string) => {
+    const newType = value as "abitare" | "boekprijs";
+    setPriceType(newType);
+    if (!selectedProductId) return;
+
+    const product = products?.find(p => p.id === selectedProductId);
+    if (!product) return;
+
+    const bookPrice = (product as any).book_price;
+
+    // If no range-specific price was resolved, switch between book/abitare
+    if (priceSource === "base_price" || !priceSource) {
+      if (newType === "boekprijs" && bookPrice != null) {
+        setUnitPrice(bookPrice.toString());
+      } else if (product.base_price != null) {
+        setUnitPrice(product.base_price.toString());
+      }
     }
   };
 
@@ -179,6 +211,7 @@ export function AddProductDialog({
         height_mm: heightMm ? parseInt(heightMm) : null,
         width_mm: widthMm ? parseInt(widthMm) : null,
         extra_description: extraDescription.trim() || null,
+        price_type: priceType,
       };
 
       // Add override if set
@@ -305,6 +338,7 @@ export function AddProductDialog({
     setExtraDescription("");
     setPriceSource(null);
     setOverrideRangeId(null);
+    setPriceType("abitare");
     setFreeDescription("");
     setFreeArticleCode("");
     setFreePrice("");
@@ -438,11 +472,44 @@ export function AddProductDialog({
                   </Select>
                 </div>
 
+                {/* Price type selector */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Prijstype</Label>
+                  <RadioGroup
+                    value={priceType}
+                    onValueChange={handlePriceTypeChange}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="abitare" id="price-abitare" />
+                      <Label htmlFor="price-abitare" className="text-sm font-normal cursor-pointer">
+                        Abitare-prijs
+                        {selectedProduct?.base_price != null && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            (€ {selectedProduct.base_price.toFixed(2)})
+                          </span>
+                        )}
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="boekprijs" id="price-boek" />
+                      <Label htmlFor="price-boek" className="text-sm font-normal cursor-pointer">
+                        Boekprijs
+                        {(selectedProduct as any)?.book_price != null && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            (€ {(selectedProduct as any).book_price.toFixed(2)})
+                          </span>
+                        )}
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
                 {/* Price indicator */}
                 {priceSource && (
                   <div className="flex items-center gap-2">
                     <Badge variant={priceSource === "override_price" ? "destructive" : priceSource === "range_price" || priceSource === "quote_default_price" ? "default" : "secondary"}>
-                      {priceSource === "override_price" ? "Override prijs" : priceSource === "range_price" ? "Prijsgroep prijs" : priceSource === "quote_default_price" ? "Offerte-standaard prijs" : "Basisprijs"}
+                      {priceSource === "override_price" ? "Override prijs" : priceSource === "range_price" ? "Prijsgroep prijs" : priceSource === "quote_default_price" ? "Offerte-standaard prijs" : priceType === "boekprijs" ? "Boekprijs" : "Abitare-prijs"}
                     </Badge>
                     {isLoadingPrice && <Loader2 className="h-3 w-3 animate-spin" />}
                   </div>
