@@ -48,6 +48,7 @@ interface AddProductDialogProps {
   sectionId: string;
   sectionRangeId?: string | null;
   quoteDefaultRangeId?: string | null;
+  sectionSupplierId?: string | null;
 }
 
 export function AddProductDialog({
@@ -57,6 +58,7 @@ export function AddProductDialog({
   sectionId,
   sectionRangeId,
   quoteDefaultRangeId,
+  sectionSupplierId,
 }: AddProductDialogProps) {
   const createLine = useCreateQuoteLine();
   
@@ -89,8 +91,12 @@ export function AddProductDialog({
   const [isGroupHeader, setIsGroupHeader] = useState(false);
   const [groupTitle, setGroupTitle] = useState("");
 
+  // Supplier filter
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
+
   const { data: products, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
+    supplierId: showAllSuppliers ? undefined : (sectionSupplierId || undefined),
     enabled: open,
   });
 
@@ -308,6 +314,7 @@ export function AddProductDialog({
     setFreeExtraDescription("");
     setIsGroupHeader(false);
     setGroupTitle("");
+    setShowAllSuppliers(false);
   };
 
   return (
@@ -327,6 +334,20 @@ export function AddProductDialog({
           </TabsList>
 
           <TabsContent value="product" className="space-y-4 mt-4">
+            {/* Supplier filter toggle */}
+            {sectionSupplierId && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="showAllSuppliers"
+                  checked={showAllSuppliers}
+                  onCheckedChange={(checked) => setShowAllSuppliers(checked === true)}
+                />
+                <Label htmlFor="showAllSuppliers" className="text-sm font-normal cursor-pointer">
+                  Toon alle leveranciers
+                </Label>
+              </div>
+            )}
+
             {/* Product Search */}
             <div className="space-y-2">
               <Label>Product *</Label>

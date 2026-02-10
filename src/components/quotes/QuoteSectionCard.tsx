@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Pencil, Trash2, GripVertical, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { QuoteLineRow } from "./QuoteLineRow";
 import { AddProductDialog } from "./AddProductDialog";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 import { SectionDiscountEditor } from "./SectionDiscountEditor";
+import { useProductRange } from "@/hooks/useProductRanges";
 
 interface QuoteSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
@@ -34,6 +35,10 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const deleteSection = useDeleteQuoteSection();
+
+  // Derive supplier ID from section's range
+  const { data: sectionRange } = useProductRange(section.range_id);
+  const sectionSupplierId = sectionRange?.supplier_id || null;
 
   const handleDelete = () => {
     if (confirm(`Weet je zeker dat je de sectie "${section.title || section.section_type}" wilt verwijderen? Alle regels in deze sectie worden ook verwijderd.`)) {
@@ -200,6 +205,7 @@ export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardP
         quoteId={quoteId}
         sectionId={section.id}
         sectionRangeId={section.range_id}
+        sectionSupplierId={sectionSupplierId}
       />
 
       <QuoteSectionConfig
