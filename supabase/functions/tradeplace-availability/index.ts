@@ -109,14 +109,14 @@ serve(async (req) => {
       });
     }
 
-    // Build TradeXML 2.0 ProductAvailabilityRequest
-    const xmlRequest = buildAvailabilityRequest(retailerGln, supplier.tradeplace_gln, products);
+    // Build TradeXML 2.1.19 ProductAvailabilityRequest
+    const xmlRequest = buildProductAvailabilityRequest(retailerGln, supplier.tradeplace_gln, products);
 
     // Send to TMH2
     const baseUrl = getBaseUrl();
     const apiUrl = `${baseUrl}/api/messages/tp/${encodeURIComponent(tpId)}`;
 
-    console.log(`Sending availability request to: ${apiUrl}`);
+    console.log(`Sending ProductAvailabilityRequest to: ${apiUrl}`);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -128,7 +128,7 @@ serve(async (req) => {
     });
 
     const responseText = await response.text();
-    console.log(`TMH2 response status: ${response.status}`);
+    console.log(`TMH2 availability response status: ${response.status}`);
 
     if (!response.ok) {
       console.error("TMH2 error response:", responseText);
@@ -142,8 +142,8 @@ serve(async (req) => {
       });
     }
 
-    // Parse XML response
-    const results = parseAvailabilityResponse(responseText, products);
+    // Parse TradeXML 2.1.19 ProductAvailabilityReply
+    const results = parseProductAvailabilityReply(responseText, products);
 
     return new Response(JSON.stringify({
       success: true,
@@ -165,42 +165,93 @@ serve(async (req) => {
   }
 });
 
-function buildAvailabilityRequest(
-  senderGln: string, 
-  receiverGln: string, 
+/**
+ * Build a TradeXML 2.1.19 compliant ProductAvailabilityRequest
+ */
+function buildProductAvailabilityRequest(
+  customerGln: string,
+  sellerGln: string,
   products: ProductRequest[]
 ): string {
-  const messageId = crypto.randomUUID();
-  const timestamp = new Date().toISOString();
-  
-  const productLines = products.map(p => `
-    <Product>
-      <EAN>${escapeXml(p.ean_code)}</EAN>
-      <Quantity>${p.quantity}</Quantity>
-    </Product>`).join('');
+  const lineItems = products.map((p, index) => `      <ProductAvailabilityRequestLineItem>
+        <LineItemNumber>${index + 1}</LineItemNumber>
+        <Material materialQualifier="EAN">${escapeXml(p.ean_code)}</Material>
+        <QuantityRequested>${p.quantity}</QuantityRequested>
+      </ProductAvailabilityRequestLineItem>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<ProductAvailabilityRequest xmlns="http://www.tradeplace.com/schema/pi">
-  <Header>
-    <MessageID>${messageId}</MessageID>
-    <Timestamp>${timestamp}</Timestamp>
-    <SenderGLN>${escapeXml(senderGln)}</SenderGLN>
-    <ReceiverGLN>${escapeXml(receiverGln)}</ReceiverGLN>
-  </Header>
-  <Products>${productLines}
-  </Products>
+<!DOCTYPE ProductAvailabilityRequest SYSTEM "TradeXML.dtd">
+<ProductAvailabilityRequest>
+  <ProductAvailabilityRequestHeader>
+    <MessageType>ProductAvailabilityRequest</MessageType>
+    <CustomerCode customerCodeQualifier="GLN">${escapeXml(customerGln)}</CustomerCode>
+    <SellerCode>${escapeXml(sellerGln)}</SellerCode>
+  </ProductAvailabilityRequestHeader>
+  <ProductAvailabilityRequestLineItems>
+${lineItems}
+  </ProductAvailabilityRequestLineItems>
 </ProductAvailabilityRequest>`;
 }
 
-function parseAvailabilityResponse(xml: string, products: ProductRequest[]): AvailabilityResult[] {
-  // Parse the XML response from TMH2
-  // TradeXML responses contain <ProductAvailabilityReply> with product availability info
-  return products.map(product => {
-    // Try to find availability info for this EAN in the XML
-    const eanPattern = new RegExp(`<EAN>${escapeRegex(product.ean_code)}</EAN>[\\s\\S]*?<\\/Product>`, 'i');
-    const match = xml.match(eanPattern);
+/**
+ * Parse a TradeXML 2.1.19 ProductAvailabilityReply response.
+ * 
+ * Each <ProductAvailabilityReplyLineItem> contains:
+ * - <Material materialQualifier="EAN">...</Material>
+ * - <QuantityRequested>...</QuantityRequested>
+ * - <ConfirmedQuantity>...</ConfirmedQuantity>
+ * - <ConfirmationSchedule> with <ConfirmedDeliveryDate>
+ * - <LineStatus> with <ErrorType>, <ErrorCode>, <ErrorText>
+ * - <SalesUnit>...</SalesUnit>
+ */
+function parseProductAvailabilityReply(xml: string, products: ProductRequest[]): AvailabilityResult[] {
+  // Split reply into individual line items
+  const lineItemBlocks = xml.match(/<ProductAvailabilityReplyLineItem>[\s\S]*?<\/ProductAvailabilityReplyLineItem>/g) || [];
 
-    if (!match) {
+  // Build a map of EAN -> parsed data from the reply
+  const replyMap = new Map<string, {
+    confirmedQty: number | null;
+    leadTimeDays: number | null;
+    errorCode: string | null;
+    errorText: string | null;
+  }>();
+
+  for (const block of lineItemBlocks) {
+    const eanMatch = block.match(/<Material[^>]*>([^<]+)<\/Material>/);
+    const confirmedQtyMatch = block.match(/<ConfirmedQuantity>([^<]+)<\/ConfirmedQuantity>/);
+    const errorCodeMatch = block.match(/<ErrorCode>([^<]+)<\/ErrorCode>/);
+    const errorTextMatch = block.match(/<ErrorText>([^<]+)<\/ErrorText>/);
+
+    // Parse confirmed delivery date to estimate lead time
+    let leadTimeDays: number | null = null;
+    const yearMatch = block.match(/<ConfirmedDeliveryDate>[\s\S]*?<Year>(\d+)<\/Year>/);
+    const monthMatch = block.match(/<ConfirmedDeliveryDate>[\s\S]*?<Month>(\d+)<\/Month>/);
+    const dayMatch = block.match(/<ConfirmedDeliveryDate>[\s\S]*?<Day>(\d+)<\/Day>/);
+
+    if (yearMatch && monthMatch && dayMatch) {
+      const deliveryDate = new Date(
+        parseInt(yearMatch[1]),
+        parseInt(monthMatch[1]) - 1,
+        parseInt(dayMatch[1])
+      );
+      const now = new Date();
+      leadTimeDays = Math.max(0, Math.ceil((deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    if (eanMatch) {
+      replyMap.set(eanMatch[1], {
+        confirmedQty: confirmedQtyMatch ? parseFloat(confirmedQtyMatch[1]) : null,
+        leadTimeDays,
+        errorCode: errorCodeMatch?.[1] || null,
+        errorText: errorTextMatch?.[1] || null,
+      });
+    }
+  }
+
+  return products.map(product => {
+    const reply = replyMap.get(product.ean_code);
+
+    if (!reply) {
       return {
         ean_code: product.ean_code,
         available: false,
@@ -211,27 +262,30 @@ function parseAvailabilityResponse(xml: string, products: ProductRequest[]): Ava
       };
     }
 
-    const block = match[0];
-    const qtyMatch = block.match(/<AvailableQuantity>(\d+)<\/AvailableQuantity>/i);
-    const leadTimeMatch = block.match(/<LeadTimeDays>(\d+)<\/LeadTimeDays>/i);
-    const statusMatch = block.match(/<AvailabilityStatus>([^<]+)<\/AvailabilityStatus>/i);
-
-    const qtyAvailable = qtyMatch ? parseInt(qtyMatch[1]) : null;
-    const leadTime = leadTimeMatch ? parseInt(leadTimeMatch[1]) : null;
-    const rawStatus = statusMatch?.[1]?.toLowerCase() || '';
-
+    // Determine status based on confirmed quantity and error codes
     let status: AvailabilityResult['status'] = 'unknown';
-    if (rawStatus.includes('in_stock') || rawStatus.includes('available')) status = 'in_stock';
-    else if (rawStatus.includes('limited')) status = 'limited';
-    else if (rawStatus.includes('out_of_stock') || rawStatus.includes('unavailable')) status = 'out_of_stock';
-    else if (rawStatus.includes('backorder')) status = 'backorder';
+    const confirmedQty = reply.confirmedQty;
+
+    if (reply.errorCode) {
+      // Error codes indicate issues
+      status = 'out_of_stock';
+    } else if (confirmedQty !== null) {
+      if (confirmedQty >= product.quantity) {
+        status = 'in_stock';
+      } else if (confirmedQty > 0) {
+        status = 'limited';
+      } else {
+        status = reply.leadTimeDays !== null ? 'backorder' : 'out_of_stock';
+      }
+    }
 
     return {
       ean_code: product.ean_code,
-      available: status === 'in_stock' || status === 'limited' || (qtyAvailable !== null && qtyAvailable > 0),
-      quantity_available: qtyAvailable,
-      lead_time_days: leadTime,
+      available: status === 'in_stock' || status === 'limited',
+      quantity_available: confirmedQty,
+      lead_time_days: reply.leadTimeDays,
       status,
+      message: reply.errorText || undefined,
     };
   });
 }
@@ -243,8 +297,4 @@ function escapeXml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

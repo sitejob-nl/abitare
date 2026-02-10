@@ -19,6 +19,10 @@ function getAuthHeader(): string {
   return "Basic " + btoa(`${username}:${password}`);
 }
 
+function tradeplaceDate(date: Date): string {
+  return `<Year>${date.getFullYear()}</Year><Month>${String(date.getMonth() + 1).padStart(2, '0')}</Month><Day>${String(date.getDate()).padStart(2, '0')}</Day>`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -107,10 +111,10 @@ serve(async (req) => {
       });
     }
 
-    // Build TradeXML 2.0 OrderPlacementRequest
-    const xmlRequest = buildOrderRequest(
-      retailerGln, 
-      supplier.tradeplace_gln, 
+    // Build TradeXML 2.1.19 OrderPlacementRequest
+    const xmlRequest = buildOrderPlacementRequest(
+      retailerGln,
+      supplier.tradeplace_gln,
       supplierOrder,
       supplierOrder.lines
     );
@@ -119,7 +123,7 @@ serve(async (req) => {
     const baseUrl = getBaseUrl();
     const apiUrl = `${baseUrl}/api/messages/tp/${encodeURIComponent(tpId)}`;
 
-    console.log(`Sending order to TMH2: ${apiUrl}`);
+    console.log(`Sending OrderPlacementRequest to TMH2: ${apiUrl}`);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -136,7 +140,6 @@ serve(async (req) => {
     if (!response.ok) {
       console.error("TMH2 order error:", responseText);
 
-      // Update order with error
       await supabase
         .from("supplier_orders")
         .update({
@@ -156,10 +159,11 @@ serve(async (req) => {
       });
     }
 
-    // Parse external order ID from response if available
-    const externalIdMatch = responseText.match(/<OrderID>([^<]+)<\/OrderID>/i) 
-      || responseText.match(/<ExternalOrderID>([^<]+)<\/ExternalOrderID>/i);
-    const externalOrderId = externalIdMatch?.[1] || `TMH2-${Date.now()}`;
+    // Parse TradeXML response: look for SalesDocumentNumber (supplier's order ID)
+    // or PurchaseOrderNumber (our order ID echoed back)
+    const salesDocMatch = responseText.match(/<SalesDocumentNumber>([^<]+)<\/SalesDocumentNumber>/);
+    const purchaseOrderMatch = responseText.match(/<PurchaseOrderNumber>([^<]+)<\/PurchaseOrderNumber>/);
+    const externalOrderId = salesDocMatch?.[1] || purchaseOrderMatch?.[1] || `TMH2-${Date.now()}`;
 
     // Update supplier order status
     const { error: updateError } = await supabase
@@ -203,37 +207,62 @@ serve(async (req) => {
   }
 });
 
-function buildOrderRequest(
-  senderGln: string,
-  receiverGln: string,
+/**
+ * Build a TradeXML 2.1.19 compliant OrderPlacementRequest
+ */
+function buildOrderPlacementRequest(
+  customerGln: string,
+  sellerGln: string,
   order: any,
   lines: any[]
 ): string {
-  const messageId = crypto.randomUUID();
-  const timestamp = new Date().toISOString();
+  const now = new Date();
   
-  const orderLines = lines.map((line: any, index: number) => `
-    <OrderLine>
-      <LineNumber>${index + 1}</LineNumber>
-      <EAN>${escapeXml(line.ean_code || '')}</EAN>
-      <Quantity>${line.quantity}</Quantity>
-      <UnitPrice>${line.unit_price || 0}</UnitPrice>
-    </OrderLine>`).join('');
+  // Requested delivery date: use expected_delivery_date from order, or 14 days from now
+  const deliveryDate = order.expected_delivery_date
+    ? new Date(order.expected_delivery_date)
+    : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+  const lineItems = lines.map((line: any, index: number) => {
+    const lineXml = [
+      `      <OrderPlacementRequestLineItem>`,
+      `        <LineItemNumber>${index + 1}</LineItemNumber>`,
+      `        <Material materialQualifier="EAN">${escapeXml(line.ean_code || '')}</Material>`,
+      `        <QuantityRequested>${line.quantity}</QuantityRequested>`,
+    ];
+
+    // Add optional CustomerExpectedPrice if we have a unit price
+    if (line.unit_price && line.unit_price > 0) {
+      lineXml.push(`        <CustomerExpectedPrice>${line.unit_price}</CustomerExpectedPrice>`);
+    }
+
+    // Add optional article code as CustomerMaterial
+    if (line.article_code) {
+      lineXml.push(`        <CustomerMaterial>${escapeXml(line.article_code)}</CustomerMaterial>`);
+    }
+
+    lineXml.push(`      </OrderPlacementRequestLineItem>`);
+    return lineXml.join('\n');
+  }).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<OrderPlacementRequest xmlns="http://www.tradeplace.com/schema/pi">
-  <Header>
-    <MessageID>${messageId}</MessageID>
-    <Timestamp>${timestamp}</Timestamp>
-    <SenderGLN>${escapeXml(senderGln)}</SenderGLN>
-    <ReceiverGLN>${escapeXml(receiverGln)}</ReceiverGLN>
-  </Header>
-  <Order>
-    <OrderID>${escapeXml(order.id)}</OrderID>
-    <OrderDate>${new Date().toISOString().split('T')[0]}</OrderDate>
-    <OrderLines>${orderLines}
-    </OrderLines>
-  </Order>
+<!DOCTYPE OrderPlacementRequest SYSTEM "TradeXML.dtd">
+<OrderPlacementRequest>
+  <OrderPlacementRequestHeader>
+    <MessageType>OrderPlacementRequest</MessageType>
+    <CustomerCode customerCodeQualifier="GLN">${escapeXml(customerGln)}</CustomerCode>
+    <SellerCode>${escapeXml(sellerGln)}</SellerCode>
+    <RequestedDeliveryDate>
+      ${tradeplaceDate(deliveryDate)}
+    </RequestedDeliveryDate>
+    <PurchaseOrderNumber>${escapeXml(order.id)}</PurchaseOrderNumber>
+    <PurchaseOrderDate>
+      ${tradeplaceDate(now)}
+    </PurchaseOrderDate>
+  </OrderPlacementRequestHeader>
+  <OrderPlacementRequestLineItems>
+${lineItems}
+  </OrderPlacementRequestLineItems>
 </OrderPlacementRequest>`;
 }
 
