@@ -11,15 +11,23 @@ import {
   FileText,
   MessageSquare,
   Plus,
+  Download,
+  CheckSquare,
+  Square,
+  ListChecks,
+  Loader2,
 } from "lucide-react";
 import { InstallerLayout } from "@/components/installer/InstallerLayout";
 import { useInstallerOrderDetail } from "@/hooks/useInstallerOrders";
 import { useWorkReportByOrder, useCreateWorkReport } from "@/hooks/useWorkReports";
+import { useOrderChecklist } from "@/hooks/useOrderChecklist";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 const statusLabels: Record<string, string> = {
   montage_gepland: "Montage gepland",
@@ -32,6 +40,7 @@ export default function InstallerOrderDetail() {
   const { data: order, isLoading } = useInstallerOrderDetail(orderId);
   const { data: existingReport } = useWorkReportByOrder(orderId);
   const createReport = useCreateWorkReport();
+  const { data: checklistItems, isLoading: checklistLoading, toggleItem } = useOrderChecklist(orderId);
 
   const handleStartWorkReport = async () => {
     if (!order) return;
@@ -50,6 +59,22 @@ export default function InstallerOrderDetail() {
     if (existingReport) {
       navigate(`/monteur/werkbon/${existingReport.id}`);
     }
+  };
+
+  const handleDownloadDocument = async (filePath: string, fileName: string) => {
+    const { data, error } = await supabase.storage
+      .from("order-documents")
+      .download(filePath);
+    if (error) {
+      console.error("Download error:", error);
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (isLoading) {
@@ -159,10 +184,14 @@ export default function InstallerOrderDetail() {
         </Card>
 
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="info">Info</TabsTrigger>
             <TabsTrigger value="docs">
               Docs ({visibleDocuments?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="checklist">
+              <ListChecks className="mr-1 h-3.5 w-3.5" />
+              Checklist
             </TabsTrigger>
             <TabsTrigger value="notes">
               Notities ({installerNotes?.length || 0})
@@ -259,9 +288,9 @@ export default function InstallerOrderDetail() {
                 )}
 
                 {order.delivery_notes && (
-                  <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm">
-                    <strong className="text-amber-800">Levernotities:</strong>
-                    <p className="mt-1 text-amber-700">{order.delivery_notes}</p>
+                  <div className="mt-3 rounded-lg bg-accent p-3 text-sm">
+                    <strong className="text-accent-foreground">Levernotities:</strong>
+                    <p className="mt-1 text-muted-foreground">{order.delivery_notes}</p>
                   </div>
                 )}
               </CardContent>
@@ -301,13 +330,23 @@ export default function InstallerOrderDetail() {
                 {visibleDocuments.map((doc) => (
                   <Card key={doc.id} className="p-4">
                     <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="font-medium">{doc.title || doc.file_name}</p>
+                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{doc.title || doc.file_name}</p>
                         <p className="text-xs text-muted-foreground">
                           {doc.document_type}
                         </p>
                       </div>
+                      {doc.file_path && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 flex-shrink-0"
+                          onClick={() => handleDownloadDocument(doc.file_path!, doc.file_name || "document")}
+                        >
+                          <Download className="h-5 w-5" />
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -317,6 +356,61 @@ export default function InstallerOrderDetail() {
                 <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
                 <p className="mt-4 text-sm text-muted-foreground">
                   Geen documenten beschikbaar
+                </p>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Checklist Tab */}
+          <TabsContent value="checklist">
+            {checklistLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : checklistItems && checklistItems.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ListChecks className="h-4 w-4" />
+                      Montage checklist
+                    </CardTitle>
+                    <Badge
+                      variant={checklistItems.every(i => i.checked) ? "default" : "secondary"}
+                      className="text-xs"
+                    >
+                      {checklistItems.filter(i => i.checked).length}/{checklistItems.length}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    {checklistItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => toggleItem.mutate({ itemId: item.id, checked: !item.checked })}
+                        className={cn(
+                          "flex items-center gap-3 w-full text-left px-3 py-3 rounded-lg text-sm transition-colors hover:bg-muted min-h-[48px]",
+                          item.checked && "text-muted-foreground"
+                        )}
+                        disabled={toggleItem.isPending}
+                      >
+                        {item.checked ? (
+                          <CheckSquare className="h-5 w-5 text-green-600 shrink-0" />
+                        ) : (
+                          <Square className="h-5 w-5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className={cn(item.checked && "line-through")}>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="p-12 text-center">
+                <ListChecks className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Geen checklist beschikbaar voor deze order
                 </p>
               </Card>
             )}
