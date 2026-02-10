@@ -116,7 +116,8 @@ export async function fetchProductPrice(
   productId: string,
   rangeId: string | null,
   overrideRangeId?: string | null,
-  quoteDefaultRangeId?: string | null
+  quoteDefaultRangeId?: string | null,
+  priceType?: "abitare" | "boekprijs"
 ): Promise<{ price: number | null; source: "override_price" | "range_price" | "quote_default_price" | "base_price" }> {
   // 1. Try override range first
   if (overrideRangeId) {
@@ -175,17 +176,19 @@ export async function fetchProductPrice(
     }
   }
 
-  // 4. Fall back to base price
+  // 4. Fall back to base price or book price based on price type
   const { data: product, error: productError } = await supabase
     .from("products")
-    .select("base_price")
+    .select("base_price, book_price")
     .eq("id", productId)
     .single();
 
   if (productError) throw productError;
 
+  const useBookPrice = priceType === "boekprijs" && (product as any)?.book_price != null;
+
   return {
-    price: product?.base_price ?? null,
+    price: useBookPrice ? (product as any).book_price : (product?.base_price ?? null),
     source: "base_price",
   };
 }

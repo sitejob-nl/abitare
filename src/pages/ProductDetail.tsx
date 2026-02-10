@@ -51,6 +51,7 @@ const ProductDetail = () => {
       description: product.description || "",
       base_price: product.base_price ?? "",
       cost_price: product.cost_price ?? "",
+      book_price: (product as any).book_price ?? "",
       vat_rate: product.vat_rate ?? 21,
       unit: product.unit || "stuk",
       sku: product.sku || "",
@@ -78,6 +79,7 @@ const ProductDetail = () => {
         description: form.description || null,
         base_price: form.base_price !== "" ? Number(form.base_price) : null,
         cost_price: form.cost_price !== "" ? Number(form.cost_price) : null,
+        book_price: form.book_price !== "" ? Number(form.book_price) : null,
         vat_rate: form.vat_rate !== "" ? Number(form.vat_rate) : null,
         unit: form.unit || null,
         sku: form.sku || null,
@@ -387,21 +389,30 @@ const ProductDetail = () => {
               {isEditing ? (
                 <>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Verkoopprijs (excl. BTW)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.base_price}
-                      onChange={(e) => setForm({ ...form, base_price: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
                     <Label className="text-xs">Inkoopprijs</Label>
                     <Input
                       type="number"
                       step="0.01"
                       value={form.cost_price}
                       onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Boekprijs (catalogusprijs)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.book_price}
+                      onChange={(e) => setForm({ ...form, book_price: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Abitare-prijs (excl. BTW)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.base_price}
+                      onChange={(e) => setForm({ ...form, base_price: e.target.value })}
                     />
                   </div>
                   <div className="grid gap-4 grid-cols-2">
@@ -434,15 +445,21 @@ const ProductDetail = () => {
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Verkoopprijs</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {formatCurrency(product.base_price)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Inkoopprijs</span>
                     <span className="text-sm text-foreground">
                       {formatCurrency(product.cost_price)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Boekprijs</span>
+                    <span className="text-sm text-foreground">
+                      {formatCurrency((product as any).book_price)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Abitare-prijs</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {formatCurrency(product.base_price)}
                     </span>
                   </div>
                   {product.base_price && product.cost_price ? (
