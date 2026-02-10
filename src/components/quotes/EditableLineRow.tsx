@@ -29,6 +29,7 @@ interface EditableLineRowProps {
   lineNumber?: number;
   subLines?: QuoteLine[];
   sectionRangeId?: string | null;
+  quoteDefaultRangeId?: string | null;
 }
 
 function formatCurrency(value: number | null): string {
@@ -50,7 +51,7 @@ function parseDimension(value: string): number | null {
   return num * 10; // Convert cm to mm
 }
 
-export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId }: EditableLineRowProps) {
+export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId }: EditableLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
   
@@ -179,7 +180,7 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
     // Refetch the price if there's a product
     if (line.product_id) {
       try {
-        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId);
+        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId, quoteDefaultRangeId);
         if (priceResult.price != null) {
           updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, range_override_id: newOverrideId } as any);
         }

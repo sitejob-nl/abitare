@@ -24,6 +24,9 @@ export function useDuplicateQuote() {
       if (!original) throw new Error("Quote not found");
 
       // 2. Create the new quote (without id, quote_number - auto-generated)
+      const originalRef = (original as any).reference as string | null;
+      const newReference = originalRef ? `${originalRef} (kopie)` : null;
+
       const { data: newQuote, error: quoteError } = await supabase
         .from("quotes")
         .insert({
@@ -49,7 +52,13 @@ export function useDuplicateQuote() {
           total_incl_vat: original.total_incl_vat,
           salesperson_id: original.salesperson_id,
           created_by: original.created_by,
-        })
+          // New offerte-level defaults
+          category: (original as any).category || 'keuken',
+          reference: newReference,
+          default_supplier_id: (original as any).default_supplier_id || null,
+          default_price_group_id: (original as any).default_price_group_id || null,
+          default_corpus_color_id: (original as any).default_corpus_color_id || null,
+        } as any)
         .select()
         .single();
 

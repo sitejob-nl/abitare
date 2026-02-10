@@ -115,8 +115,9 @@ export function useProductPrice(productId: string | null | undefined, rangeId: s
 export async function fetchProductPrice(
   productId: string,
   rangeId: string | null,
-  overrideRangeId?: string | null
-): Promise<{ price: number | null; source: "override_price" | "range_price" | "base_price" }> {
+  overrideRangeId?: string | null,
+  quoteDefaultRangeId?: string | null
+): Promise<{ price: number | null; source: "override_price" | "range_price" | "quote_default_price" | "base_price" }> {
   // 1. Try override range first
   if (overrideRangeId) {
     const { data: overridePrice, error: overrideError } = await supabase
@@ -155,7 +156,26 @@ export async function fetchProductPrice(
     }
   }
 
-  // 3. Fall back to base price
+  // 3. Try quote default range (NEW)
+  if (quoteDefaultRangeId && quoteDefaultRangeId !== rangeId) {
+    const { data: quotePrice, error: quotePriceError } = await supabase
+      .from("product_prices")
+      .select("price")
+      .eq("product_id", productId)
+      .eq("range_id", quoteDefaultRangeId)
+      .maybeSingle();
+
+    if (quotePriceError) throw quotePriceError;
+
+    if (quotePrice?.price != null) {
+      return {
+        price: quotePrice.price,
+        source: "quote_default_price",
+      };
+    }
+  }
+
+  // 4. Fall back to base price
   const { data: product, error: productError } = await supabase
     .from("products")
     .select("base_price")
