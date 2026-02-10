@@ -5,6 +5,12 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Calendar, User, Euro } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 
 interface OrderKanbanCardProps {
   order: {
@@ -13,6 +19,8 @@ interface OrderKanbanCardProps {
     total_incl_vat: number | null;
     expected_delivery_date: string | null;
     payment_status: string | null;
+    deposit_required?: boolean | null;
+    deposit_invoice_sent?: boolean | null;
     customer: {
       first_name?: string | null;
       last_name?: string | null;
@@ -43,6 +51,41 @@ function getCustomerName(customer: OrderKanbanCardProps["order"]["customer"]): s
   return [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Onbekend";
 }
 
+interface GateIndicator {
+  label: string;
+  ok: boolean;
+}
+
+function getGateIndicators(order: OrderKanbanCardProps["order"]): GateIndicator[] {
+  const indicators: GateIndicator[] = [];
+  const depositRequired = order.deposit_required !== false; // default true
+  const paymentStatus = order.payment_status || "open";
+
+  // Deposit invoice sent indicator
+  if (depositRequired) {
+    indicators.push({
+      label: order.deposit_invoice_sent
+        ? "Aanbetalingsfactuur verstuurd"
+        : "Aanbetalingsfactuur niet verstuurd",
+      ok: !!order.deposit_invoice_sent,
+    });
+  }
+
+  // Payment indicator
+  indicators.push({
+    label: depositRequired
+      ? paymentStatus === "betaald"
+        ? "Aanbetaling ontvangen"
+        : paymentStatus === "deels_betaald"
+          ? "Aanbetaling deels ontvangen"
+          : "Aanbetaling niet ontvangen"
+      : "Geen aanbetaling vereist",
+    ok: !depositRequired || paymentStatus === "betaald" || paymentStatus === "deels_betaald",
+  });
+
+  return indicators;
+}
+
 export function OrderKanbanCard({ order }: OrderKanbanCardProps) {
   const navigate = useNavigate();
   const {
@@ -61,9 +104,9 @@ export function OrderKanbanCard({ order }: OrderKanbanCardProps) {
 
   const paymentStatus = order.payment_status || "open";
   const paymentCfg = paymentStatusConfig[paymentStatus] || paymentStatusConfig.open;
+  const gates = getGateIndicators(order);
 
   const handleClick = (e: React.MouseEvent) => {
-    // Only navigate if not dragging
     if (!isDragging) {
       navigate(`/orders/${order.id}`);
     }
@@ -112,6 +155,28 @@ export function OrderKanbanCard({ order }: OrderKanbanCardProps) {
           </div>
         )}
       </div>
+
+      {gates.length > 0 && (
+        <TooltipProvider delayDuration={200}>
+          <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">
+            {gates.map((gate, i) => (
+              <Tooltip key={i}>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full shrink-0",
+                      gate.ok ? "bg-green-500" : "bg-destructive"
+                    )}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {gate.label}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
