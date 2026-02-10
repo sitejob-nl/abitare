@@ -548,8 +548,8 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                   </div>
                 )}
 
-                {/* Range/Model -- hidden for has_price_groups suppliers */}
-                {selectedSupplierId && !hasPriceGroups && (
+                {/* Range/Model -- hidden for has_price_groups suppliers and suppliers without ranges */}
+                {selectedSupplierId && !hasPriceGroups && filteredRanges.length > 0 && (
                   <div className="space-y-2">
                     <Label>Model</Label>
                     <Select
@@ -590,40 +590,44 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                   </div>
                 )}
 
-                {/* Front color & Corpus color */}
-                {selectedSupplierId && (
+                {/* Front color & Corpus color - only show when colors are available */}
+                {selectedSupplierId && colors.length > 0 && (
                   <>
-                    <div className="space-y-2">
-                      <Label>Frontkleur</Label>
-                      <Select value={colorId} onValueChange={setColorId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer frontkleur..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {colors.filter(c => c.color_type !== "corpus").map((color) => (
-                            <SelectItem key={color.id} value={color.id}>
-                              {color.code} - {color.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {colors.filter(c => c.color_type !== "corpus").length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Frontkleur</Label>
+                        <Select value={colorId} onValueChange={setColorId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecteer frontkleur..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {colors.filter(c => c.color_type !== "corpus").map((color) => (
+                              <SelectItem key={color.id} value={color.id}>
+                                {color.code} - {color.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                    <div className="space-y-2">
-                      <Label>Korpuskleur</Label>
-                      <Select value={corpusColorId} onValueChange={setCorpusColorId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer korpuskleur..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {colors.filter(c => c.color_type !== "front").map((color) => (
-                            <SelectItem key={color.id} value={color.id}>
-                              {color.code} - {color.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {colors.filter(c => c.color_type !== "front").length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Korpuskleur</Label>
+                        <Select value={corpusColorId} onValueChange={setCorpusColorId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecteer korpuskleur..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {colors.filter(c => c.color_type !== "front").map((color) => (
+                              <SelectItem key={color.id} value={color.id}>
+                                {color.code} - {color.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </>
                 )}
 
