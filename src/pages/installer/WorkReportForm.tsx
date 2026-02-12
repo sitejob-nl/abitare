@@ -7,6 +7,7 @@ import { InstallerLayout } from "@/components/installer/InstallerLayout";
 import { PhotoUploader } from "@/components/installer/PhotoUploader";
 import { TaskChecklist } from "@/components/installer/TaskChecklist";
 import { TimeTracker } from "@/components/installer/TimeTracker";
+import { SignaturePad } from "@/components/installer/SignaturePad";
 import {
   useWorkReport,
   useUpdateWorkReport,
@@ -66,7 +67,7 @@ export default function WorkReportForm() {
   const [workDescription, setWorkDescription] = useState("");
   const [materialsUsed, setMaterialsUsed] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
-
+  const [signatureSaved, setSignatureSaved] = useState(false);
   // Initialize form when report loads
   useEffect(() => {
     if (report) {
@@ -214,7 +215,7 @@ export default function WorkReportForm() {
         </div>
 
         <Tabs defaultValue="details" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="photos">
               Foto's ({report.work_report_photos?.length || 0})
@@ -222,6 +223,7 @@ export default function WorkReportForm() {
             <TabsTrigger value="tasks">
               Taken ({report.work_report_tasks?.length || 0})
             </TabsTrigger>
+            <TabsTrigger value="signature">Handtekening</TabsTrigger>
           </TabsList>
 
           {/* Details Tab */}
@@ -332,6 +334,39 @@ export default function WorkReportForm() {
                   onToggleTask={handleToggleTask}
                   disabled={isReadOnly}
                 />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Signature Tab */}
+          <TabsContent value="signature">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Handtekening klant</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SignaturePad
+                  disabled={isReadOnly}
+                  existingSignature={(report as any).customer_signature_url || null}
+                  onSave={async (dataUrl) => {
+                    if (!id) return;
+                    // Convert data URL to blob and upload
+                    const res = await fetch(dataUrl);
+                    const blob = await res.blob();
+                    const file = new File([blob], `signature-${id}.png`, { type: "image/png" });
+
+                    await uploadPhoto.mutateAsync({
+                      workReportId: id,
+                      file,
+                      photoType: "na" as const,
+                      caption: "Handtekening klant",
+                    });
+                    setSignatureSaved(true);
+                  }}
+                />
+                {signatureSaved && (
+                  <p className="mt-2 text-sm text-primary">✓ Handtekening opgeslagen</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

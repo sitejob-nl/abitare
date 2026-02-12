@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Loader2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Loader2, ExternalLink, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
@@ -18,6 +18,7 @@ import { SupplierLineGroups } from "@/components/orders/SupplierLineGroups";
 import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
 import { ChecklistCard } from "@/components/orders/ChecklistCard";
 import { OrderCommunicationTab } from "@/components/orders/OrderCommunicationTab";
+import { ScheduleOutlookEvent } from "@/components/orders/ScheduleOutlookEvent";
 import { useOrderChecklist } from "@/hooks/useOrderChecklist";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
@@ -310,11 +311,24 @@ const OrderDetail = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 pl-0 sm:pl-14">
-          <PortalTokenGenerator
-            customerId={order.customer_id}
-            orderId={order.id}
-            customerName={getCustomerName(customer)}
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <PortalTokenGenerator
+              customerId={order.customer_id}
+              orderId={order.id}
+              customerName={getCustomerName(customer)}
+            />
+            <ScheduleOutlookEvent
+              orderId={order.id}
+              orderNumber={order.order_number}
+              customerName={getCustomerName(customer)}
+              installationAddress={
+                [(order as any).installation_street_address, (order as any).installation_postal_code, (order as any).installation_city]
+                  .filter(Boolean)
+                  .join(", ") || undefined
+              }
+              outlookEventId={(order as any).outlook_event_id}
+            />
+          </div>
           <div className="text-left sm:text-right">
             <p className="text-xs text-muted-foreground">Totaal incl. BTW</p>
             <p className="text-xl font-semibold text-foreground">
