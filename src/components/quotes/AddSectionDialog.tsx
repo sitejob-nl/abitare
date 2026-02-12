@@ -258,9 +258,18 @@ export function AddSectionDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle collecties</SelectItem>
-                  {collections.map(c => (
-                    <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
-                  ))}
+                  {collections.map(c => {
+                    const labels: Record<string, string> = {
+                      evolution: 'Evolution',
+                      look: 'Look',
+                      art: 'ART',
+                      classic_glamour: 'Classic Glamour',
+                      frame: 'Frame',
+                    };
+                    return (
+                      <SelectItem key={c} value={c}>{labels[c] || c}</SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
