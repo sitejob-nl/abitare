@@ -6,14 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File, AlertTriangle, Package } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, Check, Loader2, AlertCircle, X, File, AlertTriangle, Package, FileJson } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductImport, usePriceGroupImport, parsePrice } from '@/hooks/useProductImport';
+import { useJsonImport, type JsonPayload } from '@/hooks/useJsonImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import * as XLSX from 'xlsx';
 
 interface ParsedRow {
@@ -73,8 +75,13 @@ export default function ProductImport() {
     dimension_3: '',
   });
   
+  // JSON import state
+  const [jsonMode, setJsonMode] = useState(false);
+  const [jsonPayloads, setJsonPayloads] = useState<JsonPayload[]>([]);
+
   const { importProducts, isImporting, importResult } = useProductImport();
   const { importPriceGroups, isImporting: isImportingPriceGroups, importResult: priceGroupResult } = usePriceGroupImport();
+  const { parseJsonFiles, importJsonChunks, isImporting: isJsonImporting, bulkProgress, resetProgress } = useJsonImport();
 
   // Fetch suppliers
   const { data: suppliers = [] } = useQuery({
@@ -500,25 +507,41 @@ export default function ProductImport() {
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
+    const file = files[0];
     setIsParsingFile(true);
     setParseError('');
     setFileName(file.name);
 
     try {
+      // JSON detection
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const payloads = await parseJsonFiles(files);
+        setJsonPayloads(payloads);
+        setJsonMode(true);
+        setFileName(payloads.length === 1 ? payloads[0].fileName : `${payloads.length} JSON bestanden`);
+        
+        // Auto-detect supplier from JSON
+        const supplierId = payloads[0]?.data?.supplier_id as string;
+        if (supplierId && suppliers.some(s => s.id === supplierId)) {
+          setSelectedSupplierId(supplierId);
+        }
+        
+        setStep(2);
+        setIsParsingFile(false);
+        return;
+      }
+
+      // Excel/CSV flow (existing)
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
-      
-      // Get first sheet
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      
-      // Convert to JSON
       const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, {
-        defval: '', // Default value for empty cells
-        raw: false, // Get formatted strings
+        defval: '',
+        raw: false,
       });
 
       if (jsonData.length === 0) {
@@ -526,45 +549,26 @@ export default function ProductImport() {
       }
 
       setFileData(jsonData);
+      setJsonMode(false);
       
-      // Auto-detect column mapping
       const columns = Object.keys(jsonData[0]);
       const detectedMapping = autoDetectMapping(columns);
       
-      // Valideer of dit echt een prijsgroepen bestand is
       let shouldUsePriceGroups = false;
-      
       if (detectedMapping.range_code && detectedMapping.article_code) {
         const rangeValues = new Set<string>();
         const articleValues = new Set<string>();
-        
-        // Check eerste 200 rijen voor unieke ranges en artikelen
         jsonData.slice(0, 200).forEach(row => {
           const rangeVal = row[detectedMapping.range_code]?.toString().trim();
           const articleVal = row[detectedMapping.article_code]?.toString().trim();
-          
-          // Filter lege en speciale waarden
-          if (rangeVal && rangeVal !== '-' && rangeVal !== '' && rangeVal !== '€ -') {
-            rangeValues.add(rangeVal);
-          }
-          if (articleVal && articleVal !== '-' && articleVal !== '') {
-            articleValues.add(articleVal);
-          }
+          if (rangeVal && rangeVal !== '-' && rangeVal !== '' && rangeVal !== '€ -') rangeValues.add(rangeVal);
+          if (articleVal && articleVal !== '-' && articleVal !== '') articleValues.add(articleVal);
         });
-        
-        // Prijsgroepen modus alleen als:
-        // 1. Er tenminste 3 unieke ranges zijn
-        // 2. Het aantal ranges significant minder is dan het aantal artikelen
-        //    (anders is elke regel uniek = standaard import)
-        // 3. Er minder dan 500 ranges zijn (anders is het geen prijsgroep structuur)
         const hasMultipleRanges = rangeValues.size >= 3;
         const rangesAreReused = articleValues.size > 0 && rangeValues.size < articleValues.size * 0.5;
         const notTooManyRanges = rangeValues.size < 500;
-        
         shouldUsePriceGroups = hasMultipleRanges && rangesAreReused && notTooManyRanges;
-        
         if (!shouldUsePriceGroups) {
-          // Reset range kolommen - dit is geen prijsgroep bestand
           detectedMapping.range_code = '';
           detectedMapping.range_name = '';
         }
@@ -572,12 +576,12 @@ export default function ProductImport() {
       
       setColumnMapping(detectedMapping);
       setImportMode(shouldUsePriceGroups ? 'price_groups' : 'standard');
-      
       setStep(2);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Fout bij het lezen van het bestand';
       setParseError(message);
       setFileData([]);
+      setJsonPayloads([]);
     } finally {
       setIsParsingFile(false);
     }
@@ -604,6 +608,13 @@ export default function ProductImport() {
   };
 
   const handleImport = async () => {
+    if (jsonMode) {
+      // JSON direct import
+      await importJsonChunks(jsonPayloads, selectedSupplierId || undefined);
+      setStep(4);
+      return;
+    }
+
     if (!selectedSupplierId || !columnMapping.article_code) return;
     
     if (importMode === 'price_groups') {
@@ -615,10 +626,7 @@ export default function ProductImport() {
         categoryId: selectedCategoryId || undefined,
       });
     } else {
-      // Only import valid products (with article_code)
       const validProducts = mappedProducts.filter(p => p.article_code && p.article_code.trim() !== '');
-      
-      // Deduplicate - keep last occurrence of each article code
       const deduplicatedMap = new Map<string, typeof validProducts[0]>();
       validProducts.forEach(p => {
         deduplicatedMap.set(p.article_code.trim().toUpperCase(), p);
@@ -641,6 +649,9 @@ export default function ProductImport() {
     setFileName('');
     setParseError('');
     setImportMode('standard');
+    setJsonMode(false);
+    setJsonPayloads([]);
+    resetProgress();
     setSelectedSupplierId('');
     setSelectedCategoryId('');
     setColumnMapping({
@@ -665,7 +676,7 @@ export default function ProductImport() {
     }
   };
 
-  const currentIsImporting = importMode === 'price_groups' ? isImportingPriceGroups : isImporting;
+  const currentIsImporting = jsonMode ? isJsonImporting : (importMode === 'price_groups' ? isImportingPriceGroups : isImporting);
   const currentResult = importMode === 'price_groups' ? priceGroupResult : importResult;
   const currentValidation = importMode === 'price_groups' ? priceGroupValidation : validation;
 
@@ -702,7 +713,7 @@ export default function ProductImport() {
           <Card>
             <CardHeader>
               <CardTitle>Stap 1: Bestand selecteren</CardTitle>
-              <CardDescription>Upload een CSV of Excel prijslijst</CardDescription>
+              <CardDescription>Upload een CSV, Excel prijslijst of JSON importbestand</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* File Upload Zone */}
@@ -715,7 +726,8 @@ export default function ProductImport() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv,.xlsx,.xls,.json"
+                  multiple
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -746,7 +758,9 @@ export default function ProductImport() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <FileSpreadsheet className="h-4 w-4" />
-                      <span>CSV, XLSX of XLS</span>
+                      <span>CSV, XLSX, XLS</span>
+                      <FileJson className="h-4 w-4 ml-2" />
+                      <span>JSON (Stosa import)</span>
                     </div>
                   </div>
                 )}
@@ -770,7 +784,144 @@ export default function ProductImport() {
         )}
 
         {/* Step 2: Supplier, Mode & Category Selection */}
-        {step === 2 && (
+        {step === 2 && jsonMode && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileJson className="h-5 w-5" />
+                Stap 2: JSON Import
+              </CardTitle>
+              <CardDescription>
+                {jsonPayloads.length} bestand{jsonPayloads.length !== 1 ? 'en' : ''} geselecteerd
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* JSON Stats */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Producten</span>
+                  </div>
+                  <div className="text-2xl font-bold">{jsonPayloads.reduce((s, p) => s + p.stats.products, 0).toLocaleString()}</div>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground mb-1">Prijsgroepen</div>
+                  <div className="text-2xl font-bold">{jsonPayloads.reduce((s, p) => s + p.stats.ranges, 0)}</div>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground mb-1">Prijzen</div>
+                  <div className="text-2xl font-bold">{jsonPayloads.reduce((s, p) => s + p.stats.prices, 0).toLocaleString()}</div>
+                </div>
+              </div>
+
+              {/* File list */}
+              {jsonPayloads.length > 1 && (
+                <div>
+                  <h4 className="font-medium mb-2">Bestanden ({jsonPayloads.length})</h4>
+                  <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Bestand</TableHead>
+                          <TableHead className="text-right">Producten</TableHead>
+                          <TableHead className="text-right">Prijzen</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {jsonPayloads.map((p, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono text-sm">{p.fileName}</TableCell>
+                            <TableCell className="text-right">{p.stats.products}</TableCell>
+                            <TableCell className="text-right">{p.stats.prices.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {/* Supplier override */}
+              <div className="space-y-2">
+                <Label>Leverancier {selectedSupplierId ? '' : '(optioneel - standaard uit JSON)'}</Label>
+                <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Leverancier uit JSON gebruiken" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.id}>
+                        {supplier.name} ({supplier.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={resetImport}>Terug</Button>
+                <Button onClick={handleImport} disabled={isJsonImporting}>
+                  {isJsonImporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Importeren...
+                    </>
+                  ) : (
+                    `Importeer ${jsonPayloads.length} chunk${jsonPayloads.length !== 1 ? 's' : ''}`
+                  )}
+                </Button>
+              </div>
+
+              {/* Bulk progress */}
+              {bulkProgress && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Chunk {bulkProgress.current} van {bulkProgress.total}</span>
+                    <span>{Math.round((bulkProgress.current / bulkProgress.total) * 100)}%</span>
+                  </div>
+                  <Progress value={(bulkProgress.current / bulkProgress.total) * 100} />
+                  
+                  {bulkProgress.results.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Bestand</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Resultaat</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bulkProgress.results.map((r, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono text-sm">{r.fileName}</TableCell>
+                              <TableCell>
+                                {r.success ? (
+                                  <Badge variant="default">OK</Badge>
+                                ) : (
+                                  <Badge variant="destructive">Fout</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {r.success 
+                                  ? `${(r.products_inserted || 0) + (r.products_updated || 0)} prod, ${(r.prices_inserted || 0).toLocaleString()} prijzen`
+                                  : r.error
+                                }
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 2 && !jsonMode && (
           <Card>
             <CardHeader>
               <CardTitle>Stap 2: Import instellingen</CardTitle>
@@ -1254,11 +1405,92 @@ export default function ProductImport() {
         )}
 
         {/* Step 4: Results */}
-        {step === 4 && currentResult && (
+        {step === 4 && jsonMode && bulkProgress && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Check className="h-6 w-6 text-green-500" />
+                <Check className="h-6 w-6 text-primary" />
+                JSON Import voltooid
+              </CardTitle>
+              <CardDescription>
+                {bulkProgress.results.filter(r => r.success).length}/{bulkProgress.total} chunks succesvol
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-3xl font-bold text-primary">
+                    {bulkProgress.results.reduce((s, r) => s + (r.products_inserted || 0), 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Nieuwe producten</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-3xl font-bold text-primary">
+                    {bulkProgress.results.reduce((s, r) => s + (r.products_updated || 0), 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Bijgewerkt</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-3xl font-bold text-primary">
+                    {bulkProgress.results.reduce((s, r) => s + (r.ranges_created || 0), 0)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Prijsgroepen</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-3xl font-bold">
+                    {bulkProgress.results.reduce((s, r) => s + (r.prices_inserted || 0), 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Prijzen</div>
+                </div>
+              </div>
+
+              {/* Per-chunk results */}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bestand</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Producten</TableHead>
+                      <TableHead className="text-right">Prijzen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkProgress.results.map((r, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-mono text-sm">{r.fileName}</TableCell>
+                        <TableCell>
+                          {r.success ? (
+                            <Badge variant="default">OK</Badge>
+                          ) : (
+                            <Badge variant="destructive" title={r.error}>Fout</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.success ? `${(r.products_inserted || 0) + (r.products_updated || 0)}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.success ? (r.prices_inserted || 0).toLocaleString() : r.error}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex justify-center gap-4 pt-4">
+                <Button variant="outline" onClick={resetImport}>Nieuwe import</Button>
+                <Button onClick={() => navigate('/products')}>Bekijk producten</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 4 && !jsonMode && currentResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Check className="h-6 w-6 text-primary" />
                 Import voltooid
               </CardTitle>
             </CardHeader>
@@ -1266,15 +1498,15 @@ export default function ProductImport() {
               {importMode === 'price_groups' && priceGroupResult ? (
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="text-center p-4 bg-muted rounded-lg">
-                    <div className="text-3xl font-bold text-green-600">{priceGroupResult.products_inserted}</div>
+                    <div className="text-3xl font-bold text-primary">{priceGroupResult.products_inserted}</div>
                     <div className="text-sm text-muted-foreground">Nieuwe producten</div>
                   </div>
                   <div className="text-center p-4 bg-muted rounded-lg">
-                    <div className="text-3xl font-bold text-blue-600">{priceGroupResult.products_updated}</div>
+                    <div className="text-3xl font-bold text-primary">{priceGroupResult.products_updated}</div>
                     <div className="text-sm text-muted-foreground">Bijgewerkt</div>
                   </div>
                   <div className="text-center p-4 bg-muted rounded-lg">
-                    <div className="text-3xl font-bold text-purple-600">{priceGroupResult.ranges_created}</div>
+                    <div className="text-3xl font-bold text-primary">{priceGroupResult.ranges_created}</div>
                     <div className="text-sm text-muted-foreground">Prijsgroepen</div>
                   </div>
                   <div className="text-center p-4 bg-muted rounded-lg">
@@ -1285,11 +1517,11 @@ export default function ProductImport() {
               ) : importResult && (
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="text-center p-4 bg-muted rounded-lg">
-                    <div className="text-3xl font-bold text-green-600">{importResult.inserted}</div>
+                    <div className="text-3xl font-bold text-primary">{importResult.inserted}</div>
                     <div className="text-sm text-muted-foreground">Nieuwe producten</div>
                   </div>
                   <div className="text-center p-4 bg-muted rounded-lg">
-                    <div className="text-3xl font-bold text-blue-600">{importResult.updated}</div>
+                    <div className="text-3xl font-bold text-primary">{importResult.updated}</div>
                     <div className="text-sm text-muted-foreground">Bijgewerkt</div>
                   </div>
                   <div className="text-center p-4 bg-muted rounded-lg">
@@ -1339,12 +1571,8 @@ export default function ProductImport() {
               )}
 
               <div className="flex justify-center gap-4 pt-4">
-                <Button variant="outline" onClick={resetImport}>
-                  Nieuwe import
-                </Button>
-                <Button onClick={() => navigate('/products')}>
-                  Bekijk producten
-                </Button>
+                <Button variant="outline" onClick={resetImport}>Nieuwe import</Button>
+                <Button onClick={() => navigate('/products')}>Bekijk producten</Button>
               </div>
             </CardContent>
           </Card>
