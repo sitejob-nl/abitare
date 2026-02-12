@@ -23,9 +23,14 @@ export function useDuplicateQuote() {
       if (fetchError) throw fetchError;
       if (!original) throw new Error("Quote not found");
 
-      // 2. Create the new quote (without id, quote_number - auto-generated)
+      // 2. Create the new quote as a revision (with parent_quote_id and incremented revision_number)
       const originalRef = original.reference;
-      const newReference = originalRef ? `${originalRef} (kopie)` : null;
+      const parentId = (original as any).parent_quote_id || original.id;
+      const currentRevision = (original as any).revision_number || 1;
+      const newRevision = currentRevision + 1;
+      const newReference = originalRef 
+        ? originalRef.replace(/ \(rev \d+\)$/, '') + ` (rev ${newRevision})`
+        : null;
 
       const { data: newQuote, error: quoteError } = await supabase
         .from("quotes")
@@ -37,7 +42,7 @@ export function useDuplicateQuote() {
           valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
           introduction_text: original.introduction_text,
           closing_text: original.closing_text,
-          internal_notes: original.internal_notes ? `[Kopie van #${original.quote_number}] ${original.internal_notes}` : `Kopie van offerte #${original.quote_number}`,
+          internal_notes: original.internal_notes ? `[Revisie ${newRevision} van #${original.quote_number}] ${original.internal_notes}` : `Revisie ${newRevision} van offerte #${original.quote_number}`,
           payment_condition: original.payment_condition,
           payment_terms_description: original.payment_terms_description,
           discount_amount: original.discount_amount,
@@ -58,7 +63,10 @@ export function useDuplicateQuote() {
           default_supplier_id: original.default_supplier_id || null,
           default_price_group_id: original.default_price_group_id || null,
           default_corpus_color_id: original.default_corpus_color_id || null,
-        })
+          // Revision tracking
+          parent_quote_id: parentId,
+          revision_number: newRevision,
+        } as any)
         .select()
         .single();
 

@@ -1625,6 +1625,7 @@ export type Database = {
           supplier_id: string | null
           unit: string | null
           updated_at: string | null
+          user_override: Json | null
           vat_rate: number | null
           width_mm: number | null
         }
@@ -1650,6 +1651,7 @@ export type Database = {
           supplier_id?: string | null
           unit?: string | null
           updated_at?: string | null
+          user_override?: Json | null
           vat_rate?: number | null
           width_mm?: number | null
         }
@@ -1675,6 +1677,7 @@ export type Database = {
           supplier_id?: string | null
           unit?: string | null
           updated_at?: string | null
+          user_override?: Json | null
           vat_rate?: number | null
           width_mm?: number | null
         }
@@ -1995,6 +1998,7 @@ export type Database = {
           id: string
           internal_notes: string | null
           introduction_text: string | null
+          parent_quote_id: string | null
           payment_condition: string | null
           payment_terms_description: string | null
           quote_date: string | null
@@ -2002,6 +2006,7 @@ export type Database = {
           reference: string | null
           requires_kooiaap: boolean | null
           requires_transport: boolean | null
+          revision_number: number
           salesperson_id: string | null
           sent_at: string | null
           status: Database["public"]["Enums"]["quote_status"] | null
@@ -2033,6 +2038,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           introduction_text?: string | null
+          parent_quote_id?: string | null
           payment_condition?: string | null
           payment_terms_description?: string | null
           quote_date?: string | null
@@ -2040,6 +2046,7 @@ export type Database = {
           reference?: string | null
           requires_kooiaap?: boolean | null
           requires_transport?: boolean | null
+          revision_number?: number
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
@@ -2071,6 +2078,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           introduction_text?: string | null
+          parent_quote_id?: string | null
           payment_condition?: string | null
           payment_terms_description?: string | null
           quote_date?: string | null
@@ -2078,6 +2086,7 @@ export type Database = {
           reference?: string | null
           requires_kooiaap?: boolean | null
           requires_transport?: boolean | null
+          revision_number?: number
           salesperson_id?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
@@ -2138,6 +2147,13 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_parent_quote_id_fkey"
+            columns: ["parent_quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
             referencedColumns: ["id"]
           },
         ]
