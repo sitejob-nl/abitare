@@ -13,6 +13,7 @@ import { useProductImport, usePriceGroupImport, parsePrice } from '@/hooks/usePr
 import { useJsonImport, type JsonPayload } from '@/hooks/useJsonImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
+import { ImportHistory } from '@/components/import/ImportHistory';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -693,6 +694,9 @@ export default function ProductImport() {
             <p className="text-muted-foreground">Importeer producten vanuit prijslijsten</p>
           </div>
         </div>
+
+        {/* Import History */}
+        <ImportHistory />
 
         {/* Step indicator */}
         <div className="flex items-center gap-2">

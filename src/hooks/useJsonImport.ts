@@ -83,10 +83,11 @@ export function useJsonImport() {
       setBulkProgress(prev => prev ? { ...prev, current: i + 1 } : null);
 
       try {
-        const body = { ...payload.data };
+        const body: Record<string, unknown> = { ...payload.data };
         if (overrideSupplierId) {
           body.supplier_id = overrideSupplierId;
         }
+        body.file_name = payload.fileName;
 
         const response = await fetch(
           `https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/import-products`,
