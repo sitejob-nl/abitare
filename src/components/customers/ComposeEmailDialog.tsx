@@ -23,6 +23,8 @@ import { useCustomerQuotes, CustomerQuote } from "@/hooks/useCustomerQuotes";
 import { useQuoteSections, QuoteSection } from "@/hooks/useQuoteSections";
 import { useQuoteLines, QuoteLine } from "@/hooks/useQuoteLines";
 import { generateQuotePdfBase64 } from "@/lib/generateQuotePdfBase64";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface EmailAttachment {
@@ -39,6 +41,8 @@ interface ComposeEmailDialogProps {
   customerName: string;
   replyToId?: string;
   initialSubject?: string;
+  orderId?: string | null;
+  ticketId?: string | null;
 }
 
 export function ComposeEmailDialog({
@@ -49,6 +53,8 @@ export function ComposeEmailDialog({
   customerName,
   replyToId,
   initialSubject = "",
+  orderId,
+  ticketId,
 }: ComposeEmailDialogProps) {
   const [to, setTo] = useState(customerEmail);
   const [subject, setSubject] = useState(initialSubject);
@@ -59,6 +65,26 @@ export function ComposeEmailDialog({
 
   const { mutate: sendEmail, isPending: isSending } = useSendEmailWithAttachments();
   const { data: quotes } = useCustomerQuotes(customerId);
+  const { user, activeDivisionId } = useAuth();
+
+  const logCommunication = async (sentSubject: string, sentBody: string) => {
+    try {
+      await supabase.from("communication_log").insert({
+        type: "email" as const,
+        direction: "outbound" as const,
+        subject: sentSubject,
+        body_preview: sentBody.substring(0, 500),
+        customer_id: customerId,
+        order_id: orderId || null,
+        ticket_id: ticketId || null,
+        division_id: activeDivisionId || null,
+        sent_by: user?.id || null,
+        sent_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Failed to log communication:", err);
+    }
+  };
 
   const handleSend = () => {
     if (!to || !subject || !body) {
@@ -76,6 +102,7 @@ export function ComposeEmailDialog({
       },
       {
         onSuccess: () => {
+          logCommunication(subject, body);
           onOpenChange(false);
           setSubject("");
           setBody("");

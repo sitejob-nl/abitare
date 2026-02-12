@@ -50,6 +50,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ComposeEmailDialog } from "@/components/customers/ComposeEmailDialog";
 import { useServiceTicket } from "@/hooks/useServiceTicket";
 import {
   useUpdateTicketStatus,
@@ -108,6 +109,7 @@ export default function ServiceTicketDetail() {
   const [isAddingAssignee, setIsAddingAssignee] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [showExternalEmail, setShowExternalEmail] = useState(false);
 
   if (isLoading) {
     return (
@@ -313,10 +315,22 @@ export default function ServiceTicketDetail() {
             {/* Notes */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Notities ({notes.length})
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Notities ({notes.length})
+                  </CardTitle>
+                  {ticket.submitter_email && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowExternalEmail(true)}
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Extern bericht
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {notes.length > 0 && (
@@ -706,6 +720,18 @@ export default function ServiceTicketDetail() {
           </div>
         </div>
       </div>
+
+      {ticket.submitter_email && (
+        <ComposeEmailDialog
+          open={showExternalEmail}
+          onOpenChange={setShowExternalEmail}
+          customerEmail={ticket.submitter_email}
+          customerId={ticket.customer_id || ""}
+          customerName={ticket.submitter_name || "Klant"}
+          ticketId={ticket.id}
+          initialSubject={`Re: ${ticket.subject}`}
+        />
+      )}
     </AppLayout>
   );
 }
