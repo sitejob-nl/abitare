@@ -188,8 +188,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    const body: ImportRequest = await req.json()
-    const { supplier_id, category_id, import_mode = 'standard' } = body
+    const body: ImportRequest & { file_name?: string } = await req.json()
+    const { supplier_id, category_id, import_mode = 'standard', file_name } = body
 
     if (!supplier_id) {
       return new Response(
@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     }
 
     if (import_mode === 'price_groups' && body.price_group_data) {
-      return handlePriceGroupImport(supabase, supplier_id, category_id, body.price_group_data)
+      return handlePriceGroupImport(supabase, supplier_id, category_id, body.price_group_data, user.id, file_name)
     }
 
     // ============================================================
@@ -255,6 +255,26 @@ Deno.serve(async (req) => {
     inserted = newProducts.length
     updated = existingProducts.length
 
+    // Log to import_logs
+    try {
+      const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: user.id })
+      await supabase.from('import_logs').insert({
+        supplier_id,
+        division_id: divisionRow || null,
+        source: 'excel',
+        file_name: file_name || null,
+        total_rows: inserted + updated,
+        inserted,
+        updated,
+        skipped: 0,
+        errors: errors.length,
+        error_details: errors.length > 0 ? errors : null,
+        imported_by: user.id,
+      })
+    } catch (logErr) {
+      console.error('[import] Failed to write import_log:', logErr)
+    }
+
     return new Response(
       JSON.stringify({ success: true, inserted, updated, total: inserted + updated, errors: errors.length > 0 ? errors : undefined }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -277,7 +297,9 @@ async function handlePriceGroupImport(
   supabase: any,
   supplierId: string,
   categoryId: string | undefined,
-  data: { products: PriceGroupProduct[], ranges: PriceGroupRange[], prices: PriceGroupPrice[] }
+  data: { products: PriceGroupProduct[], ranges: PriceGroupRange[], prices: PriceGroupPrice[] },
+  userId: string,
+  fileName?: string,
 ) {
   const errors: string[] = []
   const stats = {
@@ -533,6 +555,26 @@ async function handlePriceGroupImport(
     }
 
     console.log(`[import] Complete:`, JSON.stringify(stats))
+
+    // Log to import_logs
+    try {
+      const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: userId })
+      await supabase.from('import_logs').insert({
+        supplier_id: supplierId,
+        division_id: divisionRow || null,
+        source: 'json',
+        file_name: fileName || null,
+        total_rows: stats.products_inserted + stats.products_updated,
+        inserted: stats.products_inserted,
+        updated: stats.products_updated,
+        skipped: 0,
+        errors: errors.length,
+        error_details: errors.length > 0 ? errors : null,
+        imported_by: userId,
+      })
+    } catch (logErr) {
+      console.error('[import] Failed to write import_log:', logErr)
+    }
 
     return new Response(
       JSON.stringify({
