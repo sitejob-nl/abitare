@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      communication_log: {
+        Row: {
+          body_preview: string | null
+          created_at: string
+          customer_id: string | null
+          direction: Database["public"]["Enums"]["communication_direction"]
+          division_id: string | null
+          external_message_id: string | null
+          id: string
+          metadata: Json | null
+          order_id: string | null
+          sent_at: string
+          sent_by: string | null
+          subject: string | null
+          ticket_id: string | null
+          type: Database["public"]["Enums"]["communication_type"]
+        }
+        Insert: {
+          body_preview?: string | null
+          created_at?: string
+          customer_id?: string | null
+          direction?: Database["public"]["Enums"]["communication_direction"]
+          division_id?: string | null
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          subject?: string | null
+          ticket_id?: string | null
+          type?: Database["public"]["Enums"]["communication_type"]
+        }
+        Update: {
+          body_preview?: string | null
+          created_at?: string
+          customer_id?: string | null
+          direction?: Database["public"]["Enums"]["communication_direction"]
+          division_id?: string | null
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          subject?: string | null
+          ticket_id?: string | null
+          type?: Database["public"]["Enums"]["communication_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_log_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_log_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_log_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_planning_preferences: {
         Row: {
           created_at: string
@@ -407,6 +494,69 @@ export type Database = {
             columns: ["connection_id"]
             isOneToOne: false
             referencedRelation: "exact_online_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_logs: {
+        Row: {
+          created_at: string
+          division_id: string | null
+          error_details: Json | null
+          errors: number | null
+          file_name: string | null
+          id: string
+          imported_by: string | null
+          inserted: number | null
+          skipped: number | null
+          source: string
+          supplier_id: string | null
+          total_rows: number | null
+          updated: number | null
+        }
+        Insert: {
+          created_at?: string
+          division_id?: string | null
+          error_details?: Json | null
+          errors?: number | null
+          file_name?: string | null
+          id?: string
+          imported_by?: string | null
+          inserted?: number | null
+          skipped?: number | null
+          source?: string
+          supplier_id?: string | null
+          total_rows?: number | null
+          updated?: number | null
+        }
+        Update: {
+          created_at?: string
+          division_id?: string | null
+          error_details?: Json | null
+          errors?: number | null
+          file_name?: string | null
+          id?: string
+          imported_by?: string | null
+          inserted?: number | null
+          skipped?: number | null
+          source?: string
+          supplier_id?: string | null
+          total_rows?: number | null
+          updated?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_logs_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_logs_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -916,6 +1066,8 @@ export type Database = {
           id: string
           notes: string | null
           order_id: string | null
+          overridden_by: string | null
+          override_reason: string | null
           to_status: Database["public"]["Enums"]["order_status"]
         }
         Insert: {
@@ -925,6 +1077,8 @@ export type Database = {
           id?: string
           notes?: string | null
           order_id?: string | null
+          overridden_by?: string | null
+          override_reason?: string | null
           to_status: Database["public"]["Enums"]["order_status"]
         }
         Update: {
@@ -934,6 +1088,8 @@ export type Database = {
           id?: string
           notes?: string | null
           order_id?: string | null
+          overridden_by?: string | null
+          override_reason?: string | null
           to_status?: Database["public"]["Enums"]["order_status"]
         }
         Relationships: [
@@ -3370,6 +3526,8 @@ export type Database = {
         | "monteur"
         | "werkvoorbereiding"
         | "administratie"
+      communication_direction: "inbound" | "outbound"
+      communication_type: "email" | "whatsapp" | "note"
       customer_type: "particulier" | "zakelijk"
       order_status:
         | "nieuw"
@@ -3539,6 +3697,8 @@ export const Constants = {
         "werkvoorbereiding",
         "administratie",
       ],
+      communication_direction: ["inbound", "outbound"],
+      communication_type: ["email", "whatsapp", "note"],
       customer_type: ["particulier", "zakelijk"],
       order_status: [
         "nieuw",
