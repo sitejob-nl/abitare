@@ -1,79 +1,111 @@
 
-# Stosa Product & Offerte Fix Plan
 
-Dit plan implementeert alle fixes uit het Abitare_Stosa_Fix_Plan_v3 document: database schema uitbreidingen, verbeterde Edge Function (safe upsert + price_group_id), kleuren-hooks, en de volledige keukenconfiguratie cascade in de offerte-wizard.
+# Stosa Volledige Import: Edge Function v2-2 + LOOK/FRAME/Classic Glamour
+
+## Overzicht
+Dit plan brengt de Edge Function up-to-date met de complete variant mapping en voegt de ontbrekende collecties (LOOK, Classic Glamour, FRAME) toe aan de database, zodat alle JSON import-bestanden correct verwerkt kunnen worden.
 
 ---
 
-## Stap 1: Database Migratie (schema uitbreidingen)
+## Stap 1: Edge Function updaten naar v2-2
 
-Eenmalige migratie met alle ALTER TABLE statements uit `migration_stosa_fixes.sql`:
+De huidige `import-products/index.ts` heeft een onvolledige en deels foutieve variant mapping. De v2-2 versie bevat:
 
-- **price_groups**: `material_type`, `material_description`, `thickness_mm`, `has_gola_system` + unique index op `(supplier_id, code)`
-- **price_group_colors**: `supplier_id` (FK), `color_type` (front/corpus/plinth), `hex_color`, `sort_order` + indexen
-- **product_prices**: `price_group_id` (FK naar price_groups) + index op `(product_id, price_group_id)`
-- **product_ranges**: index op `(supplier_id, collection)`
-- **products**: unique index `products_supplier_article_unique` (voor upsert)
-- **quote_sections**: extra velden als die nog niet bestaan (front_number, countertop_height_mm, countertop_thickness_mm, workbench_material, workbench_edge, workbench_color)
-- **Backfill**: bestaande product_prices koppelen aan price_groups via range mapping
-- **Views**: `v_product_prices_full` en `v_price_group_colors` voor snelle lookups
-- **Functions**: `get_product_price()` en `calc_selling_price()` helper functies
+- **169 variant codes** (huidig: ~13)
+- Correcte LOOK mapping: 401 -> L1, 402 -> L2, ... 412 -> L12 (was foutief E1-E10)
+- Classic Glamour: 461 -> CG1, ... 467 -> CG7 + glasvarianten
+- ART: A01 -> ART1, ... A05 -> ART5
+- FRAME: 334/335 -> FRAME
+- Alle combo-codes (8xx Evolution, 5xx LOOK, A5x ART)
+- Verbeterde `getCollectionForVariant()` en `getCollectionForPriceGroup()` met regex-detectie
 
-## Stap 2: Seed Data (Stosa prijsgroepen + kleuren)
+## Stap 2: Ontbrekende price_groups seeden
 
-Via data-insert (niet migratie):
-- Evolution prijsgroepen E1-E10 + A, B, C met materiaalmetadata
-- ART prijsgroepen I-V
-- Frontkleuren per prijsgroep (E1, E2, E4, E7 als startset)
-- Universele korpuskleuren per collectie (evolution + art)
-- Zet Stosa supplier `has_price_groups = true` en `price_system = 'points'`
+Nieuwe prijsgroepen toevoegen voor:
 
-## Stap 3: Edge Function `import-products` v2
+**LOOK collectie (14 groepen)**:
+- L1 t/m L12 (solid door)
+- LA, LB, LC (glass door)
+- LDECOR, LNATURAL, LRIBBED, LSLIM (special glass)
 
-Vervang de huidige Edge Function met de verbeterde versie:
-- **Safe upsert** voor prijzen (geen DELETE ALL meer): bepaal per prijs of het insert of update is
-- **price_group_id** automatisch gezet op product_prices via `VARIANT_TO_PRICE_GROUP` mapping
-- **Collectie detectie** dynamisch (evolution/art) i.p.v. hardcoded 'evolution'
-- **Ranges upsert**: update bestaande + insert nieuwe (niet alleen insert)
-- **Betere error handling**: bij fout blijven bestaande data intact, partial stats terug
-- **collection** veld op PriceGroupRange interface voor correcte toewijzing
+**Classic Glamour collectie (7 groepen)**:
+- CG1 t/m CG7
 
-## Stap 4: React Hook `usePriceGroupColors` vervangen
+**FRAME collectie (1 groep)**:
+- FRAME
 
-Vervang de huidige hook met de nieuwe versie die:
-- `colorType` parameter accepteert (front/corpus/plinth) voor gefilterde queries
-- Sorteert op `sort_order` i.p.v. `color_name`
-- Nieuwe export `useSupplierColors()` voor universele kleuren per leverancier (bijv. korpuskleuren), met deduplicatie op `color_code + color_type`
-- CRUD mutations verwijderd (niet nodig voor deze flow, data komt uit seed/admin)
+**Overige**:
+- NATURAL, RIBBED, SLIM (Evolution special glass -- ontbreken mogelijk)
+- EQ (special/equipment)
 
-## Stap 5: `AddSectionDialog` vervangen met v2
+## Stap 3: JSON importbestanden klaarzetten
 
-De huidige dialoog wordt vervangen met de volledige keukenconfiguratie cascade:
-- **Collectie filter**: dropdown om Evolution vs ART te filteren
-- **Prijsgroep met materiaalinfo**: toont `material_type` in de selectie
-- **Frontkleur**: dropdown gevuld uit `usePriceGroupColors(priceGroupId, 'front')`
-- **Korpuskleur**: dropdown gevuld uit `useSupplierColors(supplierId, 'corpus')`
-- **Plintkleur, greepnummer, kolomhoogte**: invoervelden
-- **Automatische titel**: combineert prijsgroep code + naam + frontkleur
-- **Cascade resets**: bij wijziging leverancier/collectie/prijsgroep worden onderliggende velden gereset
-- Alle keukenconfiguratie velden worden opgeslagen op `quote_sections` (front_color, corpus_color, plinth_color, hinge_color, handle_number, column_height_mm)
+De geüploade JSON bestanden (LOOK 001-007 + FRAME 001) zijn kant-en-klaar voor de Edge Function. Ze bevatten:
+- `supplier_id: "STOSA_SUPPLIER_UUID"` -- dit moet vervangen worden door de werkelijke Stosa supplier UUID
+- `import_mode: "price_groups"`
+- Producten met article_code, catalog_code, afmetingen, discount_group
+- Ranges met variant codes
+- Prijzen per product per variant
+
+Na deployment van de Edge Function kunnen deze bestanden direct verstuurd worden via de ProductImport pagina of via curl.
+
+## Stap 4: Import-pagina uitbreiden (optioneel)
+
+Een "Bulk JSON Import" functie toevoegen aan de ProductImport pagina zodat de gebruiker:
+1. Meerdere JSON bestanden kan selecteren
+2. Ze sequentieel (met pauze) naar de Edge Function stuurt
+3. Voortgang ziet per chunk
 
 ---
 
 ## Technische details
 
-### Nieuwe/gewijzigde bestanden
+### Edge Function wijzigingen
+Het bestand `supabase/functions/import-products/index.ts` wordt volledig vervangen door de v2-2 versie. Belangrijkste verbeteringen:
+
+| Onderdeel | Huidig | v2-2 |
+|---|---|---|
+| Variant mapping | 13 codes (alleen Evolution) | 169 codes (alle collecties) |
+| LOOK mapping | 401-410 -> E1-E10 (FOUT) | 401-412 -> L1-L12 (correct) |
+| Collection detectie | Hardcoded lijst | Regex-based + fallback |
+| Classic Glamour | Niet ondersteund | CG1-CG7 + glasvarianten |
+| FRAME | Niet ondersteund | 334/335 -> FRAME |
+| Combo's | Niet ondersteund | 80+ combo codes |
+
+### Database migratie (seed data)
+
+```text
+INSERT INTO price_groups (supplier_id, code, name, collection, sort_order)
+VALUES
+  -- LOOK L1-L12
+  (stosa_id, 'L1', 'Look Prijsgroep 1', 'look', 1),
+  ... (L2-L12)
+  (stosa_id, 'LA', 'Look Glas A', 'look', 13),
+  (stosa_id, 'LB', 'Look Glas B', 'look', 14),
+  (stosa_id, 'LC', 'Look Glas C', 'look', 15),
+  -- CLASSIC GLAMOUR CG1-CG7
+  (stosa_id, 'CG1', 'Classic Glamour 1', 'classic_glamour', 1),
+  ... (CG2-CG7)
+  -- FRAME
+  (stosa_id, 'FRAME', 'Frame', 'frame', 1),
+  -- Evolution special glass
+  (stosa_id, 'NATURAL', 'Natural Glass', 'evolution', 14),
+  (stosa_id, 'RIBBED', 'Ribbed Glass', 'evolution', 15),
+  (stosa_id, 'SLIM', 'Slim Glass', 'evolution', 16);
+```
+
+### Bestanden die worden gewijzigd/aangemaakt
 
 | Bestand | Actie |
 |---|---|
-| `supabase/migrations/..._stosa_fixes.sql` | Nieuw: schema migratie |
-| `supabase/functions/import-products/index.ts` | Vervangen: v2 met safe upsert |
-| `src/hooks/usePriceGroupColors.ts` | Vervangen: met colorType filter + useSupplierColors |
-| `src/components/quotes/AddSectionDialog.tsx` | Vervangen: v2 met keukenconfiguratie cascade |
+| `supabase/functions/import-products/index.ts` | Vervangen door v2-2 (complete variant mapping) |
+| `supabase/migrations/..._stosa_look_cg_frame.sql` | Nieuw: seed LOOK/CG/FRAME price_groups |
+| `src/components/quotes/AddSectionDialog.tsx` | Kleine fix: collectie-dropdown uitbreiden met 'look', 'classic_glamour', 'frame' opties |
 
 ### Uitvoervolgorde
-1. Migratie draaien (schema)
-2. Seed data invoegen (prijsgroepen + kleuren)
-3. Edge Function deployen
-4. React hooks + component updaten
-5. Na deployment: Stosa herimport draaien om price_group_id te vullen op bestaande prijzen
+1. Database migratie draaien (LOOK/CG/FRAME prijsgroepen)
+2. Edge Function deployen (v2-2)
+3. AddSectionDialog collectie-opties uitbreiden
+4. JSON import bestanden versturen (handmatig of via UI) met correcte supplier UUID
+5. Resterende LOOK chunks (008-010) later importeren wanneer beschikbaar
+
