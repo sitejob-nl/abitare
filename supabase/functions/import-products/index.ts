@@ -369,7 +369,16 @@ async function handlePriceGroupImport(
       }
     }
 
-    // STEP 1b: Build price_group lookup (code → id)
+    // STEP 1b: Auto-create price_groups from variant mapping
+    // Collect all unique price group codes needed
+    const neededPgCodes = new Set<string>()
+    for (const range of data.ranges) {
+      const pgCode = VARIANT_TO_PRICE_GROUP[range.code]
+      if (pgCode) neededPgCodes.add(pgCode)
+    }
+    console.log(`[import] Need ${neededPgCodes.size} unique price groups`)
+
+    // Fetch existing price groups
     const { data: existingPriceGroups } = await supabase
       .from('price_groups')
       .select('id, code')
@@ -378,7 +387,41 @@ async function handlePriceGroupImport(
     const priceGroupMap = new Map<string, string>(
       (existingPriceGroups || []).map((pg: any) => [pg.code, pg.id])
     )
-    console.log(`[import] Found ${priceGroupMap.size} price groups for supplier`)
+
+    // Create missing price groups
+    for (const pgCode of neededPgCodes) {
+      if (!priceGroupMap.has(pgCode)) {
+        const collection = getCollectionForPriceGroup(pgCode)
+        const isGlass = ['A','B','C','LA','LB','LC','NATURAL','RIBBED','SLIM','LDECOR','LNATURAL','LRIBBED','LSLIM'].includes(pgCode)
+        const isCombo = pgCode.startsWith('COMBO_')
+        
+        let name = pgCode
+        if (isGlass) name = `Glas ${pgCode}`
+        else if (isCombo) name = `Combi ${pgCode.replace('COMBO_', '')}`
+        else name = `Prijsgroep ${pgCode}`
+
+        const { data: inserted, error: pgError } = await supabase
+          .from('price_groups')
+          .insert({
+            code: pgCode,
+            name,
+            supplier_id: supplierId,
+            collection,
+            is_glass: isGlass,
+            sort_order: 0,
+          })
+          .select('id, code')
+          .single()
+
+        if (pgError) {
+          console.error(`[import] Failed to create price group ${pgCode}:`, pgError.message)
+        } else if (inserted) {
+          priceGroupMap.set(inserted.code, inserted.id)
+          console.log(`[import] Created price group: ${pgCode} (${collection})`)
+        }
+      }
+    }
+    console.log(`[import] Total price groups available: ${priceGroupMap.size}`)
 
     // STEP 2: Upsert products
     console.log(`[import] Processing ${data.products.length} products...`)
