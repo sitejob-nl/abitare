@@ -1347,32 +1347,44 @@ export type Database = {
         Row: {
           color_code: string
           color_name: string
+          color_type: string | null
           created_at: string | null
           finish: string | null
+          hex_color: string | null
           id: string
           is_available: boolean | null
           material_type: string | null
           price_group_id: string | null
+          sort_order: number | null
+          supplier_id: string | null
         }
         Insert: {
           color_code: string
           color_name: string
+          color_type?: string | null
           created_at?: string | null
           finish?: string | null
+          hex_color?: string | null
           id?: string
           is_available?: boolean | null
           material_type?: string | null
           price_group_id?: string | null
+          sort_order?: number | null
+          supplier_id?: string | null
         }
         Update: {
           color_code?: string
           color_name?: string
+          color_type?: string | null
           created_at?: string | null
           finish?: string | null
+          hex_color?: string | null
           id?: string
           is_available?: boolean | null
           material_type?: string | null
           price_group_id?: string | null
+          sort_order?: number | null
+          supplier_id?: string | null
         }
         Relationships: [
           {
@@ -1382,6 +1394,13 @@ export type Database = {
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "price_group_colors_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       price_groups: {
@@ -1389,31 +1408,43 @@ export type Database = {
           code: string
           collection: string | null
           created_at: string | null
+          has_gola_system: boolean | null
           id: string
           is_glass: boolean | null
+          material_description: string | null
+          material_type: string | null
           name: string
           sort_order: number | null
           supplier_id: string | null
+          thickness_mm: number | null
         }
         Insert: {
           code: string
           collection?: string | null
           created_at?: string | null
+          has_gola_system?: boolean | null
           id?: string
           is_glass?: boolean | null
+          material_description?: string | null
+          material_type?: string | null
           name: string
           sort_order?: number | null
           supplier_id?: string | null
+          thickness_mm?: number | null
         }
         Update: {
           code?: string
           collection?: string | null
           created_at?: string | null
+          has_gola_system?: boolean | null
           id?: string
           is_glass?: boolean | null
+          material_description?: string | null
+          material_type?: string | null
           name?: string
           sort_order?: number | null
           supplier_id?: string | null
+          thickness_mm?: number | null
         }
         Relationships: [
           {
@@ -1503,6 +1534,7 @@ export type Database = {
           created_at: string | null
           id: string
           price: number
+          price_group_id: string | null
           product_id: string | null
           range_id: string | null
           valid_from: string | null
@@ -1514,6 +1546,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           price: number
+          price_group_id?: string | null
           product_id?: string | null
           range_id?: string | null
           valid_from?: string | null
@@ -1525,6 +1558,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           price?: number
+          price_group_id?: string | null
           product_id?: string | null
           range_id?: string | null
           valid_from?: string | null
@@ -1533,6 +1567,13 @@ export type Database = {
           variant_2_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "product_prices_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "product_prices_product_id_fkey"
             columns: ["product_id"]
@@ -3508,11 +3549,103 @@ export type Database = {
           },
         ]
       }
+      v_price_group_colors: {
+        Row: {
+          collection: string | null
+          color_code: string | null
+          color_name: string | null
+          color_type: string | null
+          finish: string | null
+          hex_color: string | null
+          id: string | null
+          material_type: string | null
+          price_group_code: string | null
+          price_group_id: string | null
+          price_group_name: string | null
+          sort_order: number | null
+          supplier_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_group_colors_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_groups_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_product_prices_full: {
+        Row: {
+          article_code: string | null
+          collection: string | null
+          depth_mm: number | null
+          discount_group: string | null
+          height_mm: number | null
+          material_type: string | null
+          points_to_eur: number | null
+          price: number | null
+          price_factor: number | null
+          price_group_code: string | null
+          price_group_id: string | null
+          price_group_name: string | null
+          price_id: string | null
+          price_system: string | null
+          product_id: string | null
+          product_name: string | null
+          range_id: string | null
+          supplier_code: string | null
+          supplier_name: string | null
+          valid_from: string | null
+          valid_until: string | null
+          variant_2_code: string | null
+          variant_2_name: string | null
+          width_mm: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_prices_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "price_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_range_id_fkey"
+            columns: ["range_id"]
+            isOneToOne: false
+            referencedRelation: "product_ranges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      calc_selling_price: {
+        Args: { p_catalog_price: number; p_supplier_id: string }
+        Returns: number
+      }
       generate_quote_reference: {
         Args: { p_category?: string; p_customer_name: string }
         Returns: string
+      }
+      get_product_price: {
+        Args: { p_price_group_id: string; p_product_id: string }
+        Returns: number
       }
       get_user_division_id: { Args: { _user_id: string }; Returns: string }
       has_role:

@@ -17,10 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { useCreateQuoteSection, SECTION_TYPES, SectionType } from "@/hooks/useQuoteSections";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useProductRanges } from "@/hooks/useProductRanges";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
+import { usePriceGroupColors, useSupplierColors } from "@/hooks/usePriceGroupColors";
 import { toast } from "@/hooks/use-toast";
 
 interface AddSectionDialogProps {
@@ -43,36 +45,93 @@ export function AddSectionDialog({
   quoteDefaultPriceGroupId,
 }: AddSectionDialogProps) {
   const createSection = useCreateQuoteSection();
+
+  // Form state
   const [sectionType, setSectionType] = useState<SectionType>("meubelen");
   const [title, setTitle] = useState("");
-  const [supplierId, setSupplierId] = useState<string>(quoteDefaultSupplierId || "");
-  const [rangeId, setRangeId] = useState<string>(quoteDefaultRangeId || "");
+  const [supplierId, setSupplierId] = useState<string>("");
+  const [rangeId, setRangeId] = useState<string>("");
   const [priceGroupId, setPriceGroupId] = useState<string>("");
 
-  // Re-sync defaults when dialog opens
+  // Kitchen configuration state (Stosa-specific fields)
+  const [frontColor, setFrontColor] = useState<string>("");
+  const [corpusColor, setCorpusColor] = useState<string>("");
+  const [plinthColor, setPlinthColor] = useState<string>("");
+  const [hingeColor, setHingeColor] = useState<string>("");
+  const [handleNumber, setHandleNumber] = useState<string>("");
+  const [columnHeightMm, setColumnHeightMm] = useState<string>("");
+
+  // Data hooks
+  const { data: suppliers } = useSuppliers();
+  const { data: ranges } = useProductRanges(supplierId || undefined);
+
+  const selectedSupplier = suppliers?.find(s => s.id === supplierId);
+  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
+
+  const { data: priceGroups } = usePriceGroups(
+    hasPriceGroups ? supplierId : undefined
+  );
+
+  // Color hooks from price_group_colors
+  const { data: frontColors = [] } = usePriceGroupColors(
+    hasPriceGroups && priceGroupId ? priceGroupId : undefined,
+    'front'
+  );
+  const { data: corpusColors = [] } = useSupplierColors(
+    hasPriceGroups ? supplierId : undefined,
+    'corpus'
+  );
+
+  // Get distinct collections from price_groups
+  const collections = (() => {
+    const cols = new Set<string>();
+    priceGroups?.forEach(pg => { if (pg.collection) cols.add(pg.collection); });
+    return Array.from(cols).sort();
+  })();
+
+  const [selectedCollection, setSelectedCollection] = useState<string>("");
+
+  // Filter price groups by selected collection
+  const filteredPriceGroups = (() => {
+    if (!selectedCollection) return priceGroups || [];
+    return (priceGroups || []).filter(pg => pg.collection === selectedCollection);
+  })();
+
+  // Sync defaults when dialog opens
   useEffect(() => {
     if (open) {
       setSupplierId(quoteDefaultSupplierId || "");
       setRangeId(quoteDefaultRangeId || "");
       setPriceGroupId(quoteDefaultPriceGroupId || "");
+      setSelectedCollection("");
+      setFrontColor("");
+      setCorpusColor("");
+      setPlinthColor("");
+      setHingeColor("");
+      setHandleNumber("");
+      setColumnHeightMm("");
     }
   }, [open, quoteDefaultSupplierId, quoteDefaultRangeId, quoteDefaultPriceGroupId]);
 
-  const { data: suppliers } = useSuppliers();
-  const { data: ranges } = useProductRanges(supplierId || undefined);
-  
-  // Check if selected supplier has price groups
-  const selectedSupplier = suppliers?.find(s => s.id === supplierId);
-  const hasPriceGroups = selectedSupplier?.has_price_groups === true;
-  
-  const { data: priceGroups } = usePriceGroups(
-    hasPriceGroups ? supplierId : undefined
-  );
-
+  // Cascade resets
   const handleSupplierChange = (value: string) => {
     setSupplierId(value);
     setRangeId("");
     setPriceGroupId("");
+    setSelectedCollection("");
+    setFrontColor("");
+    setCorpusColor("");
+  };
+
+  const handleCollectionChange = (value: string) => {
+    setSelectedCollection(value === "all" ? "" : value);
+    setPriceGroupId("");
+    setFrontColor("");
+  };
+
+  const handlePriceGroupChange = (value: string) => {
+    setPriceGroupId(value);
+    setFrontColor("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,15 +139,21 @@ export function AddSectionDialog({
 
     const selectedRange = ranges?.find(r => r.id === rangeId);
     const selectedPriceGroup = priceGroups?.find(pg => pg.id === priceGroupId);
-    
-    // Build default title from model + price group
+
+    // Build default title
     let defaultTitle = title.trim() || null;
     if (!defaultTitle) {
       const parts: string[] = [];
-      if (selectedRange?.name) parts.push(selectedRange.name);
-      else if (selectedRange?.code) parts.push(selectedRange.code);
-      if (selectedPriceGroup) parts.push(selectedPriceGroup.code);
-      defaultTitle = parts.length > 0 ? parts.join(" - ") : null;
+      if (selectedPriceGroup) {
+        parts.push(`${selectedPriceGroup.code} - ${selectedPriceGroup.name}`);
+      } else if (selectedRange?.name) {
+        parts.push(selectedRange.name);
+      }
+      if (frontColor) {
+        const fc = frontColors.find(c => c.color_code === frontColor);
+        if (fc) parts.push(fc.color_name);
+      }
+      defaultTitle = parts.length > 0 ? parts.join(" | ") : null;
     }
 
     try {
@@ -100,6 +165,12 @@ export function AddSectionDialog({
         subtotal: 0,
         range_id: rangeId || null,
         price_group_id: priceGroupId || null,
+        front_color: frontColor || null,
+        corpus_color: corpusColor || null,
+        plinth_color: plinthColor || null,
+        hinge_color: hingeColor || null,
+        handle_number: handleNumber || null,
+        column_height_mm: columnHeightMm ? parseInt(columnHeightMm) : null,
       });
 
       toast({
@@ -107,12 +178,18 @@ export function AddSectionDialog({
         description: `De sectie "${defaultTitle || SECTION_TYPES.find(t => t.value === sectionType)?.label}" is aangemaakt.`,
       });
 
-      // Reset form
+      // Reset and close
       setSectionType("meubelen");
       setTitle("");
       setSupplierId("");
       setRangeId("");
       setPriceGroupId("");
+      setFrontColor("");
+      setCorpusColor("");
+      setPlinthColor("");
+      setHingeColor("");
+      setHandleNumber("");
+      setColumnHeightMm("");
       onOpenChange(false);
     } catch (error) {
       console.error("Error creating section:", error);
@@ -124,14 +201,17 @@ export function AddSectionDialog({
     }
   };
 
+  const showKitchenConfig = hasPriceGroups && priceGroupId;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nieuwe sectie</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Section Type */}
           <div className="space-y-2">
             <Label htmlFor="section-type">Type sectie *</Label>
             <Select
@@ -151,6 +231,7 @@ export function AddSectionDialog({
             </Select>
           </div>
 
+          {/* Supplier */}
           <div className="space-y-2">
             <Label>Leverancier</Label>
             <Select value={supplierId} onValueChange={handleSupplierChange}>
@@ -167,12 +248,31 @@ export function AddSectionDialog({
             </Select>
           </div>
 
-          {supplierId && (ranges?.length ?? 0) > 0 && (
+          {/* Collection filter (only for price-group suppliers) */}
+          {hasPriceGroups && collections.length > 0 && (
             <div className="space-y-2">
-              <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
+              <Label>Collectie</Label>
+              <Select value={selectedCollection || "all"} onValueChange={handleCollectionChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Alle collecties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle collecties</SelectItem>
+                  {collections.map(c => (
+                    <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Range/Model (for non-price-group suppliers) */}
+          {supplierId && !hasPriceGroups && (ranges?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <Label>Prijsgroep / Model</Label>
               <Select value={rangeId} onValueChange={setRangeId}>
                 <SelectTrigger>
-                  <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
+                  <SelectValue placeholder="Selecteer model" />
                 </SelectTrigger>
                 <SelectContent>
                   {ranges?.map((range) => (
@@ -185,17 +285,23 @@ export function AddSectionDialog({
             </div>
           )}
 
+          {/* Price Group (for Stosa-like suppliers) */}
           {hasPriceGroups && (
             <div className="space-y-2">
-              <Label>Prijsgroep</Label>
-              <Select value={priceGroupId} onValueChange={setPriceGroupId}>
+              <Label>Prijsgroep *</Label>
+              <Select value={priceGroupId} onValueChange={handlePriceGroupChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecteer prijsgroep (E1-E10, A, B, C)" />
+                  <SelectValue placeholder="Selecteer prijsgroep (bijv. E1, E4...)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {priceGroups?.map((pg) => (
+                  {filteredPriceGroups.map((pg) => (
                     <SelectItem key={pg.id} value={pg.id}>
                       {pg.code} - {pg.name}
+                      {(pg as any).material_type && (
+                        <span className="text-muted-foreground ml-1">
+                          ({(pg as any).material_type})
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -203,6 +309,89 @@ export function AddSectionDialog({
             </div>
           )}
 
+          {/* Kitchen Configuration (shown after price group is selected) */}
+          {showKitchenConfig && (
+            <>
+              <Separator />
+              <p className="text-sm text-muted-foreground font-medium">Keukenconfiguratie</p>
+
+              {/* Front Color */}
+              {frontColors.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Frontkleur</Label>
+                  <Select value={frontColor} onValueChange={setFrontColor}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecteer frontkleur" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {frontColors.map((color) => (
+                        <SelectItem key={color.id} value={color.color_code}>
+                          {color.color_code} - {color.color_name}
+                          {color.finish && (
+                            <span className="text-muted-foreground ml-1">
+                              ({color.finish})
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Corpus Color */}
+              {corpusColors.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Korpuskleur</Label>
+                  <Select value={corpusColor} onValueChange={setCorpusColor}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecteer korpuskleur" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {corpusColors.map((color) => (
+                        <SelectItem key={color.id} value={color.color_code}>
+                          {color.color_code} - {color.color_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Plinth Color */}
+              <div className="space-y-2">
+                <Label>Plintkleur</Label>
+                <Input
+                  placeholder="Bijv. dezelfde als front"
+                  value={plinthColor}
+                  onChange={(e) => setPlinthColor(e.target.value)}
+                />
+              </div>
+
+              {/* Handle */}
+              <div className="space-y-2">
+                <Label>Greepnummer</Label>
+                <Input
+                  placeholder="Bijv. M, MI, GS, Linear..."
+                  value={handleNumber}
+                  onChange={(e) => setHandleNumber(e.target.value)}
+                />
+              </div>
+
+              {/* Column Height */}
+              <div className="space-y-2">
+                <Label>Kolomhoogte (mm)</Label>
+                <Input
+                  type="number"
+                  placeholder="Bijv. 2400"
+                  value={columnHeightMm}
+                  onChange={(e) => setColumnHeightMm(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Titel (optioneel)</Label>
             <Input
@@ -212,7 +401,7 @@ export function AddSectionDialog({
               onChange={(e) => setTitle(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Laat leeg om de prijsgroep of type als naam te gebruiken
+              Laat leeg om automatisch een naam te genereren
             </p>
           </div>
 
