@@ -17,6 +17,7 @@ import { SupplierOrdersCard } from "@/components/orders/SupplierOrdersCard";
 import { SupplierLineGroups } from "@/components/orders/SupplierLineGroups";
 import { PortalTokenGenerator } from "@/components/orders/PortalTokenGenerator";
 import { ChecklistCard } from "@/components/orders/ChecklistCard";
+import { OrderCommunicationTab } from "@/components/orders/OrderCommunicationTab";
 import { useOrderChecklist } from "@/hooks/useOrderChecklist";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
@@ -345,6 +346,12 @@ const OrderDetail = () => {
               unit_price: line.unit_price,
               supplier_id: line.supplier_id
             }))}
+          />
+          <OrderCommunicationTab
+            orderId={order.id}
+            customerId={order.customer_id}
+            customerEmail={customer?.email}
+            customerName={getCustomerName(customer)}
           />
         </div>
 
