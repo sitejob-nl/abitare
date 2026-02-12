@@ -62,6 +62,7 @@ import {
 import { useProfiles } from "@/hooks/useUsers";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useQuotes } from "@/hooks/useQuotes";
+import { useOrders } from "@/hooks/useOrders";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -98,6 +99,7 @@ export default function ServiceTicketDetail() {
   const { data: users = [] } = useProfiles();
   const { data: customers = [] } = useCustomers({ limit: 200 });
   const { data: quotes = [] } = useQuotes({ limit: 200 });
+  const { data: orders = [] } = useOrders({ limit: 200 });
   const updateStatus = useUpdateTicketStatus();
   const updateTicket = useUpdateTicket();
   const addNote = useAddTicketNote();
@@ -109,6 +111,7 @@ export default function ServiceTicketDetail() {
   const [isAddingAssignee, setIsAddingAssignee] = useState(false);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const [showExternalEmail, setShowExternalEmail] = useState(false);
 
   if (isLoading) {
@@ -152,10 +155,13 @@ export default function ServiceTicketDetail() {
     (user) => !assignees.some((a) => a.user_id === user.id)
   );
 
-  // Filter quotes by selected customer if one is selected
+  // Filter quotes and orders by selected customer if one is selected
   const filteredQuotes = ticket.customer_id
     ? quotes.filter((q) => q.customer_id === ticket.customer_id)
     : quotes;
+  const filteredOrders = ticket.customer_id
+    ? orders.filter((o) => o.customer_id === ticket.customer_id)
+    : orders;
 
   const handleStatusChange = (newStatus: string) => {
     updateStatus.mutate({
@@ -186,8 +192,16 @@ export default function ServiceTicketDetail() {
     updateTicket.mutate({
       id: ticket.id,
       quote_id: quoteId,
-    });
+    } as any);
     setQuoteOpen(false);
+  };
+
+  const handleOrderChange = (orderId: string | null) => {
+    updateTicket.mutate({
+      id: ticket.id,
+      order_id: orderId,
+    } as any);
+    setOrderOpen(false);
   };
 
   const handleAddNote = () => {
@@ -608,20 +622,71 @@ export default function ServiceTicketDetail() {
                   )}
                 </div>
 
-                {/* Order link (if exists) */}
-                {ticket.order && (
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Order</label>
+                {/* Order selector */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Order</label>
+                  <Popover open={orderOpen} onOpenChange={setOrderOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={orderOpen}
+                        className="w-full justify-between"
+                      >
+                        {ticket.order ? (
+                          <span>Order #{ticket.order.order_number}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Selecteer order...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Zoek order..." />
+                        <CommandList>
+                          <CommandEmpty>Geen order gevonden</CommandEmpty>
+                          <CommandGroup>
+                            {ticket.order_id && (
+                              <CommandItem onSelect={() => handleOrderChange(null)}>
+                                <X className="mr-2 h-4 w-4" />
+                                Koppeling verwijderen
+                              </CommandItem>
+                            )}
+                            {filteredOrders.map((order) => (
+                              <CommandItem
+                                key={order.id}
+                                value={`${order.order_number}`}
+                                onSelect={() => handleOrderChange(order.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    ticket.order_id === order.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                #{order.order_number}
+                                {order.customer && (
+                                  <span className="ml-1 text-muted-foreground truncate">
+                                    - {(order.customer as any).first_name} {(order.customer as any).last_name}
+                                  </span>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {ticket.order && (
                     <Link
                       to={`/orders/${ticket.order.id}`}
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
                     >
-                      <Package className="h-3 w-3" />
-                      Order #{ticket.order.order_number}
-                      <ExternalLink className="h-3 w-3" />
+                      Bekijk order <ExternalLink className="h-3 w-3" />
                     </Link>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
 

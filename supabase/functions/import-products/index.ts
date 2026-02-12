@@ -131,17 +131,33 @@ Deno.serve(async (req) => {
     let updated = 0
     const errors: string[] = []
 
+    // Fetch existing products including user_override to protect manual corrections
     const { data: allExisting } = await supabase
       .from('products')
-      .select('article_code')
+      .select('article_code, user_override')
       .eq('supplier_id', supplier_id)
     
+    const existingMap = new Map<string, any>((allExisting || []).map(e => [e.article_code, e.user_override]))
     const existingCodes = new Set(allExisting?.map(e => e.article_code) || [])
     const newProducts = productsToUpsert.filter(p => !existingCodes.has(p.article_code))
     const existingProducts = productsToUpsert.filter(p => existingCodes.has(p.article_code))
 
     for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
-      const chunk = productsToUpsert.slice(i, i + chunkSize)
+      const chunk = productsToUpsert.slice(i, i + chunkSize).map(p => {
+        // If product has user_override, preserve those overridden fields
+        const override = existingMap.get(p.article_code)
+        if (override && typeof override === 'object') {
+          const protected_product = { ...p }
+          // Skip fields that have user overrides
+          for (const key of Object.keys(override)) {
+            if (key in protected_product) {
+              delete (protected_product as any)[key]
+            }
+          }
+          return { ...protected_product, article_code: p.article_code, supplier_id: p.supplier_id }
+        }
+        return p
+      })
       const { error: upsertError } = await supabase
         .from('products')
         .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
