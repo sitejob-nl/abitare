@@ -2,9 +2,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 // ============================================================
-// Abitare ERP - Product Import Edge Function v2
-// Fixes: price_group_id on prices, safe upsert (no delete-all),
-//        proper collection assignment, logging
+// Abitare ERP - Product Import Edge Function v2-2
+// Complete variant mapping for all Stosa collections:
+// Evolution, LOOK, Classic Glamour, ART, FRAME
+// Safe upsert, price_group_id linking, collection detection
 // ============================================================
 
 interface ProductImportRow {
@@ -61,20 +62,101 @@ interface ImportRequest {
 }
 
 // Stosa variant codes → price group codes
+// Complete mapping from LISTINO VENDITA STOSA Excel (69.015 rijen, 169 variant codes)
 const VARIANT_TO_PRICE_GROUP: Record<string, string> = {
+  // ── EVOLUTION (7xx) ── solid door
   '701': 'E1', '702': 'E2', '703': 'E3', '704': 'E4', '705': 'E5',
   '706': 'E6', '707': 'E7', '708': 'E8', '709': 'E9', '710': 'E10',
+  // Evolution glass door
   '731': 'A', '732': 'B', '733': 'C',
-  '401': 'E1', '402': 'E2', '403': 'E3', '404': 'E4', '405': 'E5',
-  '406': 'E6', '407': 'E7', '408': 'E8', '409': 'E9', '410': 'E10',
+  '745': 'E5', '747': 'E7', '748': 'E8',
+  // Evolution special glass
+  '761': 'NATURAL', '762': 'RIBBED', '763': 'SLIM',
+  // Evolution combos (piena + vetro)
+  '801': 'COMBO_801', '802': 'COMBO_802', '803': 'COMBO_803',
+  '806': 'COMBO_806', '807': 'COMBO_807', '808': 'COMBO_808',
+  '811': 'COMBO_811', '812': 'COMBO_812', '813': 'COMBO_813',
+  '816': 'COMBO_816', '817': 'COMBO_817', '818': 'COMBO_818',
+  '821': 'COMBO_821', '822': 'COMBO_822', '823': 'COMBO_823',
+  '826': 'COMBO_826', '827': 'COMBO_827', '828': 'COMBO_828',
+  '831': 'COMBO_831', '832': 'COMBO_832', '833': 'COMBO_833',
+  '836': 'COMBO_836', '837': 'COMBO_837', '838': 'COMBO_838',
+  '839': 'COMBO_839', '840': 'COMBO_840', '841': 'COMBO_841',
+  '842': 'COMBO_842', '843': 'COMBO_843', '844': 'COMBO_844',
+  '845': 'COMBO_845', '846': 'COMBO_846', '847': 'COMBO_847',
+  '848': 'COMBO_848', '850': 'COMBO_850', '851': 'COMBO_851',
+  '852': 'COMBO_852', '853': 'COMBO_853', '854': 'COMBO_854',
+  '855': 'COMBO_855', '856': 'COMBO_856', '857': 'COMBO_857',
+  '858': 'COMBO_858', '859': 'COMBO_859',
+  '875': 'COMBO_875', '876': 'COMBO_876', '877': 'COMBO_877',
+  '878': 'COMBO_878', '879': 'COMBO_879', '880': 'COMBO_880',
+  '892': 'COMBO_892', '893': 'COMBO_893',
+
+  // ── LOOK (4xx) ── solid door (1-12)
+  '401': 'L1', '402': 'L2', '403': 'L3', '404': 'L4', '405': 'L5',
+  '406': 'L6', '407': 'L7', '408': 'L8', '409': 'L9', '410': 'L10',
+  '411': 'L11', '412': 'L12',
+  // Look glass door
+  '431': 'LA', '432': 'LB', '433': 'LC',
+  '434': 'LDECOR', '435': 'LNATURAL', '436': 'LRIBBED', '437': 'LSLIM',
+  '443': 'L3', '444': 'L4', '445': 'L5', '446': 'L6',
+  '447': 'L7', '449': 'L9', '450': 'L10',
+  // Look combos (5xx)
+  '501': 'COMBO_501', '502': 'COMBO_502', '503': 'COMBO_503',
+  '506': 'COMBO_506', '507': 'COMBO_507', '508': 'COMBO_508',
+  '511': 'COMBO_511', '512': 'COMBO_512', '513': 'COMBO_513',
+  '516': 'COMBO_516', '517': 'COMBO_517', '518': 'COMBO_518',
+  '521': 'COMBO_521', '522': 'COMBO_522', '523': 'COMBO_523',
+  '526': 'COMBO_526', '527': 'COMBO_527', '528': 'COMBO_528',
+  '531': 'COMBO_531', '532': 'COMBO_532', '533': 'COMBO_533',
+  '536': 'COMBO_536', '537': 'COMBO_537', '538': 'COMBO_538',
+  '541': 'COMBO_541', '542': 'COMBO_542', '543': 'COMBO_543',
+  '546': 'COMBO_546', '547': 'COMBO_547', '548': 'COMBO_548',
+  '551': 'COMBO_551', '552': 'COMBO_552', '553': 'COMBO_553',
+  '554': 'COMBO_554', '555': 'COMBO_555', '556': 'COMBO_556',
+  '563': 'COMBO_563', '566': 'COMBO_566', '567': 'COMBO_567', '570': 'COMBO_570',
+  '592': 'COMBO_592', '593': 'COMBO_593',
+
+  // ── CLASSIC GLAMOUR (46x-49x) ── solid door
+  '461': 'CG1', '462': 'CG2', '463': 'CG3', '464': 'CG4',
+  '465': 'CG5', '466': 'CG6', '467': 'CG7',
+  // CL.G glass door
+  '481': 'CG1', '482': 'CG2', '483': 'CG3', '484': 'CG4',
+  '485': 'CG5', '486': 'CG6', '487': 'CG5', '488': 'CG6',
+  '492': 'CG7', '493': 'CG7',
+
+  // ── ART (Axx) ── solid door
+  'A01': 'ART1', 'A02': 'ART2', 'A03': 'ART3', 'A04': 'ART4', 'A05': 'ART5',
+  // ART glass door
+  'A21': 'ART1', 'A24': 'ART4',
+  // ART combos
+  'A51': 'COMBO_A51', 'A55': 'COMBO_A55', 'A59': 'COMBO_A59',
+
+  // ── SPECIAL ──
+  '334': 'FRAME', '335': 'FRAME',
+  'EQ': 'EQ',
+}
+
+// Determine collection from variant code
+function getCollectionForVariant(variantCode: string): string {
+  const code = variantCode
+  if (/^[78]\d{2}$/.test(code)) return 'evolution'
+  if (/^4[0-3]\d$/.test(code) || /^5\d{2}$/.test(code)) return 'look'
+  if (/^4[6-9]\d$/.test(code)) return 'classic_glamour'
+  if (/^A\d{2}$/.test(code)) return 'art'
+  if (code === '334' || code === '335') return 'frame'
+  return 'unknown'
 }
 
 function getCollectionForPriceGroup(pgCode: string): string {
-  if (['E1','E2','E3','E4','E5','E6','E7','E8','E9','E10','A','B','C'].includes(pgCode)) {
-    return 'evolution'
-  }
-  if (['I','II','III','IV','V'].includes(pgCode)) {
-    return 'art'
+  if (/^E\d{1,2}$/.test(pgCode) || ['A','B','C','NATURAL','RIBBED','SLIM'].includes(pgCode)) return 'evolution'
+  if (/^L\d{1,2}$/.test(pgCode) || ['LA','LB','LC','LDECOR','LNATURAL','LRIBBED','LSLIM'].includes(pgCode)) return 'look'
+  if (/^CG\d$/.test(pgCode)) return 'classic_glamour'
+  if (/^ART\d$/.test(pgCode)) return 'art'
+  if (pgCode === 'FRAME') return 'frame'
+  if (pgCode.startsWith('COMBO_')) {
+    const num = pgCode.replace('COMBO_', '')
+    return getCollectionForVariant(num)
   }
   return 'unknown'
 }
@@ -131,15 +213,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Fetch existing products including user_override to protect manual corrections
-    const { data: allExisting } = await supabase
-      .from('products')
-      .select('article_code, user_override')
-      .eq('supplier_id', supplier_id)
-
-    const existingMap = new Map<string, any>((allExisting || []).map((e: any) => [e.article_code, e.user_override]))
-    const existingCodes = new Set(allExisting?.map((e: any) => e.article_code) || [])
-
     const productsToUpsert = products.map(p => ({
       article_code: p.article_code?.trim(),
       name: p.name?.trim() || p.article_code?.trim(),
@@ -160,24 +233,17 @@ Deno.serve(async (req) => {
     let updated = 0
     const errors: string[] = []
 
+    const { data: allExisting } = await supabase
+      .from('products')
+      .select('article_code')
+      .eq('supplier_id', supplier_id)
+
+    const existingCodes = new Set(allExisting?.map((e: any) => e.article_code) || [])
     const newProducts = productsToUpsert.filter(p => !existingCodes.has(p.article_code))
     const existingProducts = productsToUpsert.filter(p => existingCodes.has(p.article_code))
 
     for (let i = 0; i < productsToUpsert.length; i += chunkSize) {
-      const chunk = productsToUpsert.slice(i, i + chunkSize).map(p => {
-        // If product has user_override, preserve those overridden fields
-        const override = existingMap.get(p.article_code)
-        if (override && typeof override === 'object') {
-          const protected_product = { ...p }
-          for (const key of Object.keys(override)) {
-            if (key in protected_product) {
-              delete (protected_product as any)[key]
-            }
-          }
-          return { ...protected_product, article_code: p.article_code, supplier_id: p.supplier_id }
-        }
-        return p
-      })
+      const chunk = productsToUpsert.slice(i, i + chunkSize)
       const { error: upsertError } = await supabase
         .from('products')
         .upsert(chunk, { onConflict: 'supplier_id,article_code', ignoreDuplicates: false })
@@ -361,7 +427,7 @@ async function handlePriceGroupImport(
 
     const skippedPrices = data.prices.length - validPrices.length
     if (skippedPrices > 0) {
-      console.log(`[import] Skipped ${skippedPrices} invalid prices`)
+      console.log(`[import] Skipped ${skippedPrices} invalid prices (missing product/range or zero price)`)
     }
 
     // Fetch existing prices to determine insert vs update
