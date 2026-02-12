@@ -1,68 +1,83 @@
 
 
-# JSON Import toevoegen aan ProductImport pagina
+# Import Geschiedenis: Producten filteren op wanneer geimporteerd
 
 ## Probleem
-De huidige import-pagina accepteert alleen Excel/CSV bestanden. De Stosa JSON chunks (gegenereerd door `stosa_import.py`) bevatten kant-en-klare data maar kunnen niet worden geimporteerd via de UI.
+De `import_logs` tabel bestaat al in de database maar wordt nooit gevuld. Na een JSON import is er geen manier om te zien wanneer welke producten zijn geimporteerd, hoeveel er zijn toegevoegd/bijgewerkt, of er fouten waren.
 
 ## Oplossing
-De ProductImport pagina uitbreiden zodat JSON bestanden (enkel en meervoudig) direct naar de Edge Function gestuurd kunnen worden, inclusief voortgangsindicatie.
+Twee aanpassingen: (1) de Edge Function gaat import-logs schrijven na elke import, en (2) de ProductImport pagina krijgt een "Import Geschiedenis" sectie.
 
 ---
 
-## Wijzigingen
+## Stap 1: Edge Function -- import_logs schrijven
 
-### 1. Bestandsacceptatie uitbreiden
-- File input `accept` uitbreiden met `.json`
-- Hint-tekst aanpassen: "CSV, XLSX, XLS of JSON"
+Na elke succesvolle (of deels succesvolle) import wordt een rij toegevoegd aan `import_logs`:
 
-### 2. JSON detectie en verwerking
-Bij het uploaden van een `.json` bestand:
-- Parse als JSON (niet via XLSX)
-- Controleer of het een geldig Stosa import-formaat is (heeft `import_mode`, `price_group_data`)
-- Sla de Excel-kolommap stappen over en ga direct naar een vereenvoudigd "JSON preview" scherm
-- Toon: aantal producten, ranges, prijzen uit het JSON bestand
-- Leverancier automatisch invullen als `supplier_id` in de JSON staat (lookup op naam of UUID)
+- **source**: `'json'` of `'excel'` (op basis van `import_mode`)
+- **file_name**: meegegeven vanuit de frontend (bijv. `import_look_001_of_010.json`)
+- **supplier_id**: de leverancier
+- **total_rows**: totaal verwerkte rijen
+- **inserted**: aantal nieuwe producten
+- **updated**: aantal bijgewerkte producten
+- **skipped**: 0 (of berekend)
+- **errors**: aantal fouten
+- **error_details**: JSON array met foutmeldingen
+- **imported_by**: `auth.uid()` uit het JWT token
+- **division_id**: ophalen via `get_user_division_id()`
 
-### 3. Bulk JSON import (meerdere bestanden)
-- Optie om meerdere JSON bestanden tegelijk te selecteren
-- Sequentiele verwerking met voortgangsbalk per chunk
-- Resultaten per chunk tonen (inserted/updated/errors)
-- Pauze van 500ms tussen chunks om de Edge Function niet te overbelasten
+Dit geldt voor zowel de standaard-import als de prijsgroep-import.
 
-### 4. Directe Edge Function aanroep
-JSON bestanden worden 1-op-1 doorgestuurd naar de `import-products` Edge Function:
-- Geen kolomdetectie nodig (data is al in het juiste formaat)
-- `supplier_id` uit het JSON bestand gebruiken, of de geselecteerde leverancier
-- Resultaat per chunk tonen
+## Stap 2: Frontend -- file_name meesturen
+
+De `useJsonImport` hook en `useProductImport` hook sturen het bestandsnaam mee in het request body zodat de Edge Function dit kan loggen.
+
+## Stap 3: Import Geschiedenis pagina/sectie
+
+Op de ProductImport pagina komt bovenaan (voor de upload area) een inklapbare "Import Geschiedenis" kaart met:
+
+- Tabel met kolommen: Datum, Bestand, Leverancier, Totaal, Nieuw, Bijgewerkt, Fouten
+- Sorteer op datum (nieuwste eerst)
+- Leveranciernaam via join
+- Fout-indicator (rode badge bij errors > 0), klikbaar voor details
+- Filter op leverancier (optioneel, via dropdown)
+- Laatste 50 imports tonen
 
 ---
 
 ## Technische details
 
-### Gewijzigd bestand
+### Gewijzigde bestanden
 
 | Bestand | Wijziging |
 |---|---|
-| `src/pages/ProductImport.tsx` | JSON detectie, bulk upload, direct-send flow |
+| `supabase/functions/import-products/index.ts` | Na import: `INSERT INTO import_logs` met stats |
+| `src/hooks/useJsonImport.ts` | `file_name` meesturen in request body |
+| `src/pages/ProductImport.tsx` | Import geschiedenis kaart toevoegen (query op `import_logs` + suppliers join) |
 
-### Nieuwe flow voor JSON bestanden
+### Edge Function aanpassing (in beide import flows)
+
+Na het berekenen van de stats, voor het retourneren van de response:
 
 ```text
-[Upload JSON] --> [Detecteer formaat] --> [Toon preview (producten/ranges/prijzen)]
-     |                                          |
-     v                                          v
-[Meerdere JSONs?] --> [Sequentieel versturen] --> [Voortgang per chunk]
-                                                       |
-                                                       v
-                                                [Resultaten samenvatting]
+INSERT INTO import_logs (supplier_id, division_id, source, file_name, total_rows, inserted, updated, skipped, errors, error_details, imported_by)
+VALUES (supplierId, divisionId, 'json'/'excel', fileName, total, inserted, updated, 0, errorCount, errorDetailsJson, userId)
 ```
 
-### Wijzigingen in detail
+De `imported_by` en `division_id` worden uit het JWT token gehaald (de supabase client heeft al de user context).
 
-1. **`handleFileUpload`**: Check op `.json` extensie, parse via `JSON.parse()` i.p.v. XLSX, extract stats
-2. **Nieuwe state**: `jsonMode: boolean`, `jsonPayloads: object[]` (voor bulk), `bulkProgress: {current, total, results[]}`
-3. **Stap 2 (JSON variant)**: Simpeler scherm met alleen leverancier-selectie + preview stats, geen kolomdetectie
-4. **`handleImport` (JSON variant)**: Loop door `jsonPayloads`, stuur elk direct naar Edge Function, update voortgang
-5. **File input**: `multiple` attribuut wanneer JSON modus, zodat meerdere chunks tegelijk geselecteerd kunnen worden
+### Frontend query
+
+```text
+SELECT il.*, s.name as supplier_name
+FROM import_logs il
+LEFT JOIN suppliers s ON s.id = il.supplier_id
+ORDER BY il.created_at DESC
+LIMIT 50
+```
+
+### Uitvoervolgorde
+1. Edge Function updaten (import_logs schrijven)
+2. useJsonImport hook: file_name meesturen
+3. ProductImport pagina: geschiedenis sectie toevoegen
 
