@@ -8,7 +8,7 @@ export function useDuplicateQuote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (quoteId: string): Promise<Quote> => {
+    mutationFn: async ({ quoteId, mode = "revision" }: { quoteId: string; mode?: "revision" | "new_sub_quote" }): Promise<Quote> => {
       // 1. Fetch the original quote with all related data
       const { data: original, error: fetchError } = await supabase
         .from("quotes")
@@ -23,14 +23,16 @@ export function useDuplicateQuote() {
       if (fetchError) throw fetchError;
       if (!original) throw new Error("Quote not found");
 
-      // 2. Create the new quote as a revision (with parent_quote_id and incremented revision_number)
+      const isRevision = mode === "revision";
+
+      // 2. Build revision fields only for revision mode
       const originalRef = original.reference;
-      const parentId = (original as any).parent_quote_id || original.id;
-      const currentRevision = (original as any).revision_number || 1;
-      const newRevision = currentRevision + 1;
-      const newReference = originalRef 
+      const parentId = isRevision ? ((original as any).parent_quote_id || original.id) : null;
+      const currentRevision = isRevision ? ((original as any).revision_number || 1) : 0;
+      const newRevision = isRevision ? currentRevision + 1 : 1;
+      const newReference = isRevision && originalRef
         ? originalRef.replace(/ \(rev \d+\)$/, '') + ` (rev ${newRevision})`
-        : null;
+        : originalRef;
 
       const { data: newQuote, error: quoteError } = await supabase
         .from("quotes")
@@ -42,7 +44,9 @@ export function useDuplicateQuote() {
           valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
           introduction_text: original.introduction_text,
           closing_text: original.closing_text,
-          internal_notes: original.internal_notes ? `[Revisie ${newRevision} van #${original.quote_number}] ${original.internal_notes}` : `Revisie ${newRevision} van offerte #${original.quote_number}`,
+          internal_notes: isRevision
+            ? (original.internal_notes ? `[Revisie ${newRevision} van #${original.quote_number}] ${original.internal_notes}` : `Revisie ${newRevision} van offerte #${original.quote_number}`)
+            : (original.internal_notes ? `[Kopie van #${original.quote_number}] ${original.internal_notes}` : `Kopie van offerte #${original.quote_number}`),
           payment_condition: original.payment_condition,
           payment_terms_description: original.payment_terms_description,
           discount_amount: original.discount_amount,
@@ -63,9 +67,11 @@ export function useDuplicateQuote() {
           default_supplier_id: original.default_supplier_id || null,
           default_price_group_id: original.default_price_group_id || null,
           default_corpus_color_id: original.default_corpus_color_id || null,
-          // Revision tracking
+          // Revision tracking (only for revision mode)
           parent_quote_id: parentId,
           revision_number: newRevision,
+          // Keep project linkage
+          project_id: (original as any).project_id || null,
         } as any)
         .select()
         .single();

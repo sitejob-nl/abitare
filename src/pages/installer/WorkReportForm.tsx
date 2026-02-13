@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ArrowLeft, Save, Send, User } from "lucide-react";
+import { ArrowLeft, Save, Send, User, AlertTriangle } from "lucide-react";
 import { InstallerLayout } from "@/components/installer/InstallerLayout";
 import { PhotoUploader } from "@/components/installer/PhotoUploader";
 import { TaskChecklist } from "@/components/installer/TaskChecklist";
@@ -25,6 +25,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +70,10 @@ export default function WorkReportForm() {
   const [materialsUsed, setMaterialsUsed] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [signatureSaved, setSignatureSaved] = useState(false);
+  
+  // Damage state
+  const [hasDamage, setHasDamage] = useState<boolean | null>(null);
+  const [damageDescription, setDamageDescription] = useState("");
   // Initialize form when report loads
   useEffect(() => {
     if (report) {
@@ -108,8 +114,43 @@ export default function WorkReportForm() {
     });
   };
 
+  // Count damage photos
+  const damagePhotos = useMemo(() => {
+    return (report?.work_report_photos || []).filter(p => p.photo_type === "schade");
+  }, [report?.work_report_photos]);
+
+  // Validate damage flow before submit
+  const canSubmit = useMemo(() => {
+    if (hasDamage === null) return false; // Must answer the question
+    if (hasDamage) {
+      // Must have at least 1 damage photo + description
+      return damagePhotos.length > 0 && damageDescription.trim().length > 0;
+    }
+    return true;
+  }, [hasDamage, damagePhotos.length, damageDescription]);
+
   const handleSubmit = async () => {
     if (!id) return;
+    
+    if (hasDamage === null) {
+      toast.error("Beantwoord eerst de schadebeoordeling");
+      return;
+    }
+    if (hasDamage && damagePhotos.length === 0) {
+      toast.error("Voeg minimaal 1 schadefoto toe voordat je de werkbon indient");
+      return;
+    }
+    if (hasDamage && !damageDescription.trim()) {
+      toast.error("Voeg een schadeomschrijving toe");
+      return;
+    }
+
+    // Save damage flag
+    await updateReport.mutateAsync({
+      id,
+      data: { has_damage: hasDamage } as any,
+    });
+
     await handleSave();
     await submitReport.mutateAsync(id);
     navigate("/monteur/werkbonnen");
@@ -372,6 +413,71 @@ export default function WorkReportForm() {
           </TabsContent>
         </Tabs>
 
+        {/* Damage Assessment - always visible when not read-only */}
+        {!isReadOnly && (
+          <Card className="border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                Schadebeoordeling
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-medium">Is er beschadiging geconstateerd? *</Label>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant={hasDamage === false ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setHasDamage(false)}
+                  >
+                    Nee, geen schade
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={hasDamage === true ? "destructive" : "outline"}
+                    size="sm"
+                    onClick={() => setHasDamage(true)}
+                  >
+                    Ja, schade geconstateerd
+                  </Button>
+                </div>
+              </div>
+
+              {hasDamage === true && (
+                <div className="space-y-3 rounded-lg border border-destructive/30 p-3 bg-destructive/5">
+                  <div className="space-y-2">
+                    <Label>Schadeomschrijving *</Label>
+                    <Textarea
+                      placeholder="Beschrijf de schade, locatie en omvang..."
+                      value={damageDescription}
+                      onChange={(e) => setDamageDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <strong>Schadefoto's ({damagePhotos.length}):</strong>
+                    {damagePhotos.length === 0 ? (
+                      <p className="text-destructive mt-1">
+                        ⚠ Upload minimaal 1 schadefoto via het tabblad "Foto's" (type: schade)
+                      </p>
+                    ) : (
+                      <p className="text-green-600 mt-1">✓ {damagePhotos.length} foto('s) geüpload</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {hasDamage === null && (
+                <p className="text-xs text-orange-600">
+                  ⚠ Je moet de schadebeoordeling invullen voordat je de werkbon kunt indienen.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Fixed Bottom Actions */}
         {!isReadOnly && (
           <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4 lg:left-64">
@@ -388,7 +494,10 @@ export default function WorkReportForm() {
 
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button className="flex-1 min-h-[48px]">
+                  <Button 
+                    className="flex-1 min-h-[48px]"
+                    disabled={!canSubmit}
+                  >
                     <Send className="mr-2 h-4 w-4" />
                     Indienen
                   </Button>
@@ -397,8 +506,9 @@ export default function WorkReportForm() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Werkbon indienen?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Na het indienen kun je de werkbon niet meer bewerken. Weet
-                      je zeker dat je de werkbon wilt indienen?
+                      Na het indienen kun je de werkbon niet meer bewerken.
+                      {hasDamage && " Er is schade geregistreerd bij deze werkbon."}
+                      {" "}Weet je zeker dat je de werkbon wilt indienen?
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

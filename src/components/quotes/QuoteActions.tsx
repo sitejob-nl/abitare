@@ -18,6 +18,7 @@ import { useDeleteQuote } from "@/hooks/useQuotes";
 import { useDuplicateQuote } from "@/hooks/useQuoteDuplicate";
 import { useConvertQuoteToOrder } from "@/hooks/useConvertQuoteToOrder";
 import { ConvertToOrderDialog } from "./ConvertToOrderDialog";
+import { DuplicateChoiceDialog, type DuplicateMode } from "./DuplicateChoiceDialog";
 import { toast } from "@/hooks/use-toast";
 
 interface QuoteActionsProps {
@@ -40,6 +41,7 @@ export function QuoteActions({
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   
   const deleteQuote = useDeleteQuote();
   const duplicateQuote = useDuplicateQuote();
@@ -69,13 +71,15 @@ export function QuoteActions({
     setShowDeleteDialog(false);
   };
 
-  const handleDuplicate = async () => {
+  const handleDuplicate = async (mode: DuplicateMode) => {
     try {
-      const newQuote = await duplicateQuote.mutateAsync(quoteId);
+      const newQuote = await duplicateQuote.mutateAsync({ quoteId, mode });
+      const label = mode === "revision" ? "Nieuwe revisie" : "Nieuwe deelofferte";
       toast({
-        title: "Offerte gekopieerd",
-        description: `Een nieuwe offerte #${newQuote.quote_number} is aangemaakt.`,
+        title: label + " aangemaakt",
+        description: `Offerte #${newQuote.quote_number} is aangemaakt.`,
       });
+      setShowDuplicateDialog(false);
       navigate(`/quotes/${newQuote.id}`);
     } catch (error) {
       console.error("Error duplicating quote:", error);
@@ -129,7 +133,7 @@ export function QuoteActions({
         variant="outline"
         size="sm"
         className="gap-1.5 h-8"
-        onClick={handleDuplicate}
+        onClick={() => setShowDuplicateDialog(true)}
         disabled={duplicateQuote.isPending}
       >
         {duplicateQuote.isPending ? (
@@ -184,6 +188,14 @@ export function QuoteActions({
         customerName={customerName}
         totalAmount={totalAmount}
         isPending={convertToOrder.isPending}
+      />
+
+      <DuplicateChoiceDialog
+        open={showDuplicateDialog}
+        onOpenChange={setShowDuplicateDialog}
+        onSelect={handleDuplicate}
+        quoteNumber={quoteNumber}
+        isPending={duplicateQuote.isPending}
       />
     </div>
   );

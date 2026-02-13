@@ -39,7 +39,7 @@ export function CustomerQuotesTab({ customerId }: CustomerQuotesTabProps) {
   const handleDuplicate = async (quote: CustomerQuote, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const newQuote = await duplicateQuote.mutateAsync(quote.id);
+      const newQuote = await duplicateQuote.mutateAsync({ quoteId: quote.id, mode: "revision" });
       toast({
         title: "Offerte gekopieerd",
         description: `Offerte #${newQuote.quote_number} is aangemaakt als kopie.`,

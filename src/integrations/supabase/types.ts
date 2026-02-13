@@ -1153,6 +1153,7 @@ export type Database = {
           outlook_event_id: string | null
           payment_condition: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
+          project_id: string | null
           quote_id: string | null
           requires_elevator: boolean | null
           salesperson_id: string | null
@@ -1208,6 +1209,7 @@ export type Database = {
           outlook_event_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          project_id?: string | null
           quote_id?: string | null
           requires_elevator?: boolean | null
           salesperson_id?: string | null
@@ -1263,6 +1265,7 @@ export type Database = {
           outlook_event_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          project_id?: string | null
           quote_id?: string | null
           requires_elevator?: boolean | null
           salesperson_id?: string | null
@@ -1288,6 +1291,13 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -1777,6 +1787,57 @@ export type Database = {
           },
         ]
       }
+      projects: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          division_id: string | null
+          id: string
+          name: string | null
+          project_number: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          division_id?: string | null
+          id?: string
+          name?: string | null
+          project_number?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          division_id?: string | null
+          id?: string
+          name?: string | null
+          project_number?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quote_lines: {
         Row: {
           article_code: string | null
@@ -2042,6 +2103,7 @@ export type Database = {
           parent_quote_id: string | null
           payment_condition: string | null
           payment_terms_description: string | null
+          project_id: string | null
           quote_date: string | null
           quote_number: number
           reference: string | null
@@ -2082,6 +2144,7 @@ export type Database = {
           parent_quote_id?: string | null
           payment_condition?: string | null
           payment_terms_description?: string | null
+          project_id?: string | null
           quote_date?: string | null
           quote_number?: number
           reference?: string | null
@@ -2122,6 +2185,7 @@ export type Database = {
           parent_quote_id?: string | null
           payment_condition?: string | null
           payment_terms_description?: string | null
+          project_id?: string | null
           quote_date?: string | null
           quote_number?: number
           reference?: string | null
@@ -2195,6 +2259,13 @@ export type Database = {
             columns: ["parent_quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -2499,6 +2570,7 @@ export type Database = {
           order_id: string | null
           planned_date: string | null
           priority: Database["public"]["Enums"]["service_ticket_priority"]
+          project_id: string | null
           quote_id: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["service_ticket_status"]
@@ -2520,6 +2592,7 @@ export type Database = {
           order_id?: string | null
           planned_date?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          project_id?: string | null
           quote_id?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["service_ticket_status"]
@@ -2541,6 +2614,7 @@ export type Database = {
           order_id?: string | null
           planned_date?: string | null
           priority?: Database["public"]["Enums"]["service_ticket_priority"]
+          project_id?: string | null
           quote_id?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["service_ticket_status"]
@@ -2585,6 +2659,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_tickets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -3076,6 +3157,61 @@ export type Database = {
         }
         Relationships: []
       }
+      work_report_damages: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          measurements: string | null
+          order_line_id: string | null
+          photo_urls: string[]
+          position: string | null
+          work_report_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          measurements?: string | null
+          order_line_id?: string | null
+          photo_urls?: string[]
+          position?: string | null
+          work_report_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          measurements?: string | null
+          order_line_id?: string | null
+          photo_urls?: string[]
+          position?: string | null
+          work_report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_report_damages_order_line_id_fkey"
+            columns: ["order_line_id"]
+            isOneToOne: false
+            referencedRelation: "installer_order_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_report_damages_order_line_id_fkey"
+            columns: ["order_line_id"]
+            isOneToOne: false
+            referencedRelation: "order_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_report_damages_work_report_id_fkey"
+            columns: ["work_report_id"]
+            isOneToOne: false
+            referencedRelation: "work_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_report_photos: {
         Row: {
           caption: string | null
@@ -3163,6 +3299,7 @@ export type Database = {
           customer_signature: string | null
           division_id: string | null
           end_time: string | null
+          has_damage: boolean | null
           id: string
           installer_id: string
           internal_notes: string | null
@@ -3184,6 +3321,7 @@ export type Database = {
           customer_signature?: string | null
           division_id?: string | null
           end_time?: string | null
+          has_damage?: boolean | null
           id?: string
           installer_id: string
           internal_notes?: string | null
@@ -3205,6 +3343,7 @@ export type Database = {
           customer_signature?: string | null
           division_id?: string | null
           end_time?: string | null
+          has_damage?: boolean | null
           id?: string
           installer_id?: string
           internal_notes?: string | null
