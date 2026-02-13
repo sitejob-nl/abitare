@@ -1,66 +1,25 @@
 
 
-# RLS-verbetering projects + Projectselector in QuoteFormDialog
+# Projectselector bij order-aanmaak (quote-naar-order conversie)
 
-## 1. RLS Policies verscherpen op `projects` tabel
+## Analyse
 
-De huidige INSERT en UPDATE policies zijn te ruim (elke ingelogde gebruiker kan alles). Deze worden aangescherpt naar het zelfde patroon als quotes/orders:
+Orders worden aangemaakt via het "Offerte omzetten naar order"-proces (`ConvertToOrderDialog` + `useConvertQuoteToOrder`). Er is geen apart "order aanmaak"-formulier -- orders ontstaan altijd vanuit een offerte.
 
-**Nieuwe migration:**
+De offerte heeft al een `project_id` (via de eerder toegevoegde projectselector). Bij conversie wordt dit veld echter niet overgenomen naar de nieuwe order.
 
-```text
--- DROP bestaande te ruime policies
-DROP POLICY "Users can create projects" ON public.projects;
-DROP POLICY "Users can update projects" ON public.projects;
+## Oplossing
 
--- INSERT: alleen eigen divisie of admin/manager
-CREATE POLICY "Users can create projects in their division"
-  ON public.projects FOR INSERT TO authenticated
-  WITH CHECK (
-    division_id IS NULL
-    OR division_id = public.get_user_division_id(auth.uid())
-    OR public.is_admin_or_manager(auth.uid())
-  );
+Het `project_id` van de bronofferte automatisch meenemen naar de nieuwe order bij conversie. Dit is de logische plek omdat:
+- Orders altijd uit offertes ontstaan
+- Het project al op offerteniveau is vastgelegd
+- Er geen apart order-aanmaakformulier bestaat
 
--- UPDATE: alleen eigen divisie of admin/manager
-CREATE POLICY "Users can update projects in their division"
-  ON public.projects FOR UPDATE TO authenticated
-  USING (
-    division_id IS NULL
-    OR division_id = public.get_user_division_id(auth.uid())
-    OR public.is_admin_or_manager(auth.uid())
-  );
-```
+## Technische wijziging
 
-Dit zorgt ervoor dat:
-- Gebruikers alleen projecten kunnen aanmaken/bewerken binnen hun eigen vestiging
-- Admins en managers alles kunnen
-- De SELECT en DELETE policies blijven ongewijzigd (zijn al correct)
+**Bestand: `src/hooks/useConvertQuoteToOrder.ts`**
 
-## 2. Projectselector toevoegen aan QuoteFormDialog
+In de order-insert (rond regel 46-69) wordt `project_id: quote.project_id` toegevoegd aan het insert-object. Dit erft het project automatisch over van de offerte.
 
-Op stap 1 van het formulier, na de klantselectie, wordt een optionele projectselector toegevoegd:
-
-**Wijzigingen in `src/components/quotes/QuoteFormDialog.tsx`:**
-- Import `useCustomerProjects` uit `useProjects.ts`
-- State toevoegen: `selectedProjectId`
-- Na klantselectie: projecten ophalen voor die klant
-- Select dropdown tonen met bestaande projecten + optie "Geen project"
-- Bij submit: `project_id` meesturen naar `createQuote`
-
-**Wijzigingen in `src/hooks/useQuotes.ts`:**
-- `project_id` toevoegen aan het insert-object in `useCreateQuote`
-
-**UI-positie:** Direct onder de klant-selector op stap 1, alleen zichtbaar als er een klant geselecteerd is. Bevat:
-- "Geen project" (default)
-- Lijst van bestaande projecten voor die klant (projectnummer + naam)
-
-### Technische details
-
-Het schema-veld `quotes.project_id` bestaat al (toegevoegd in eerdere migration). Er hoeft alleen de UI + hook-aanpassing te komen.
-
-**Bestanden die gewijzigd worden:**
-1. Nieuwe migration SQL -- RLS policy verscherping
-2. `src/components/quotes/QuoteFormDialog.tsx` -- projectselector UI
-3. `src/hooks/useQuotes.ts` -- project_id meesturen bij insert
+Dat is de enige wijziging die nodig is -- een enkele regel toevoegen.
 
