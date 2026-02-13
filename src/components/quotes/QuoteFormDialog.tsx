@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, ArrowRight, ArrowLeft, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCustomers, type Customer } from "@/hooks/useCustomers";
+import { useCustomerProjects } from "@/hooks/useProjects";
 import { useCreateQuote } from "@/hooks/useQuotes";
 import { useCreateQuoteSection, SECTION_TYPES } from "@/hooks/useQuoteSections";
 import { useSuppliers } from "@/hooks/useSuppliers";
@@ -95,6 +96,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const [colorId, setColorId] = useState<string>("");
   const [corpusColorId, setCorpusColorId] = useState<string>("");
   const [step, setStep] = useState(1);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [requiresTransport, setRequiresTransport] = useState(false);
   const [requiresKooiaap, setRequiresKooiaap] = useState(false);
 
@@ -155,6 +157,8 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
   const selectedRangeId = watch("range_id");
   const selectedSectionType = watch("section_type");
   const watchedCategory = watch("category");
+
+  const { data: customerProjects = [] } = useCustomerProjects(selectedCustomerId || undefined);
 
   // Sync colorRangeId with form's range_id for the color query
   useEffect(() => {
@@ -243,6 +247,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
         default_supplier_id: selectedSupplierId || null,
         requires_transport: data.category === "tegels" ? requiresTransport : false,
         requires_kooiaap: data.category === "tegels" ? requiresKooiaap : false,
+        project_id: selectedProjectId || null,
       });
 
       // If supplier/range selected, create first section automatically
@@ -274,6 +279,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
       setPriceGroupId("");
       setColorId("");
       setCorpusColorId("");
+      setSelectedProjectId("");
       setStep(1);
       onOpenChange(false);
       navigate(`/quotes/${quote.id}`);
@@ -295,6 +301,7 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
     setPriceGroupId("");
     setColorId("");
     setCorpusColorId("");
+    setSelectedProjectId("");
     setStep(1);
     setRequiresTransport(false);
     setRequiresKooiaap(false);
@@ -398,6 +405,26 @@ export function QuoteFormDialog({ open, onOpenChange, customerId: prefillCustome
                     <p className="text-xs text-destructive">{errors.customer_id.message}</p>
                   )}
                 </div>
+
+                {/* Project selector */}
+                {selectedCustomerId && customerProjects.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Project</Label>
+                    <Select value={selectedProjectId || "none"} onValueChange={(v) => setSelectedProjectId(v === "none" ? "" : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Geen project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Geen project</SelectItem>
+                        {customerProjects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            P{p.project_number} – {p.name || "Naamloos"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Category */}
                 <div className="space-y-2">
