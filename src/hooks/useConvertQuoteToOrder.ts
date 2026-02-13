@@ -46,6 +46,7 @@ export function useConvertQuoteToOrder() {
         .insert({
           customer_id: quote.customer_id,
           division_id: quote.division_id,
+          project_id: quote.project_id,
           quote_id: quote.id,
           order_date: new Date().toISOString().split("T")[0],
           status: "nieuw",
