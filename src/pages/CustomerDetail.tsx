@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Plus, Edit, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Loader2, Mail, FolderOpen } from "lucide-react";
 import { useCustomer } from "@/hooks/useCustomers";
 import { useCustomerQuotes } from "@/hooks/useCustomerQuotes";
 import { useCustomerOrders } from "@/hooks/useCustomerOrders";
@@ -12,6 +12,7 @@ import { CustomerInfoCard } from "@/components/customers/CustomerInfoCard";
 import { CustomerQuotesTab } from "@/components/customers/CustomerQuotesTab";
 import { CustomerOrdersTab } from "@/components/customers/CustomerOrdersTab";
 import { CustomerCommunicationTab } from "@/components/customers/CustomerCommunicationTab";
+import { CustomerProjectsTab } from "@/components/customers/CustomerProjectsTab";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 import { QuoteFormDialog } from "@/components/quotes/QuoteFormDialog";
 
@@ -109,8 +110,12 @@ const CustomerDetail = () => {
 
         {/* Right Column - Tabs */}
         <div className="lg:col-span-2">
-          <Tabs defaultValue="quotes" className="w-full">
+          <Tabs defaultValue="projects" className="w-full">
             <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
+              <TabsTrigger value="projects" className="gap-1.5">
+                <FolderOpen className="h-3.5 w-3.5" />
+                Projecten
+              </TabsTrigger>
               <TabsTrigger value="quotes" className="gap-1.5">
                 Offertes
                 {quotesCount > 0 && (
@@ -138,6 +143,10 @@ const CustomerDetail = () => {
                 )}
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="projects" className="mt-4">
+              <CustomerProjectsTab customerId={customer.id} />
+            </TabsContent>
 
             <TabsContent value="quotes" className="mt-4">
               <CustomerQuotesTab customerId={customer.id} />
