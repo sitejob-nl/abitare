@@ -1,93 +1,89 @@
 
 
-# Plan: Productcategorisatie uit PIMS-data
+# Plan: Gaggenau-producten correct importeren
 
-## Huidige situatie
+## Probleem 1: Leverancier-detectie
 
-- Alle 667 Bosch-producten hebben **geen categorie** (`category_id = null`)
-- De `product_categories` tabel ondersteunt al hierarchie via `parent_id`
-- Bestaande top-level categorien: Keukenmeubelen, Apparatuur, Werkbladen, Montage, Transport, Accessoires
-- De BMEcat XML bevat classificatie-data in `CATALOG_GROUP_SYSTEM` en `ARTICLE_TO_CATALOGGROUP_MAP` tags
+De Gaggenau XML wordt door "BSH Huishoudapparaten B.V." (de PARTY/afzender) gematcht op Bosch. De `CATALOG_NAME` "Gaggenau producten" wordt niet meegenomen in de detectie.
 
-## Gewenste structuur
+### Oplossing
 
-```text
-Apparatuur (bestaand)
-  └── Bosch (merk-niveau, nieuw)
-        ├── MDA - Inbouw (hoofdgroep)
-        │     ├── Baking oven
-        │     ├── Cooker hood
-        │     ├── Dishwasher
-        │     ├── Hob
-        │     └── ...
-        ├── MDA - Vrijstaand (hoofdgroep)
-        │     ├── Washing machine
-        │     └── ...
-        └── Accessory (hoofdgroep)
-              └── Other
-```
+De supplier-detectielogica uitbreiden met een extra strategie:
 
-## Wat wordt aangepast
+1. Naast `SUPPLIER_NAME` / `PARTY` ook `CATALOG_NAME` uit de XML header lezen
+2. De catalogusnaam als eerste prioriteit gebruiken (specifiekere match), dan pas de afzender
+3. Gaggenau als leverancier aanmaken in de database met "BSH Huishoudapparaten" als gedeelde alias -- of beter: de match-logica aanpassen zodat `CATALOG_NAME` prioriteit krijgt
 
-### 1. Supplier-kolom op categorien
+**Aanpak**: In `extractSupplierName()` eerst de `CATALOG_NAME` proberen. Dit geeft "Gaggenau producten" terug, wat matcht op een nieuw aan te maken leverancier "Gaggenau".
 
-Een `supplier_id` kolom toevoegen aan `product_categories` zodat leverancier-specifieke categorien (Bosch > MDA - Inbouw > Dishwasher) gescheiden zijn van generieke categorien (Apparatuur, Werkbladen).
+**Alternatief**: Een nieuwe leverancier "Gaggenau" aanmaken met alias "Gaggenau" en in de detectielogica de `CATALOG_NAME` mee laten wegen. De huidige flow probeert dan eerst "Gaggenau producten" te matchen (hit op Gaggenau), voordat "BSH Huishoudapparaten B.V." wordt geprobeerd.
 
-### 2. BMEcat classificatie-parser
+## Probleem 2: 0 catalog groups
 
-De XML bevat een `CATALOG_GROUP_SYSTEM` blok met `CATALOG_STRUCTURE` entries die de hiearchie beschrijven (groep-id, naam, parent-id). Elk product is gekoppeld via `ARTICLE_TO_CATALOGGROUP_MAP`.
+Het log toont "Parsed 0 catalog groups" -- de `CATALOG_GROUP_SYSTEM` tag wordt niet gevonden in de Gaggenau XML, of de structuur wijkt af. Mogelijke oorzaken:
 
-Nieuwe parsing-logica:
-1. Alle `CATALOG_STRUCTURE` entries uitlezen (groep-id, naam, parent-groep-id)
-2. Hiearchie opbouwen: hoofdgroep > productgroep
-3. Per product de `ARTICLE_TO_CATALOGGROUP_MAP` uitlezen voor de classificatie-link
-4. Categorien automatisch aanmaken in `product_categories` (upsert op code + supplier_id)
-5. Product toewijzen aan de juiste leaf-categorie
+- De Gaggenau XML gebruikt andere tagnamen voor classificatie
+- De classificatiedata zit in een ander blok (bijv. `CLASSIFICATION_SYSTEM` i.p.v. `CATALOG_GROUP_SYSTEM`)
 
-### 3. Bestaande producten categoriseren
+### Oplossing
 
-Na het opnieuw importeren van de Bosch-data worden de 667 producten automatisch aan de juiste categorie gekoppeld. Er is geen aparte SQL-correctie nodig; de volgende import doet dit automatisch.
+De `parseCatalogGroups()` functie uitbreiden met fallback-tagnamen:
+- `CLASSIFICATION_SYSTEM` als alternatief voor `CATALOG_GROUP_SYSTEM`
+- `CLASSIFICATION_GROUP` als alternatief voor `CATALOG_STRUCTURE`
+- `CLASS_ID` als alternatief voor `GROUP_ID`
+
+En extra logging toevoegen om te zien welke tags wel aanwezig zijn als er 0 groups gevonden worden.
+
+## Stappen
+
+### Stap 1: Gaggenau leverancier aanmaken
+- Nieuw record in `suppliers` tabel: naam "Gaggenau", code "GAGGENAU", pims_aliases `["Gaggenau"]`
+- Price factor instellen (standaard 1.0, later aanpasbaar)
+
+### Stap 2: Supplier-detectie verbeteren
+In `extractSupplierName()`:
+- `CATALOG_NAME` als eerste strategie toevoegen (voor `SUPPLIER_NAME`)
+- Woorden als "producten", "products", "catalogue" strippen uit de naam voor betere matching
+
+### Stap 3: Catalog group parser robuuster maken
+In `parseCatalogGroups()`:
+- Fallback tagnamen toevoegen voor classificatie-structuren
+- Debug-logging als 0 groups gevonden: welke top-level tags bestaan er in de XML?
+
+### Stap 4: Bestaande Gaggenau-producten corrigeren
+SQL-update om de 443 verkeerd geimporteerde producten van Bosch naar Gaggenau te verplaatsen (op basis van artikelcodes of importdatum).
 
 ## Technische details
 
-### Database migratie
+### Supplier-detectie (`extractSupplierName`)
 
 ```text
-ALTER TABLE product_categories ADD COLUMN supplier_id uuid REFERENCES suppliers(id);
-```
-
-Een index toevoegen voor snelle lookups:
-```text
-CREATE INDEX idx_product_categories_supplier ON product_categories(supplier_id) WHERE supplier_id IS NOT NULL;
-```
-
-### Parser-wijzigingen (`pims-import/index.ts`)
-
-**Nieuwe functie: `parseCatalogGroups`**
-- Leest `CATALOG_GROUP_SYSTEM` uit de XML
-- Bouwt een map van groep-id naar `{ name, parent_id }`
-- Retourneert de hiearchie
-
-**Nieuwe functie: `parseProductGroupMapping`**
-- Leest `ARTICLE_TO_CATALOGGROUP_MAP` per product
-- Koppelt artikel aan groep-id
-
-**Upsert-logica uitbreiden:**
-- Voor elke unieke groep: upsert in `product_categories` met `code = groep-id`, `supplier_id`, en correcte `parent_id`
-- Merk-categorie (bijv. "Bosch") automatisch aanmaken als tussenniveau onder "Apparatuur"
-- Product `category_id` vullen met de leaf-categorie
-
-### PimsProduct interface uitbreiden
-
-```text
-interface PimsProduct {
-  // ... bestaande velden
-  catalog_group_id?: string  // classificatie-groep uit XML
+// Nieuwe strategie 0: CATALOG_NAME uit HEADER
+const catalogName = xmlGetTag(headerBlock, 'CATALOG_NAME')
+if (catalogName) {
+  // Strip generieke woorden: "producten", "products", "catalog"
+  const cleaned = catalogName.replace(/\b(producten|products|catalog(ue)?)\b/gi, '').trim()
+  if (cleaned.length > 2) return cleaned
 }
 ```
 
-### Geen wijzigingen nodig aan
+### Catalog group parser fallbacks
 
-- Frontend: de productlijst/filter pagina gebruikt al `category_id` met de bestaande categorien
-- Andere edge functions
+```text
+function parseCatalogGroups(xmlString: string): CatalogGroup[] {
+  let groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
+  if (!groupSystem) groupSystem = xmlGetTag(xmlString, 'CLASSIFICATION_SYSTEM')
+  if (!groupSystem) {
+    // Debug: log welke top-level tags er zijn
+    console.warn('[pims] No CATALOG_GROUP_SYSTEM or CLASSIFICATION_SYSTEM found')
+    return []
+  }
+  // ... rest met fallback tagnamen
+}
+```
+
+### Bestanden die wijzigen
+
+- `supabase/functions/pims-import/index.ts` -- detectie + parser
+- SQL migratie: Gaggenau leverancier aanmaken + producten corrigeren
 
