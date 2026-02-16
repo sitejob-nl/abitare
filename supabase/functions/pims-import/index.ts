@@ -142,6 +142,47 @@ function extractSupplierName(xml: string): string | null {
   return xmlGetTagFirst(xml, ['PARTY_ID']) || null
 }
 
+// ── ETIM Feature Code Mapping ──
+const ETIM_MAP: Record<string, string> = {
+  'EF000008': 'Breedte (mm)',
+  'EF000040': 'Hoogte (mm)',
+  'EF000049': 'Diepte (mm)',
+  'EF000007': 'Gewicht (kg)',
+  'EF002680': 'Diepte met deur (mm)',
+  'EF008333': 'Inbouw breedte (mm)',
+  'EF008334': 'Inbouw hoogte (mm)',
+  'EF008335': 'Inbouw diepte (mm)',
+  'EF002065': 'Energielabel',
+  'EF004149': 'Bewaartijd bij storing (uur)',
+  'EF007823': 'Scharnier type',
+  'EF000054': 'Kleur',
+  'EF000025': 'Voltage (V)',
+  'EF000587': 'Frequentie (Hz)',
+  'EF000138': 'Vermogen (W)',
+  'EF000104': 'Geluidsniveau (dB)',
+  'EF003262': 'Netto inhoud (l)',
+  'EF003490': 'Netto inhoud vriezer (l)',
+  'EF003489': 'Netto inhoud koeler (l)',
+  'EF000661': 'Energieverbruik (kWh/jaar)',
+  'EF009879': 'Energieklasse',
+  'EF002169': 'Aansluitwaarde (kW)',
+  'EF000585': 'Stroom (A)',
+  'EF010050': 'Breedte nis (mm)',
+  'EF010051': 'Hoogte nis (mm)',
+  'EF010052': 'Diepte nis (mm)',
+}
+
+// ETIM EV-code mapping for enumerated values
+const ETIM_EV_MAP: Record<string, string> = {
+  'EV000154': 'Links',
+  'EV000155': 'Rechts',
+  'EV000019': 'Ja',
+  'EV000020': 'Nee',
+  'EV000073': 'Wit',
+  'EV000072': 'Zwart',
+  'EV000091': 'RVS',
+}
+
 // ── BMEcat XML Parser ──
 function parseBMEcatXml(xmlString: string): PimsProduct[] {
   const products: PimsProduct[] = []
@@ -154,9 +195,17 @@ function parseBMEcatXml(xmlString: string): PimsProduct[] {
     const code = xmlGetTagFirst(block, ['SUPPLIER_AID', 'SUPPLIER_PID', 'PRODUCT_ID'])
     if (!code) continue
 
+    // Clean name: strip article code prefix if present
+    const rawName = xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code
+    const name = rawName.startsWith(code + ',') 
+      ? rawName.slice(code.length + 1).trim() 
+      : rawName.startsWith(code + ' ') 
+        ? rawName.slice(code.length + 1).trim() 
+        : rawName
+
     const product: PimsProduct = {
       article_code: code,
-      name: xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code,
+      name,
       description: xmlGetTagFirst(block, ['DESCRIPTION_LONG']) || undefined,
       ean_code: xmlGetTagFirst(block, ['EAN', 'INTERNATIONAL_PID']) || undefined,
     }
@@ -191,13 +240,21 @@ function parseBMEcatXml(xmlString: string): PimsProduct[] {
       }
     }
 
-    // Parse features/specifications
+    // Parse features/specifications with ETIM translation
     const featureBlocks = xmlGetAllBlocks(block, 'FEATURE')
     const specs: Record<string, unknown> = {}
     for (const feat of featureBlocks) {
       const fname = xmlGetTagFirst(feat, ['FNAME', 'FEATURE_NAME'])
       const fvalue = xmlGetTagFirst(feat, ['FVALUE', 'FEATURE_VALUE'])
-      if (fname && fvalue) specs[fname] = fvalue
+      if (!fname || !fvalue) continue
+      
+      // Translate ETIM code to readable name, skip unknown codes
+      const readableName = ETIM_MAP[fname]
+      if (!readableName) continue // Skip unknown EF-codes
+      
+      // Translate EV-codes to readable values
+      const readableValue = ETIM_EV_MAP[fvalue] || fvalue
+      specs[readableName] = readableValue
     }
     if (Object.keys(specs).length > 0) product.specifications = specs
 
@@ -425,6 +482,15 @@ Deno.serve(async (req) => {
 
     console.log(`[pims] Processing ${products.length} products for supplier ${supplier_id}`)
 
+    // Fetch supplier price_factor for base_price calculation
+    const { data: supplierData } = await supabase
+      .from('suppliers')
+      .select('price_factor')
+      .eq('id', supplier_id)
+      .single()
+    const priceFactor = supplierData?.price_factor || 1.0
+    console.log(`[pims] Supplier price_factor: ${priceFactor}`)
+
     // Fetch existing products for safe upsert
     const existingMap = new Map<string, { id: string; user_override: Record<string, boolean> | null }>()
     let offset = 0
@@ -467,8 +533,32 @@ Deno.serve(async (req) => {
         if (!overrides['description'] && p.description) productData.description = p.description
         if (!overrides['ean_code'] && p.ean_code) productData.ean_code = p.ean_code
         if (!overrides['cost_price'] && p.cost_price) productData.cost_price = p.cost_price
-        if (!overrides['base_price'] && p.base_price) productData.base_price = p.base_price
+        
+        // Calculate base_price: use XML value, or derive from cost_price * price_factor
+        if (!overrides['base_price']) {
+          if (p.base_price) {
+            productData.base_price = p.base_price
+          } else if (p.cost_price && priceFactor > 1.0) {
+            productData.base_price = Math.round(p.cost_price * priceFactor * 100) / 100
+          }
+        }
+        
         if (p.specifications && !overrides['specifications']) productData.specifications = p.specifications
+
+        // Extract dimensions from specifications
+        const specs = p.specifications || {}
+        if (!overrides['width_mm'] && specs['Breedte (mm)']) {
+          const v = parseInt(String(specs['Breedte (mm)']))
+          if (!isNaN(v)) productData.width_mm = v
+        }
+        if (!overrides['height_mm'] && specs['Hoogte (mm)']) {
+          const v = parseInt(String(specs['Hoogte (mm)']))
+          if (!isNaN(v)) productData.height_mm = v
+        }
+        if (!overrides['depth_mm'] && specs['Diepte (mm)']) {
+          const v = parseInt(String(specs['Diepte (mm)']))
+          if (!isNaN(v)) productData.depth_mm = v
+        }
 
         if (!existing) {
           productData.name = p.name
