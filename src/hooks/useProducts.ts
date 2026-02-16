@@ -19,6 +19,35 @@ interface UseProductsOptions {
   priceMin?: number | null;
   priceMax?: number | null;
   showInactive?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+function applyFilters(
+  query: any,
+  opts: Pick<UseProductsOptions, "supplierId" | "categoryId" | "search" | "priceMin" | "priceMax" | "showInactive">
+) {
+  if (!opts.showInactive) {
+    query = query.eq("is_active", true);
+  }
+  if (opts.supplierId && opts.supplierId !== "all") {
+    query = query.eq("supplier_id", opts.supplierId);
+  }
+  if (opts.categoryId && opts.categoryId !== "all") {
+    query = query.eq("category_id", opts.categoryId);
+  }
+  if (opts.search) {
+    query = query.or(
+      `article_code.ilike.%${opts.search}%,name.ilike.%${opts.search}%,sku.ilike.%${opts.search}%`
+    );
+  }
+  if (opts.priceMin !== null && opts.priceMin !== undefined) {
+    query = query.gte("base_price", opts.priceMin);
+  }
+  if (opts.priceMax !== null && opts.priceMax !== undefined) {
+    query = query.lte("base_price", opts.priceMax);
+  }
+  return query;
 }
 
 export function useProducts(options: UseProductsOptions = {}) {
@@ -26,10 +55,13 @@ export function useProducts(options: UseProductsOptions = {}) {
     supplierId, categoryId, search, limit, enabled = true,
     sortField = "name", sortDirection = "asc",
     priceMin, priceMax, showInactive = false,
+    page = 1, pageSize = 50,
   } = options;
 
+  const filterOpts = { supplierId, categoryId, search, priceMin, priceMax, showInactive };
+
   return useQuery({
-    queryKey: ["products", { supplierId, categoryId, search, limit, sortField, sortDirection, priceMin, priceMax, showInactive }],
+    queryKey: ["products", { ...filterOpts, limit, sortField, sortDirection, page, pageSize }],
     queryFn: async () => {
       let query = supabase
         .from("products")
@@ -37,42 +69,23 @@ export function useProducts(options: UseProductsOptions = {}) {
           *,
           supplier:suppliers(id, name, code),
           category:product_categories(id, name, code)
-        `)
+        `, { count: "exact" })
         .order(sortField, { ascending: sortDirection === "asc" });
 
-      if (!showInactive) {
-        query = query.eq("is_active", true);
-      }
-
-      if (supplierId && supplierId !== "all") {
-        query = query.eq("supplier_id", supplierId);
-      }
-
-      if (categoryId && categoryId !== "all") {
-        query = query.eq("category_id", categoryId);
-      }
-
-      if (search) {
-        query = query.or(
-          `article_code.ilike.%${search}%,name.ilike.%${search}%,sku.ilike.%${search}%`
-        );
-      }
-
-      if (priceMin !== null && priceMin !== undefined) {
-        query = query.gte("base_price", priceMin);
-      }
-      if (priceMax !== null && priceMax !== undefined) {
-        query = query.lte("base_price", priceMax);
-      }
+      query = applyFilters(query, filterOpts);
 
       if (limit) {
         query = query.limit(limit);
+      } else {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
       }
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
       if (error) throw error;
-      return data;
+      return { data: data ?? [], count: count ?? 0, page, pageSize };
     },
     enabled,
   });
