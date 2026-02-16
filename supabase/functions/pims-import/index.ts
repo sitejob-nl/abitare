@@ -16,6 +16,13 @@ interface PimsProduct {
   image_urls?: string[]
   cost_price?: number
   base_price?: number
+  catalog_group_id?: string
+}
+
+interface CatalogGroup {
+  id: string
+  name: string
+  parent_id?: string
 }
 
 interface PimsRequest {
@@ -183,9 +190,50 @@ const ETIM_EV_MAP: Record<string, string> = {
   'EV000091': 'RVS',
 }
 
+// ── Catalog Group System Parser ──
+function parseCatalogGroups(xmlString: string): CatalogGroup[] {
+  const groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
+  if (!groupSystem) return []
+
+  const structureBlocks = xmlGetAllBlocks(groupSystem, 'CATALOG_STRUCTURE')
+  const groups: CatalogGroup[] = []
+
+  for (const block of structureBlocks) {
+    const groupId = xmlGetTagFirst(block, ['GROUP_ID', 'CATALOG_GROUP_ID'])
+    const groupName = xmlGetTagFirst(block, ['GROUP_NAME', 'GROUP_DESCRIPTION'])
+    const parentId = xmlGetTagFirst(block, ['PARENT_ID', 'PARENT_GROUP_ID'])
+    if (!groupId || !groupName) continue
+
+    groups.push({
+      id: groupId,
+      name: groupName.trim(),
+      parent_id: parentId && parentId !== '0' && parentId !== '' ? parentId : undefined,
+    })
+  }
+
+  console.log(`[pims] Parsed ${groups.length} catalog groups`)
+  return groups
+}
+
+function parseProductGroupMapping(xmlString: string): Map<string, string> {
+  const mapping = new Map<string, string>()
+  const mapBlocks = xmlGetAllBlocks(xmlString, 'ARTICLE_TO_CATALOGGROUP_MAP')
+  for (const block of mapBlocks) {
+    const articleId = xmlGetTagFirst(block, ['ART_ID', 'SUPPLIER_AID', 'SUPPLIER_PID', 'PRODUCT_ID'])
+    const groupId = xmlGetTagFirst(block, ['CATALOG_GROUP_ID', 'GROUP_ID'])
+    if (articleId && groupId) {
+      mapping.set(articleId, groupId)
+    }
+  }
+  console.log(`[pims] Parsed ${mapping.size} product-to-group mappings`)
+  return mapping
+}
+
 // ── BMEcat XML Parser ──
-function parseBMEcatXml(xmlString: string): PimsProduct[] {
+function parseBMEcatXml(xmlString: string): { products: PimsProduct[]; catalogGroups: CatalogGroup[]; productGroupMap: Map<string, string> } {
   const products: PimsProduct[] = []
+  const catalogGroups = parseCatalogGroups(xmlString)
+  const productGroupMap = parseProductGroupMapping(xmlString)
 
   let articleBlocks = xmlGetAllBlocks(xmlString, 'ARTICLE')
   if (articleBlocks.length === 0) articleBlocks = xmlGetAllBlocks(xmlString, 'PRODUCT')
@@ -208,6 +256,7 @@ function parseBMEcatXml(xmlString: string): PimsProduct[] {
       name,
       description: xmlGetTagFirst(block, ['DESCRIPTION_LONG']) || undefined,
       ean_code: xmlGetTagFirst(block, ['EAN', 'INTERNATIONAL_PID']) || undefined,
+      catalog_group_id: productGroupMap.get(code) || undefined,
     }
 
     // Parse MIME (images)
@@ -261,9 +310,8 @@ function parseBMEcatXml(xmlString: string): PimsProduct[] {
     products.push(product)
   }
 
-  return products
+  return { products, catalogGroups, productGroupMap }
 }
-
 // ── CSV Parser ──
 function parseCsv(csvString: string): PimsProduct[] {
   const lines = csvString.split('\n').map(l => l.trim()).filter(l => l.length > 0)
@@ -374,6 +422,7 @@ Deno.serve(async (req) => {
     let category_id: string | undefined
     let file_name: string | undefined
     let products: PimsProduct[] = []
+    let catalogGroups: CatalogGroup[] = []
 
     if (isRawXml) {
       category_id = url.searchParams.get('category_id') || undefined
@@ -442,9 +491,10 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-
-      products = parseBMEcatXml(xmlText)
-      console.log(`[pims] Parsed ${products.length} products from XML`)
+      const parseResult = parseBMEcatXml(xmlText)
+      products = parseResult.products
+      catalogGroups = parseResult.catalogGroups
+      console.log(`[pims] Parsed ${products.length} products from XML, ${catalogGroups.length} catalog groups`)
     } else {
       const body: PimsRequest = await req.json()
       supplier_id = body.supplier_id
@@ -465,7 +515,9 @@ Deno.serve(async (req) => {
         const text = new TextDecoder().decode(Uint8Array.from(decoded.split('').map(c => c.charCodeAt(0))))
 
         if (body.format === 'bmecat') {
-          products = parseBMEcatXml(text)
+          const parseResult = parseBMEcatXml(text)
+          products = parseResult.products
+          catalogGroups = parseResult.catalogGroups
         } else if (body.format === 'csv') {
           products = parseCsv(text)
         }
@@ -482,14 +534,114 @@ Deno.serve(async (req) => {
 
     console.log(`[pims] Processing ${products.length} products for supplier ${supplier_id}`)
 
-    // Fetch supplier price_factor for base_price calculation
+    // Fetch supplier info
     const { data: supplierData } = await supabase
       .from('suppliers')
-      .select('price_factor')
+      .select('name, price_factor')
       .eq('id', supplier_id)
       .single()
     const priceFactor = supplierData?.price_factor || 1.0
-    console.log(`[pims] Supplier price_factor: ${priceFactor}`)
+    const supplierName = supplierData?.name || 'Unknown'
+    console.log(`[pims] Supplier: ${supplierName}, price_factor: ${priceFactor}`)
+
+    // ── Upsert catalog group hierarchy as product_categories ──
+    const categoryIdMap = new Map<string, string>() // catalog_group_id -> product_categories.id
+    if (catalogGroups.length > 0) {
+      console.log(`[pims] Upserting ${catalogGroups.length} catalog groups for supplier ${supplierName}`)
+
+      // Find or create "Apparatuur" top-level category
+      const { data: apparatuurRow } = await supabase
+        .from('product_categories')
+        .select('id')
+        .eq('code', 'apparatuur')
+        .is('supplier_id', null)
+        .single()
+
+      let apparatuurId = apparatuurRow?.id
+      if (!apparatuurId) {
+        const { data: created } = await supabase
+          .from('product_categories')
+          .insert({ code: 'apparatuur', name: 'Apparatuur', is_active: true })
+          .select('id')
+          .single()
+        apparatuurId = created?.id
+      }
+
+      // Find or create brand-level category (e.g. "Bosch" under "Apparatuur")
+      const brandCode = `brand-${supplier_id}`
+      const { data: brandRow } = await supabase
+        .from('product_categories')
+        .select('id')
+        .eq('code', brandCode)
+        .eq('supplier_id', supplier_id)
+        .single()
+
+      let brandId = brandRow?.id
+      if (!brandId) {
+        const { data: created } = await supabase
+          .from('product_categories')
+          .insert({
+            code: brandCode,
+            name: supplierName,
+            parent_id: apparatuurId || null,
+            supplier_id,
+            is_active: true,
+          })
+          .select('id')
+          .single()
+        brandId = created?.id
+      }
+
+      // Build parent lookup from catalog groups
+      const groupParentMap = new Map<string, string | undefined>()
+      const groupNameMap = new Map<string, string>()
+      for (const g of catalogGroups) {
+        groupParentMap.set(g.id, g.parent_id)
+        groupNameMap.set(g.id, g.name)
+      }
+
+      // Find root groups (no parent or parent not in set) = hoofdgroepen
+      const rootGroupIds = new Set<string>()
+      for (const g of catalogGroups) {
+        if (!g.parent_id || !groupNameMap.has(g.parent_id)) {
+          rootGroupIds.add(g.id)
+        }
+      }
+
+      // Upsert root groups under brand
+      for (const g of catalogGroups) {
+        if (!rootGroupIds.has(g.id)) continue
+        const code = `${supplier_id}-${g.id}`
+        const { data: row } = await supabase
+          .from('product_categories')
+          .upsert(
+            { code, name: g.name, parent_id: brandId, supplier_id, is_active: true },
+            { onConflict: 'code' }
+          )
+          .select('id')
+          .single()
+        if (row) categoryIdMap.set(g.id, row.id)
+      }
+
+      // Upsert child groups under their parent
+      for (const g of catalogGroups) {
+        if (rootGroupIds.has(g.id)) continue
+        const parentDbId = g.parent_id ? categoryIdMap.get(g.parent_id) : brandId
+        if (!parentDbId) continue
+        const code = `${supplier_id}-${g.id}`
+        const { data: row } = await supabase
+          .from('product_categories')
+          .upsert(
+            { code, name: g.name, parent_id: parentDbId, supplier_id, is_active: true },
+            { onConflict: 'code' }
+          )
+          .select('id')
+          .single()
+        if (row) categoryIdMap.set(g.id, row.id)
+      }
+
+      console.log(`[pims] Upserted ${categoryIdMap.size} categories`)
+    }
 
     // Fetch existing products for safe upsert
     const existingMap = new Map<string, { id: string; user_override: Record<string, boolean> | null }>()
@@ -524,7 +676,7 @@ Deno.serve(async (req) => {
         const productData: Record<string, unknown> = {
           article_code: p.article_code,
           supplier_id,
-          category_id: category_id || null,
+          category_id: (p.catalog_group_id && categoryIdMap.get(p.catalog_group_id)) || category_id || null,
           is_active: true,
           pims_last_synced: new Date().toISOString(),
         }
