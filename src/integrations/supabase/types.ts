@@ -1531,6 +1531,7 @@ export type Database = {
           name: string
           parent_id: string | null
           sort_order: number | null
+          supplier_id: string | null
         }
         Insert: {
           code: string
@@ -1539,6 +1540,7 @@ export type Database = {
           name: string
           parent_id?: string | null
           sort_order?: number | null
+          supplier_id?: string | null
         }
         Update: {
           code?: string
@@ -1547,6 +1549,7 @@ export type Database = {
           name?: string
           parent_id?: string | null
           sort_order?: number | null
+          supplier_id?: string | null
         }
         Relationships: [
           {
@@ -1554,6 +1557,13 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_categories_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
