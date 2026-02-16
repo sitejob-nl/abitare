@@ -1309,6 +1309,63 @@ export type Database = {
           },
         ]
       }
+      pims_image_queue: {
+        Row: {
+          article_code: string
+          batch_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          image_index: number
+          image_url: string
+          processed_at: string | null
+          product_id: string
+          status: string
+          supplier_id: string
+        }
+        Insert: {
+          article_code: string
+          batch_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_index?: number
+          image_url: string
+          processed_at?: string | null
+          product_id: string
+          status?: string
+          supplier_id: string
+        }
+        Update: {
+          article_code?: string
+          batch_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_index?: number
+          image_url?: string
+          processed_at?: string | null
+          product_id?: string
+          status?: string
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pims_image_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pims_image_queue_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plinth_options: {
         Row: {
           code: string

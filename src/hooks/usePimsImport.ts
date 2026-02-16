@@ -8,8 +8,9 @@ interface PimsImportResult {
   inserted: number;
   updated: number;
   total: number;
-  images_downloaded: number;
-  image_errors: number;
+  images_downloaded?: number;
+  images_queued?: number;
+  image_errors?: number;
   errors?: string[];
 }
 
@@ -65,7 +66,7 @@ export function usePimsImport() {
       setProgress('');
       toast({
         title: 'PIMS import geslaagd',
-        description: `${data.inserted} nieuw, ${data.updated} bijgewerkt, ${data.images_downloaded} afbeeldingen.`,
+        description: `${data.inserted} nieuw, ${data.updated} bijgewerkt, ${data.images_queued || data.images_downloaded || 0} afbeeldingen in wachtrij.`,
       });
     },
     onError: (error: Error) => {

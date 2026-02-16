@@ -299,7 +299,7 @@ export function PimsImportTab() {
                 <div className="text-sm text-muted-foreground">Bijgewerkt</div>
               </div>
               <div className="text-center p-4 bg-muted rounded-lg">
-                <div className="text-3xl font-bold text-primary">{importResult.images_downloaded}</div>
+                <div className="text-3xl font-bold text-primary">{importResult.images_queued || importResult.images_downloaded || 0}</div>
                 <div className="text-sm text-muted-foreground">Afbeeldingen</div>
               </div>
               <div className="text-center p-4 bg-muted rounded-lg">
@@ -308,7 +308,16 @@ export function PimsImportTab() {
               </div>
             </div>
 
-            {importResult.image_errors > 0 && (
+            {(importResult.images_queued || 0) > 0 && (
+              <Alert>
+                <Image className="h-4 w-4" />
+                <AlertDescription>
+                  {importResult.images_queued} afbeelding(en) worden op de achtergrond gedownload en verwerkt. Dit kan enkele minuten duren.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {(importResult.image_errors || 0) > 0 && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
