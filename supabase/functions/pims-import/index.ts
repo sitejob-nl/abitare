@@ -3,8 +3,8 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 // ============================================================
 // PIMS Import Edge Function - Phase 1: Parse & Upsert
-// Accepts BMEcat XML or CSV, upserts products, queues images
-// for background processing by pims-process-images
+// Accepts BMEcat XML, TradePI XML, or CSV
+// Upserts products, queues images for background processing
 // ============================================================
 
 interface PimsProduct {
@@ -17,6 +17,43 @@ interface PimsProduct {
   cost_price?: number
   base_price?: number
   catalog_group_id?: string
+  // TradePI enrichment fields
+  retail_price?: number
+  product_family?: string
+  product_series?: string
+  product_status?: string
+  height_mm?: number
+  width_mm?: number
+  depth_mm?: number
+  depth_open_door_mm?: number
+  weight_net_kg?: number
+  weight_gross_kg?: number
+  niche_height_min_mm?: number
+  niche_height_max_mm?: number
+  niche_width_min_mm?: number
+  niche_width_max_mm?: number
+  niche_depth_mm?: number
+  energy_class?: string
+  energy_consumption_kwh?: number
+  water_consumption_l?: number
+  noise_db?: number
+  noise_class?: string
+  construction_type?: string
+  installation_type?: string
+  connection_power_w?: number
+  voltage_v?: number
+  current_a?: number
+  color_main?: string
+  color_basic?: string
+  datasheet_url?: string
+  // Media with types
+  media_items?: MediaItem[]
+}
+
+interface MediaItem {
+  url: string
+  media_type: string // photo, dimension_drawing, energy_label, datasheet, 3d_model
+  sort_order: number
 }
 
 interface CatalogGroup {
@@ -28,7 +65,7 @@ interface CatalogGroup {
 interface PimsRequest {
   supplier_id: string
   category_id?: string
-  format?: 'bmecat' | 'csv'
+  format?: 'bmecat' | 'csv' | 'tradepi'
   file_content?: string // base64
   file_name?: string
   products?: PimsProduct[]
@@ -36,7 +73,6 @@ interface PimsRequest {
 
 // ── Regex-based XML helpers (namespace-tolerant) ──
 function xmlGetTag(xml: string, tagName: string): string | null {
-  // Match tags with optional namespace prefix: <ns:TAG> or <TAG>
   const re = new RegExp(`<(?:\\w+:)?${tagName}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tagName}>`, 'i')
   const m = xml.match(re)
   return m ? m[1].trim() : null
@@ -124,20 +160,28 @@ async function unzipFirstXml(zipBytes: Uint8Array): Promise<string> {
 }
 
 // Extract supplier name with multiple fallback strategies
-// Returns an array of candidate names (most specific first) for matching
 function extractSupplierNames(xml: string): string[] {
   const candidates: string[] = []
 
-  // Strategy 0 (highest priority): CATALOG_NAME from HEADER
-  // This distinguishes e.g. "Gaggenau producten" from a shared sender like "BSH"
+  // Strategy 0: CATALOG_NAME from HEADER (BMEcat)
   const headerBlock = xmlGetTag(xml, 'HEADER')
   if (headerBlock) {
     const catalogName = xmlGetTag(headerBlock, 'CATALOG_NAME')
     if (catalogName) {
-      // Strip generic words for better matching
       const cleaned = catalogName.replace(/\b(producten|products|catalog(ue)?|prijslijst|price\s?list)\b/gi, '').trim()
       if (cleaned.length > 2) candidates.push(cleaned)
-      candidates.push(catalogName) // also try full name
+      candidates.push(catalogName)
+    }
+  }
+
+  // Strategy 0b: TradePI CatalogName
+  const tradePiHeader = xmlGetTag(xml, 'CatalogDownloadReplyHeader')
+  if (tradePiHeader) {
+    const catName = xmlGetTag(tradePiHeader, 'CatalogName')
+    if (catName) {
+      const cleaned = catName.replace(/\b(producten|products|catalog(ue)?|prijslijst|price\s?list)\b/gi, '').trim()
+      if (cleaned.length > 2) candidates.push(cleaned)
+      candidates.push(catName)
     }
   }
 
@@ -145,7 +189,7 @@ function extractSupplierNames(xml: string): string[] {
   const directName = xmlGetTagFirst(xml, ['SUPPLIER_NAME', 'SUPPLIER_ID'])
   if (directName) candidates.push(directName)
 
-  // Strategy 2: Look inside <SUPPLIER> or <HEADER> block
+  // Strategy 2: Inside <SUPPLIER> or <HEADER> block
   const supplierBlock = xmlGetTag(xml, 'SUPPLIER') || headerBlock
   if (supplierBlock) {
     const blockName = xmlGetTagFirst(supplierBlock, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'NAME'])
@@ -169,7 +213,7 @@ function extractSupplierNames(xml: string): string[] {
   return candidates
 }
 
-// Legacy wrapper - returns first candidate
+// Legacy wrapper
 function extractSupplierName(xml: string): string | null {
   const names = extractSupplierNames(xml)
   return names.length > 0 ? names[0] : null
@@ -205,7 +249,6 @@ const ETIM_MAP: Record<string, string> = {
   'EF010052': 'Diepte nis (mm)',
 }
 
-// ETIM EV-code mapping for enumerated values
 const ETIM_EV_MAP: Record<string, string> = {
   'EV000154': 'Links',
   'EV000155': 'Rechts',
@@ -216,9 +259,8 @@ const ETIM_EV_MAP: Record<string, string> = {
   'EV000091': 'RVS',
 }
 
-// ── Catalog Group System Parser (with fallback tag support) ──
+// ── Catalog Group System Parser ──
 function parseCatalogGroups(xmlString: string): CatalogGroup[] {
-  // Try primary tag first, then fallbacks for different XML schemas
   let groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
   let structureTag = 'CATALOG_STRUCTURE'
   let idTag = ['GROUP_ID', 'CATALOG_GROUP_ID']
@@ -226,7 +268,6 @@ function parseCatalogGroups(xmlString: string): CatalogGroup[] {
   let parentTag = ['PARENT_ID', 'PARENT_GROUP_ID']
 
   if (!groupSystem) {
-    // Fallback: CLASSIFICATION_SYSTEM (used by some manufacturers like Gaggenau)
     groupSystem = xmlGetTag(xmlString, 'CLASSIFICATION_SYSTEM')
     if (groupSystem) {
       structureTag = 'CLASSIFICATION_GROUP'
@@ -238,7 +279,6 @@ function parseCatalogGroups(xmlString: string): CatalogGroup[] {
   }
 
   if (!groupSystem) {
-    // Debug: log which top-level tags exist to help diagnose future issues
     const topTags = ['CATALOG_GROUP_SYSTEM', 'CLASSIFICATION_SYSTEM', 'CATALOG_STRUCTURE', 
                      'T_NEW_CATALOG', 'HEADER', 'ARTICLE', 'PRODUCT']
     const found = topTags.filter(t => xmlGetTag(xmlString, t) !== null)
@@ -246,7 +286,6 @@ function parseCatalogGroups(xmlString: string): CatalogGroup[] {
     return []
   }
 
-  // Try primary structure tag, then fallback alternatives
   let structureBlocks = xmlGetAllBlocks(groupSystem, structureTag)
   if (structureBlocks.length === 0 && structureTag === 'CLASSIFICATION_GROUP') {
     structureBlocks = xmlGetAllBlocks(groupSystem, 'CLASSIFICATION')
@@ -302,7 +341,6 @@ function parseBMEcatXml(xmlString: string): { products: PimsProduct[]; catalogGr
     const code = xmlGetTagFirst(block, ['SUPPLIER_AID', 'SUPPLIER_PID', 'PRODUCT_ID'])
     if (!code) continue
 
-    // Clean name: strip article code prefix if present
     const rawName = xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code
     const name = rawName.startsWith(code + ',') 
       ? rawName.slice(code.length + 1).trim() 
@@ -356,11 +394,9 @@ function parseBMEcatXml(xmlString: string): { products: PimsProduct[]; catalogGr
       const fvalue = xmlGetTagFirst(feat, ['FVALUE', 'FEATURE_VALUE'])
       if (!fname || !fvalue) continue
       
-      // Translate ETIM code to readable name, skip unknown codes
       const readableName = ETIM_MAP[fname]
-      if (!readableName) continue // Skip unknown EF-codes
+      if (!readableName) continue
       
-      // Translate EV-codes to readable values
       const readableValue = ETIM_EV_MAP[fvalue] || fvalue
       specs[readableName] = readableValue
     }
@@ -371,6 +407,330 @@ function parseBMEcatXml(xmlString: string): { products: PimsProduct[]; catalogGr
 
   return { products, catalogGroups, productGroupMap }
 }
+
+// ══════════════════════════════════════════════════════════════
+// TradePI XML Parser (Tradeplace Product Information)
+// Based on Python TradeplaceParser - handles Miele, BSH, etc.
+// ══════════════════════════════════════════════════════════════
+
+const TRADEPI_PROPERTY_MAPPING: Record<string, string> = {
+  // Description
+  'CODE': 'name',
+  'SHORT_DESCRIPTION': 'short_description',
+  'LONG_DESCRIPTION': 'long_description',
+  'FAMILY': 'product_family',
+  'PRODUCT_SERIES': 'product_series',
+  // Dimensions
+  'HEIGHT': 'height_mm',
+  'WIDTH': 'width_mm',
+  'DEPTH': 'depth_mm',
+  'DEPTH_OPEN_DOOR': 'depth_open_door_mm',
+  'WEIGHT_NET': 'weight_net_kg',
+  'WEIGHT_GROSS': 'weight_gross_kg',
+  // Niche
+  'HEIGHT_NICHE_SIZE_MIN': 'niche_height_min_mm',
+  'HEIGHT_NICHE_SIZE_MAX': 'niche_height_max_mm',
+  'WIDTH_NICHE_SIZE_MIN': 'niche_width_min_mm',
+  'WIDTH_NICHE_SIZE_MAX': 'niche_width_max_mm',
+  'DEPTH_NICHE_SIZE': 'niche_depth_mm',
+  // Energy
+  'ENERGY_CLASS_2017': 'energy_class',
+  'EPEC_DISH_2017': 'energy_consumption_kwh',
+  'WATER_CONS_ECO_2017': 'water_consumption_l',
+  'NOISE_2017': 'noise_db',
+  'NOISE_CLASS_2017': 'noise_class',
+  // Installation
+  'CONSTR_TYPE': 'construction_type',
+  'INST_TYPE': 'installation_type',
+  'CONNECTION': 'connection_power_w',
+  'VOLTAGE': 'voltage_v',
+  'CURRENT': 'current_a',
+  // Color
+  'COL_MAIN': 'color_main',
+  'COL_BASIC': 'color_basic',
+}
+
+const TRADEPI_INT_FIELDS = new Set([
+  'height_mm', 'width_mm', 'depth_mm', 'depth_open_door_mm',
+  'niche_height_min_mm', 'niche_height_max_mm',
+  'niche_width_min_mm', 'niche_width_max_mm', 'niche_depth_mm',
+  'noise_db', 'connection_power_w', 'voltage_v', 'current_a',
+])
+
+const TRADEPI_FLOAT_FIELDS = new Set([
+  'weight_net_kg', 'weight_gross_kg',
+  'energy_consumption_kwh', 'water_consumption_l',
+])
+
+function convertTradepiValue(fieldName: string, value: string): number | string | null {
+  if (!value || value.trim() === '') return null
+  value = value.trim()
+
+  if (TRADEPI_INT_FIELDS.has(fieldName)) {
+    const n = parseInt(String(parseFloat(value.replace(',', '.'))))
+    return isNaN(n) ? null : n
+  }
+  if (TRADEPI_FLOAT_FIELDS.has(fieldName)) {
+    const n = parseFloat(value.replace(',', '.'))
+    return isNaN(n) ? null : n
+  }
+  return value
+}
+
+function parseTradepiPrice(otherData: string): number | undefined {
+  const rrpBlock = xmlGetTag(otherData, 'RecommendedRetailPrice')
+  if (!rrpBlock) return undefined
+
+  const amountStr = xmlGetTag(rrpBlock, 'Amount')
+  const decimalsStr = xmlGetTag(rrpBlock, 'NumberOfDecimal')
+  if (!amountStr) return undefined
+
+  const amount = parseInt(amountStr)
+  const decimals = parseInt(decimalsStr || '2')
+  if (isNaN(amount)) return undefined
+
+  // Convert to actual price: e.g. 141900 with 2 decimals = €1419.00
+  return amount / Math.pow(10, decimals)
+}
+
+function parseTradepiDate(container: string, tagName: string): string | undefined {
+  const dateBlock = xmlGetTag(container, tagName)
+  if (!dateBlock) return undefined
+
+  const year = xmlGetTag(dateBlock, 'Year')
+  const month = (xmlGetTag(dateBlock, 'Month') || '').padStart(2, '0')
+  const day = (xmlGetTag(dateBlock, 'Day') || '').padStart(2, '0')
+  if (!year) return undefined
+  return `${year}-${month}-${day}`
+}
+
+function parseTradePlaceCatalog(xmlString: string): { products: PimsProduct[]; familyCodes: Set<string> } {
+  const products: PimsProduct[] = []
+  const familyCodes = new Set<string>()
+
+  // Parse metadata
+  const header = xmlGetTag(xmlString, 'CatalogDownloadReplyHeader')
+  if (header) {
+    const catName = xmlGetTag(header, 'CatalogName')
+    const catDate = parseTradepiDate(header, 'CatalogCreationDate')
+    console.log(`[tradepi] Catalog: ${catName}, Date: ${catDate}`)
+  }
+
+  const productBlocks = xmlGetAllBlocks(xmlString, 'Product')
+  console.log(`[tradepi] Found ${productBlocks.length} Product blocks`)
+
+  for (const productXml of productBlocks) {
+    try {
+      const piData = xmlGetTag(productXml, 'PIData')
+      if (!piData) continue
+
+      const articleCode = xmlGetTag(piData, 'ProductCode') || ''
+      if (!articleCode) continue
+
+      const eanCode = xmlGetTag(piData, 'EANArticleCode') || undefined
+      const familyName = xmlGetAttr(piData, 'ProductFamily', 'familyName') || ''
+      if (familyName) familyCodes.add(familyName)
+
+      const product: PimsProduct = {
+        article_code: articleCode,
+        ean_code: eanCode,
+        name: articleCode, // fallback, overridden by CODE/SHORT_DESCRIPTION property
+        catalog_group_id: familyName || undefined,
+        media_items: [],
+      }
+
+      const specs: Record<string, unknown> = {}
+      const usps: string[] = []
+
+      // Parse PIProperty elements
+      const propRe = /<PIProperty\s+name="([^"]*)"(?:\s+description="([^"]*)")?[^>]*>([\s\S]*?)<\/PIProperty>/gi
+      let propMatch: RegExpExecArray | null
+      while ((propMatch = propRe.exec(piData)) !== null) {
+        const propName = propMatch[1]
+        const propDesc = propMatch[2] || propName
+        const propValue = propMatch[3].trim()
+
+        // USPs
+        if (propName.startsWith('USP_')) {
+          if (propValue) usps.push(propValue)
+          continue
+        }
+
+        // Media properties
+        if (propName === 'PRODUCT_IMAGE' && propValue) {
+          product.media_items!.unshift({ url: propValue, media_type: 'photo', sort_order: 0 })
+          continue
+        }
+        if (propName === 'MEASURE_IMAGE' && propValue) {
+          product.media_items!.push({ url: propValue, media_type: 'dimension_drawing', sort_order: 50 })
+          continue
+        }
+        if (propName === 'PANEL_IMAGE' && propValue) {
+          product.media_items!.push({ url: propValue, media_type: 'photo', sort_order: 10 })
+          continue
+        }
+        if (propName === 'ENERGY_LABEL' && propValue) {
+          product.media_items!.push({ url: propValue, media_type: 'energy_label', sort_order: 60 })
+          continue
+        }
+        if (propName === 'PRODUCT_FICHE' && propValue) {
+          product.datasheet_url = propValue
+          product.media_items!.push({ url: propValue, media_type: 'datasheet', sort_order: 70 })
+          continue
+        }
+        if (propName.startsWith('ADD_IMAGE') && propValue) {
+          product.media_items!.push({ url: propValue, media_type: 'photo', sort_order: 20 })
+          continue
+        }
+
+        // Mapped fields
+        if (propName in TRADEPI_PROPERTY_MAPPING) {
+          const fieldName = TRADEPI_PROPERTY_MAPPING[propName]
+          const converted = convertTradepiValue(fieldName, propValue)
+          if (converted !== null) {
+            if (fieldName === 'name' || fieldName === 'short_description' || fieldName === 'long_description') {
+              if (fieldName === 'name') product.name = String(converted)
+              else if (fieldName === 'short_description') product.description = String(converted)
+              // long_description appended to description
+              else if (fieldName === 'long_description' && converted) {
+                product.description = product.description 
+                  ? `${product.description}\n\n${converted}` 
+                  : String(converted)
+              }
+            } else {
+              (product as any)[fieldName] = converted
+            }
+          }
+          continue
+        }
+
+        // Store as specification
+        if (propValue) {
+          specs[propDesc] = propValue
+        }
+      }
+
+      // Store USPs in specs
+      if (usps.length > 0) specs['USPs'] = usps
+
+      if (Object.keys(specs).length > 0) product.specifications = specs
+
+      // Parse OtherData: prices, dates, assets
+      const otherData = xmlGetTag(productXml, 'OtherData')
+      if (otherData) {
+        // Price
+        const price = parseTradepiPrice(otherData)
+        if (price) product.retail_price = price
+
+        // Status
+        const status = xmlGetTag(otherData, 'ProductStatus')
+        if (status) product.product_status = status
+
+        // Assets (additional media)
+        const assetRe = /<Asset\s+source="([^"]*)"[^>]*>([\s\S]*?)<\/Asset>/gi
+        let assetMatch: RegExpExecArray | null
+        while ((assetMatch = assetRe.exec(otherData)) !== null) {
+          const assetUrl = assetMatch[1]
+          const assetBody = assetMatch[2]
+
+          // Extract AssetProperty elements
+          const assetProps: Record<string, string> = {}
+          const apRe = /<AssetProperty\s+name="([^"]*)"[^>]*>([\s\S]*?)<\/AssetProperty>/gi
+          let apMatch: RegExpExecArray | null
+          while ((apMatch = apRe.exec(assetBody)) !== null) {
+            assetProps[apMatch[1]] = apMatch[2].trim()
+          }
+
+          const format = (assetProps['format'] || '').toLowerCase()
+          const subject = (assetProps['subject'] || '').toLowerCase()
+          const purpose = (assetProps['purpose'] || '').toLowerCase()
+
+          let mediaType = 'photo'
+          let sortOrder = 30
+
+          if (format.includes('image')) {
+            if (subject.includes('installation') || subject.includes('diagram')) {
+              mediaType = 'dimension_drawing'
+              sortOrder = 51
+            } else if (subject.includes('energy')) {
+              mediaType = 'energy_label'
+              sortOrder = 61
+            } else if (purpose.includes('main')) {
+              sortOrder = 1
+            }
+          } else if (format.includes('pdf')) {
+            if (subject.includes('energy')) {
+              mediaType = 'energy_label'
+              sortOrder = 62
+            } else if (subject.includes('data sheet') || subject.includes('fiche')) {
+              mediaType = 'datasheet'
+              sortOrder = 71
+              if (!product.datasheet_url) product.datasheet_url = assetUrl
+            } else {
+              mediaType = 'datasheet'
+              sortOrder = 72
+            }
+          } else if (format.includes('zip')) {
+            mediaType = '3d_model'
+            sortOrder = 80
+          }
+
+          product.media_items!.push({ url: assetUrl, media_type: mediaType, sort_order: sortOrder })
+        }
+      }
+
+      // Parse UnitOfMeasures as fallback for dimensions
+      const unitsBlock = xmlGetTag(productXml, 'UnitOfMeasures')
+      if (unitsBlock) {
+        // Find PCE type unit
+        const uomBlocks = xmlGetAllBlocks(unitsBlock, 'UnitOfMeasure')
+        for (const uom of uomBlocks) {
+          if (!uom.includes('type="PCE"')) continue
+          const uomPropRe = /<UnitOfMeasureProperty\s+name="([^"]*)"[^>]*>([\s\S]*?)<\/UnitOfMeasureProperty>/gi
+          let uomMatch: RegExpExecArray | null
+          while ((uomMatch = uomPropRe.exec(uom)) !== null) {
+            const uomName = uomMatch[1]
+            const uomValue = uomMatch[2].trim()
+            const fieldMapping: Record<string, string> = {
+              'HEIGHT': 'height_mm',
+              'WIDTH': 'width_mm',
+              'DEPTH': 'depth_mm',
+              'WEIGHT_NET': 'weight_net_kg',
+              'WEIGHT_GROSS': 'weight_gross_kg',
+            }
+            if (uomName in fieldMapping) {
+              const field = fieldMapping[uomName]
+              if ((product as any)[field] == null) {
+                (product as any)[field] = convertTradepiValue(field, uomValue)
+              }
+            }
+          }
+        }
+      }
+
+      // Fallback name
+      if (product.name === articleCode && product.description) {
+        product.name = product.description.split('\n')[0].substring(0, 200)
+      }
+
+      // Convert media_items to image_urls for backward compat (photos only)
+      const photoUrls = (product.media_items || [])
+        .filter(m => m.media_type === 'photo')
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map(m => m.url)
+      if (photoUrls.length > 0) product.image_urls = photoUrls
+
+      products.push(product)
+    } catch (e) {
+      console.warn(`[tradepi] Error parsing product:`, e)
+      continue
+    }
+  }
+
+  console.log(`[tradepi] Parsed ${products.length} products, ${familyCodes.size} families`)
+  return { products, familyCodes }
+}
+
 // ── CSV Parser ──
 function parseCsv(csvString: string): PimsProduct[] {
   const lines = csvString.split('\n').map(l => l.trim()).filter(l => l.length > 0)
@@ -440,6 +800,15 @@ function findCol(headers: string[], patterns: string[]): number {
   return -1
 }
 
+// ── Format auto-detection ──
+function detectXmlFormat(xml: string): 'tradepi' | 'bmecat' {
+  // TradePI: has <Product> with <PIData> children
+  if (xml.includes('<PIData>') || xml.includes('<CatalogDownloadReply')) {
+    return 'tradepi'
+  }
+  return 'bmecat'
+}
+
 // ── Main handler ──
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -482,6 +851,8 @@ Deno.serve(async (req) => {
     let file_name: string | undefined
     let products: PimsProduct[] = []
     let catalogGroups: CatalogGroup[] = []
+    let tradepiFamilyCodes = new Set<string>()
+    let isTradepi = false
 
     if (isRawXml) {
       category_id = url.searchParams.get('category_id') || undefined
@@ -500,6 +871,10 @@ Deno.serve(async (req) => {
         console.log(`[pims] Received raw XML (${xmlText.length} chars), first 500: ${xmlText.substring(0, 500)}`)
       }
 
+      // Auto-detect format
+      const detectedFormat = detectXmlFormat(xmlText)
+      console.log(`[pims] Auto-detected format: ${detectedFormat}`)
+
       const xmlSupplierNames = extractSupplierNames(xmlText)
       const xmlSupplierName = xmlSupplierNames.length > 0 ? xmlSupplierNames[0] : null
       const qsSupplierId = url.searchParams.get('supplier_id')
@@ -517,7 +892,6 @@ Deno.serve(async (req) => {
 
         console.log(`[pims] Active suppliers in DB: ${(suppliers || []).map((s: any) => `${s.name} (${s.code}) aliases=${(s.pims_aliases || []).join(',')}`).join('; ')}`)
 
-        // Try each candidate name in priority order (most specific first)
         let match: any = null
         let matchedCandidate = ''
         for (const candidate of xmlSupplierNames) {
@@ -543,7 +917,7 @@ Deno.serve(async (req) => {
           supplier_id = match.id
           console.log(`[pims] Matched supplier: ${match.name} (${match.id}) via candidate "${matchedCandidate}"`)
         } else {
-          console.error(`[pims] No supplier match for candidates ${JSON.stringify(xmlSupplierNames)}. Available: ${(suppliers || []).map((s: any) => s.name).join(', ')}`)
+          console.error(`[pims] No supplier match for candidates ${JSON.stringify(xmlSupplierNames)}`)
           const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_names: xmlSupplierNames, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code })) } : undefined
           return new Response(
             JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.`, debug: debugInfo }),
@@ -552,16 +926,24 @@ Deno.serve(async (req) => {
         }
       } else {
         console.error(`[pims] No supplier found in XML. First 500 chars: ${xmlText.substring(0, 500)}`)
-        const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), tags_found: { SUPPLIER_NAME: !!xmlGetTag(xmlText, 'SUPPLIER_NAME'), HEADER: !!xmlGetTag(xmlText, 'HEADER'), PARTY: xmlGetAllBlocks(xmlText, 'PARTY').length } } : undefined
+        const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500) } : undefined
         return new Response(
           JSON.stringify({ error: 'Geen leverancier gevonden in XML en geen supplier_id meegegeven.', debug: debugInfo }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      const parseResult = parseBMEcatXml(xmlText)
-      products = parseResult.products
-      catalogGroups = parseResult.catalogGroups
-      console.log(`[pims] Parsed ${products.length} products from XML, ${catalogGroups.length} catalog groups`)
+
+      if (detectedFormat === 'tradepi') {
+        isTradepi = true
+        const result = parseTradePlaceCatalog(xmlText)
+        products = result.products
+        tradepiFamilyCodes = result.familyCodes
+      } else {
+        const parseResult = parseBMEcatXml(xmlText)
+        products = parseResult.products
+        catalogGroups = parseResult.catalogGroups
+      }
+      console.log(`[pims] Parsed ${products.length} products from ${detectedFormat} XML`)
     } else {
       const body: PimsRequest = await req.json()
       supplier_id = body.supplier_id
@@ -581,7 +963,17 @@ Deno.serve(async (req) => {
         const decoded = atob(body.file_content)
         const text = new TextDecoder().decode(Uint8Array.from(decoded.split('').map(c => c.charCodeAt(0))))
 
-        if (body.format === 'bmecat') {
+        // Auto-detect XML format within uploaded files
+        const detectedFormat = body.format === 'bmecat' || body.format === 'tradepi'
+          ? detectXmlFormat(text)
+          : body.format
+
+        if (detectedFormat === 'tradepi') {
+          isTradepi = true
+          const result = parseTradePlaceCatalog(text)
+          products = result.products
+          tradepiFamilyCodes = result.familyCodes
+        } else if (detectedFormat === 'bmecat' || body.format === 'bmecat') {
           const parseResult = parseBMEcatXml(text)
           products = parseResult.products
           catalogGroups = parseResult.catalogGroups
@@ -611,13 +1003,91 @@ Deno.serve(async (req) => {
     const supplierName = supplierData?.name || 'Unknown'
     console.log(`[pims] Supplier: ${supplierName}, price_factor: ${priceFactor}`)
 
-    // ── Upsert catalog group hierarchy as product_categories ──
-    const categoryIdMap = new Map<string, string>() // catalog_group_id -> product_categories.id
+    // ── Category mapping for TradePI families ──
+    const familyCategoryMap = new Map<string, string>() // familyName -> product_categories.id
+    if (isTradepi && tradepiFamilyCodes.size > 0) {
+      console.log(`[tradepi] Mapping ${tradepiFamilyCodes.size} families to categories`)
+
+      // Fetch existing seeded categories
+      const { data: existingCats } = await supabase
+        .from('product_categories')
+        .select('id, code')
+        .in('code', Array.from(tradepiFamilyCodes))
+
+      for (const cat of existingCats || []) {
+        familyCategoryMap.set(cat.code, cat.id)
+      }
+
+      // Create missing families under brand category
+      const missingFamilies = Array.from(tradepiFamilyCodes).filter(f => !familyCategoryMap.has(f))
+      if (missingFamilies.length > 0) {
+        // Find or create brand category
+        const brandCode = `brand-${supplier_id}`
+        let { data: brandRow } = await supabase
+          .from('product_categories')
+          .select('id')
+          .eq('code', brandCode)
+          .eq('supplier_id', supplier_id)
+          .single()
+
+        if (!brandRow) {
+          // Ensure "Apparatuur" parent exists
+          let { data: apparatuurRow } = await supabase
+            .from('product_categories')
+            .select('id')
+            .eq('code', 'apparatuur')
+            .is('supplier_id', null)
+            .single()
+
+          if (!apparatuurRow) {
+            const { data: created } = await supabase
+              .from('product_categories')
+              .insert({ code: 'apparatuur', name: 'Apparatuur', is_active: true })
+              .select('id')
+              .single()
+            apparatuurRow = created
+          }
+
+          const { data: created } = await supabase
+            .from('product_categories')
+            .insert({
+              code: brandCode,
+              name: supplierName,
+              parent_id: apparatuurRow?.id || null,
+              supplier_id,
+              is_active: true,
+            })
+            .select('id')
+            .single()
+          brandRow = created
+        }
+
+        for (const familyCode of missingFamilies) {
+          const code = `${supplier_id}-${familyCode}`
+          const { data: row } = await supabase
+            .from('product_categories')
+            .upsert({
+              code,
+              name: familyCode.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+              parent_id: brandRow?.id || null,
+              supplier_id,
+              is_active: true,
+            }, { onConflict: 'code' })
+            .select('id')
+            .single()
+          if (row) familyCategoryMap.set(familyCode, row.id)
+        }
+      }
+
+      console.log(`[tradepi] Mapped ${familyCategoryMap.size} families to categories`)
+    }
+
+    // ── Upsert catalog group hierarchy as product_categories (BMEcat) ──
+    const categoryIdMap = new Map<string, string>()
     if (catalogGroups.length > 0) {
       console.log(`[pims] Upserting ${catalogGroups.length} catalog groups for supplier ${supplierName}`)
 
-      // Find or create "Apparatuur" top-level category
-      const { data: apparatuurRow } = await supabase
+      let { data: apparatuurRow } = await supabase
         .from('product_categories')
         .select('id')
         .eq('code', 'apparatuur')
@@ -634,9 +1104,8 @@ Deno.serve(async (req) => {
         apparatuurId = created?.id
       }
 
-      // Find or create brand-level category (e.g. "Bosch" under "Apparatuur")
       const brandCode = `brand-${supplier_id}`
-      const { data: brandRow } = await supabase
+      let { data: brandRow } = await supabase
         .from('product_categories')
         .select('id')
         .eq('code', brandCode)
@@ -659,7 +1128,6 @@ Deno.serve(async (req) => {
         brandId = created?.id
       }
 
-      // Build parent lookup from catalog groups
       const groupParentMap = new Map<string, string | undefined>()
       const groupNameMap = new Map<string, string>()
       for (const g of catalogGroups) {
@@ -667,7 +1135,6 @@ Deno.serve(async (req) => {
         groupNameMap.set(g.id, g.name)
       }
 
-      // Find root groups (no parent or parent not in set) = hoofdgroepen
       const rootGroupIds = new Set<string>()
       for (const g of catalogGroups) {
         if (!g.parent_id || !groupNameMap.has(g.parent_id)) {
@@ -675,7 +1142,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Upsert root groups under brand
       for (const g of catalogGroups) {
         if (!rootGroupIds.has(g.id)) continue
         const code = `${supplier_id}-${g.id}`
@@ -690,7 +1156,6 @@ Deno.serve(async (req) => {
         if (row) categoryIdMap.set(g.id, row.id)
       }
 
-      // Multi-pass: upsert child groups level by level until all resolved
       const remaining = catalogGroups.filter(g => !rootGroupIds.has(g.id))
       let maxPasses = 10
       let toProcess = [...remaining]
@@ -714,7 +1179,7 @@ Deno.serve(async (req) => {
           if (row) categoryIdMap.set(g.id, row.id)
         }
         if (stillUnresolved.length === toProcess.length) {
-          console.warn(`[pims] ${stillUnresolved.length} orphan groups could not be resolved: ${stillUnresolved.map(g => g.id).join(', ')}`)
+          console.warn(`[pims] ${stillUnresolved.length} orphan groups could not be resolved`)
           break
         }
         toProcess = stillUnresolved
@@ -753,10 +1218,19 @@ Deno.serve(async (req) => {
         const existing = existingMap.get(p.article_code)
         const overrides = existing?.user_override || {}
 
+        // Resolve category
+        let resolvedCategoryId: string | null = null
+        if (isTradepi && p.catalog_group_id) {
+          resolvedCategoryId = familyCategoryMap.get(p.catalog_group_id) || null
+        } else if (p.catalog_group_id && categoryIdMap.has(p.catalog_group_id)) {
+          resolvedCategoryId = categoryIdMap.get(p.catalog_group_id) || null
+        }
+        if (!resolvedCategoryId) resolvedCategoryId = category_id || null
+
         const productData: Record<string, unknown> = {
           article_code: p.article_code,
           supplier_id,
-          category_id: (p.catalog_group_id && categoryIdMap.get(p.catalog_group_id)) || category_id || null,
+          category_id: resolvedCategoryId,
           is_active: true,
           pims_last_synced: new Date().toISOString(),
         }
@@ -766,7 +1240,7 @@ Deno.serve(async (req) => {
         if (!overrides['ean_code'] && p.ean_code) productData.ean_code = p.ean_code
         if (!overrides['cost_price'] && p.cost_price) productData.cost_price = p.cost_price
         
-        // Calculate base_price: use XML value, or derive from cost_price * price_factor
+        // Calculate base_price
         if (!overrides['base_price']) {
           if (p.base_price) {
             productData.base_price = p.base_price
@@ -777,20 +1251,57 @@ Deno.serve(async (req) => {
         
         if (p.specifications && !overrides['specifications']) productData.specifications = p.specifications
 
-        // Extract dimensions from specifications
-        const specs = p.specifications || {}
-        if (!overrides['width_mm'] && specs['Breedte (mm)']) {
-          const v = parseInt(String(specs['Breedte (mm)']))
-          if (!isNaN(v)) productData.width_mm = v
+        // TradePI enrichment fields
+        if (p.retail_price && !overrides['retail_price']) productData.retail_price = p.retail_price
+        if (p.product_family && !overrides['product_family']) productData.product_family = p.product_family
+        if (p.product_series && !overrides['product_series']) productData.product_series = p.product_series
+        if (p.product_status) productData.product_status = p.product_status
+        if (p.datasheet_url && !overrides['datasheet_url']) productData.datasheet_url = p.datasheet_url
+
+        // Dimensions - from TradePI direct fields or from BMEcat specs
+        if (!overrides['width_mm']) {
+          if (p.width_mm) productData.width_mm = p.width_mm
+          else if (p.specifications?.['Breedte (mm)']) {
+            const v = parseInt(String(p.specifications['Breedte (mm)']))
+            if (!isNaN(v)) productData.width_mm = v
+          }
         }
-        if (!overrides['height_mm'] && specs['Hoogte (mm)']) {
-          const v = parseInt(String(specs['Hoogte (mm)']))
-          if (!isNaN(v)) productData.height_mm = v
+        if (!overrides['height_mm']) {
+          if (p.height_mm) productData.height_mm = p.height_mm
+          else if (p.specifications?.['Hoogte (mm)']) {
+            const v = parseInt(String(p.specifications['Hoogte (mm)']))
+            if (!isNaN(v)) productData.height_mm = v
+          }
         }
-        if (!overrides['depth_mm'] && specs['Diepte (mm)']) {
-          const v = parseInt(String(specs['Diepte (mm)']))
-          if (!isNaN(v)) productData.depth_mm = v
+        if (!overrides['depth_mm']) {
+          if (p.depth_mm) productData.depth_mm = p.depth_mm
+          else if (p.specifications?.['Diepte (mm)']) {
+            const v = parseInt(String(p.specifications['Diepte (mm)']))
+            if (!isNaN(v)) productData.depth_mm = v
+          }
         }
+
+        // Additional enrichment fields
+        if (p.depth_open_door_mm && !overrides['depth_open_door_mm']) productData.depth_open_door_mm = p.depth_open_door_mm
+        if (p.weight_net_kg && !overrides['weight_net_kg']) productData.weight_net_kg = p.weight_net_kg
+        if (p.weight_gross_kg && !overrides['weight_gross_kg']) productData.weight_gross_kg = p.weight_gross_kg
+        if (p.niche_height_min_mm && !overrides['niche_height_min_mm']) productData.niche_height_min_mm = p.niche_height_min_mm
+        if (p.niche_height_max_mm && !overrides['niche_height_max_mm']) productData.niche_height_max_mm = p.niche_height_max_mm
+        if (p.niche_width_min_mm && !overrides['niche_width_min_mm']) productData.niche_width_min_mm = p.niche_width_min_mm
+        if (p.niche_width_max_mm && !overrides['niche_width_max_mm']) productData.niche_width_max_mm = p.niche_width_max_mm
+        if (p.niche_depth_mm && !overrides['niche_depth_mm']) productData.niche_depth_mm = p.niche_depth_mm
+        if (p.energy_class && !overrides['energy_class']) productData.energy_class = p.energy_class
+        if (p.energy_consumption_kwh && !overrides['energy_consumption_kwh']) productData.energy_consumption_kwh = p.energy_consumption_kwh
+        if (p.water_consumption_l && !overrides['water_consumption_l']) productData.water_consumption_l = p.water_consumption_l
+        if (p.noise_db && !overrides['noise_db']) productData.noise_db = p.noise_db
+        if (p.noise_class && !overrides['noise_class']) productData.noise_class = p.noise_class
+        if (p.construction_type && !overrides['construction_type']) productData.construction_type = p.construction_type
+        if (p.installation_type && !overrides['installation_type']) productData.installation_type = p.installation_type
+        if (p.connection_power_w && !overrides['connection_power_w']) productData.connection_power_w = p.connection_power_w
+        if (p.voltage_v && !overrides['voltage_v']) productData.voltage_v = p.voltage_v
+        if (p.current_a && !overrides['current_a']) productData.current_a = p.current_a
+        if (p.color_main && !overrides['color_main']) productData.color_main = p.color_main
+        if (p.color_basic && !overrides['color_basic']) productData.color_basic = p.color_basic
 
         if (!existing) {
           productData.name = p.name
@@ -815,8 +1326,20 @@ Deno.serve(async (req) => {
         if (existing) updated++
         else inserted++
 
-        // Queue images instead of downloading them
-        if (p.image_urls && p.image_urls.length > 0) {
+        // Queue media items (TradePI with media_type) or legacy image_urls
+        if (p.media_items && p.media_items.length > 0) {
+          for (const media of p.media_items) {
+            imageQueueRows.push({
+              product_id: productId,
+              supplier_id,
+              article_code: p.article_code,
+              image_url: media.url,
+              image_index: media.sort_order,
+              media_type: media.media_type,
+              status: 'pending',
+            })
+          }
+        } else if (p.image_urls && p.image_urls.length > 0) {
           const maxImages = Math.min(p.image_urls.length, 5)
           for (let imgIdx = 0; imgIdx < maxImages; imgIdx++) {
             imageQueueRows.push({
@@ -825,6 +1348,7 @@ Deno.serve(async (req) => {
               article_code: p.article_code,
               image_url: p.image_urls[imgIdx],
               image_index: imgIdx,
+              media_type: 'photo',
               status: 'pending',
             })
           }
@@ -853,7 +1377,7 @@ Deno.serve(async (req) => {
       await supabase.from('import_logs').insert({
         supplier_id,
         division_id: divisionId,
-        source: 'pims',
+        source: isTradepi ? 'pims-tradepi' : 'pims',
         file_name: file_name || null,
         total_rows: inserted + updated,
         inserted,
@@ -881,7 +1405,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({ supplier_id }),
         }).catch(err => console.warn('[pims] Failed to trigger image processor:', err))
       } catch {
-        // Fire and forget - don't block response
+        // Fire and forget
       }
     }
 

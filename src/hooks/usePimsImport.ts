@@ -28,7 +28,7 @@ export function usePimsImport() {
     }: {
       supplierId: string;
       categoryId?: string;
-      format: 'bmecat' | 'csv';
+      format: 'bmecat' | 'csv' | 'tradepi';
       fileContent: string; // base64
       fileName: string;
     }): Promise<PimsImportResult> => {
