@@ -27,90 +27,100 @@ interface PimsRequest {
   products?: PimsProduct[]
 }
 
+// ── Regex-based XML helpers (no DOMParser needed) ──
+function xmlGetTag(xml: string, tagName: string): string | null {
+  const re = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i')
+  const m = xml.match(re)
+  return m ? m[1].trim() : null
+}
+
+function xmlGetTagFirst(xml: string, tagNames: string[]): string | null {
+  for (const t of tagNames) {
+    const v = xmlGetTag(xml, t)
+    if (v) return v
+  }
+  return null
+}
+
+function xmlGetAllBlocks(xml: string, tagName: string): string[] {
+  const re = new RegExp(`<${tagName}[^>]*>[\\s\\S]*?<\\/${tagName}>`, 'gi')
+  return Array.from(xml.matchAll(re)).map(m => m[0])
+}
+
+function xmlGetAttr(xml: string, tagName: string, attrName: string): string | null {
+  const re = new RegExp(`<${tagName}[^>]*\\b${attrName}="([^"]*)"`, 'i')
+  const m = xml.match(re)
+  return m ? m[1] : null
+}
+
 // ── BMEcat XML Parser ──
 function parseBMEcatXml(xmlString: string): PimsProduct[] {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(xmlString, 'text/xml')
   const products: PimsProduct[] = []
 
-  // Support both BMEcat 1.2 and 2005 structures
-  const articles = doc.querySelectorAll('ARTICLE, T_NEW_CATALOG ARTICLE')
-  if (articles.length === 0) {
-    // Try alternative root elements
-    const items = doc.querySelectorAll('PRODUCT, ITEM')
-    items.forEach(item => {
-      const code = getTextContent(item, 'SUPPLIER_PID, SUPPLIER_AID, PRODUCT_ID')
-      if (!code) return
-      products.push(parseArticleNode(item, code))
-    })
-  } else {
-    articles.forEach(article => {
-      const code = getTextContent(article, 'SUPPLIER_AID, SUPPLIER_PID')
-      if (!code) return
-      products.push(parseArticleNode(article, code))
-    })
+  // Find all ARTICLE blocks
+  let articleBlocks = xmlGetAllBlocks(xmlString, 'ARTICLE')
+  if (articleBlocks.length === 0) {
+    articleBlocks = xmlGetAllBlocks(xmlString, 'PRODUCT')
+  }
+  if (articleBlocks.length === 0) {
+    articleBlocks = xmlGetAllBlocks(xmlString, 'ITEM')
+  }
+
+  for (const block of articleBlocks) {
+    const code = xmlGetTagFirst(block, ['SUPPLIER_AID', 'SUPPLIER_PID', 'PRODUCT_ID'])
+    if (!code) continue
+
+    const product: PimsProduct = {
+      article_code: code,
+      name: xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code,
+      description: xmlGetTagFirst(block, ['DESCRIPTION_LONG']) || undefined,
+      ean_code: xmlGetTagFirst(block, ['EAN', 'INTERNATIONAL_PID']) || undefined,
+    }
+
+    // Parse MIME (images)
+    const mimeBlocks = xmlGetAllBlocks(block, 'MIME')
+    const imageUrls: string[] = []
+    for (const mime of mimeBlocks) {
+      const source = xmlGetTag(mime, 'MIME_SOURCE')
+      const mimeType = xmlGetTag(mime, 'MIME_TYPE') || ''
+      if (source && (mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i.test(source))) {
+        imageUrls.push(source)
+      }
+    }
+    if (imageUrls.length > 0) product.image_urls = imageUrls
+
+    // Parse prices
+    const priceBlocks = xmlGetAllBlocks(block, 'ARTICLE_PRICE')
+      .concat(xmlGetAllBlocks(block, 'PRODUCT_PRICE'))
+    for (const priceBlock of priceBlocks) {
+      const priceType = xmlGetAttr(priceBlock, 'ARTICLE_PRICE', 'price_type')
+        || xmlGetTag(priceBlock, 'PRICE_TYPE') || ''
+      const amount = parseFloat(xmlGetTagFirst(priceBlock, ['PRICE_AMOUNT', 'PRICE']) || '0')
+      if (amount > 0) {
+        if (priceType.toLowerCase().includes('net') || priceType === 'net_list') {
+          product.cost_price = amount
+        } else if (priceType.toLowerCase().includes('gros') || priceType === 'nrp') {
+          product.base_price = amount
+        } else if (!product.cost_price) {
+          product.cost_price = amount
+        }
+      }
+    }
+
+    // Parse features/specifications
+    const featureBlocks = xmlGetAllBlocks(block, 'FEATURE')
+    const specs: Record<string, unknown> = {}
+    for (const feat of featureBlocks) {
+      const fname = xmlGetTagFirst(feat, ['FNAME', 'FEATURE_NAME'])
+      const fvalue = xmlGetTagFirst(feat, ['FVALUE', 'FEATURE_VALUE'])
+      if (fname && fvalue) specs[fname] = fvalue
+    }
+    if (Object.keys(specs).length > 0) product.specifications = specs
+
+    products.push(product)
   }
 
   return products
-}
-
-function parseArticleNode(node: Element, articleCode: string): PimsProduct {
-  const product: PimsProduct = {
-    article_code: articleCode,
-    name: getTextContent(node, 'DESCRIPTION_SHORT') || articleCode,
-    description: getTextContent(node, 'DESCRIPTION_LONG') || undefined,
-    ean_code: getTextContent(node, 'EAN, INTERNATIONAL_PID') || undefined,
-  }
-
-  // Parse MIME (images)
-  const mimeNodes = node.querySelectorAll('MIME, MIME_INFO MIME')
-  const imageUrls: string[] = []
-  mimeNodes.forEach(mime => {
-    const source = getTextContent(mime, 'MIME_SOURCE')
-    const mimeType = getTextContent(mime, 'MIME_TYPE') || ''
-    if (source && (mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i.test(source))) {
-      imageUrls.push(source)
-    }
-  })
-  if (imageUrls.length > 0) product.image_urls = imageUrls
-
-  // Parse prices
-  const priceNodes = node.querySelectorAll('ARTICLE_PRICE, PRODUCT_PRICE_DETAILS PRODUCT_PRICE')
-  priceNodes.forEach(priceNode => {
-    const priceType = priceNode.getAttribute('price_type') || getTextContent(priceNode, 'PRICE_TYPE') || ''
-    const amount = parseFloat(getTextContent(priceNode, 'PRICE_AMOUNT, PRICE') || '0')
-    if (amount > 0) {
-      if (priceType.toLowerCase().includes('net') || priceType === 'net_list') {
-        product.cost_price = amount
-      } else if (priceType.toLowerCase().includes('gros') || priceType === 'nrp') {
-        product.base_price = amount
-      } else if (!product.cost_price) {
-        product.cost_price = amount
-      }
-    }
-  })
-
-  // Parse features/specifications
-  const featureNodes = node.querySelectorAll('FEATURE, ARTICLE_FEATURES FEATURE')
-  const specs: Record<string, unknown> = {}
-  featureNodes.forEach(feat => {
-    const fname = getTextContent(feat, 'FNAME, FEATURE_NAME')
-    const fvalue = getTextContent(feat, 'FVALUE, FEATURE_VALUE')
-    if (fname && fvalue) {
-      specs[fname] = fvalue
-    }
-  })
-  if (Object.keys(specs).length > 0) product.specifications = specs
-
-  return product
-}
-
-function getTextContent(parent: Element, selectors: string): string | null {
-  for (const sel of selectors.split(',').map(s => s.trim())) {
-    const el = parent.querySelector(sel)
-    if (el?.textContent) return el.textContent.trim()
-  }
-  return null
 }
 
 // ── CSV Parser ──
@@ -251,47 +261,81 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Auth check
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const url = new URL(req.url)
+    const contentType = (req.headers.get('content-type') || '').toLowerCase()
+    const isRawXml = contentType.includes('xml')
 
-    const body: PimsRequest = await req.json()
-    const { supplier_id, category_id, format, file_content, file_name } = body
+    // Determine auth mode: raw XML from Tradeplace skips user auth (M2M)
+    let userId: string | null = null
 
-    if (!supplier_id) {
-      return new Response(
-        JSON.stringify({ error: 'supplier_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    if (!isRawXml) {
+      // Standard UI flow: require Bearer token
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: 'Missing authorization header' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
       )
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      userId = user.id
     }
+    // For raw XML: Tradeplace sends directly, no user auth needed (M2M integration)
 
-    // Parse products from file or use pre-parsed
+    let supplier_id: string
+    let category_id: string | undefined
+    let file_name: string | undefined
     let products: PimsProduct[] = []
 
-    if (body.products && body.products.length > 0) {
-      products = body.products
-    } else if (file_content && format) {
-      const decoded = atob(file_content)
-      const text = new TextDecoder().decode(Uint8Array.from(decoded.split('').map(c => c.charCodeAt(0))))
+    if (isRawXml) {
+      // ── Raw XML mode (Tradeplace PIMS HTTP transport) ──
+      supplier_id = url.searchParams.get('supplier_id') || ''
+      category_id = url.searchParams.get('category_id') || undefined
+      file_name = url.searchParams.get('file_name') || 'tradeplace-push.xml'
 
-      if (format === 'bmecat') {
-        products = parseBMEcatXml(text)
-      } else if (format === 'csv') {
-        products = parseCsv(text)
+      if (!supplier_id) {
+        return new Response(
+          JSON.stringify({ error: 'supplier_id query parameter is required for raw XML' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const xmlText = await req.text()
+      console.log(`[pims] Received raw XML (${xmlText.length} bytes) for supplier ${supplier_id}`)
+      products = parseBMEcatXml(xmlText)
+    } else {
+      // ── JSON mode (UI upload) ──
+      const body: PimsRequest = await req.json()
+      supplier_id = body.supplier_id
+      category_id = body.category_id
+      file_name = body.file_name
+
+      if (!supplier_id) {
+        return new Response(
+          JSON.stringify({ error: 'supplier_id is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (body.products && body.products.length > 0) {
+        products = body.products
+      } else if (body.file_content && body.format) {
+        const decoded = atob(body.file_content)
+        const text = new TextDecoder().decode(Uint8Array.from(decoded.split('').map(c => c.charCodeAt(0))))
+
+        if (body.format === 'bmecat') {
+          products = parseBMEcatXml(text)
+        } else if (body.format === 'csv') {
+          products = parseCsv(text)
+        }
       }
     }
 
@@ -417,10 +461,14 @@ Deno.serve(async (req) => {
 
     // Log import
     try {
-      const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: user.id })
+      let divisionId: string | null = null
+      if (userId) {
+        const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: userId })
+        divisionId = divisionRow || null
+      }
       await supabase.from('import_logs').insert({
         supplier_id,
-        division_id: divisionRow || null,
+        division_id: divisionId,
         source: 'pims',
         file_name: file_name || null,
         total_rows: inserted + updated,
@@ -429,7 +477,7 @@ Deno.serve(async (req) => {
         skipped: 0,
         errors: errors.length,
         error_details: errors.length > 0 ? errors : null,
-        imported_by: user.id,
+        imported_by: userId,
       })
     } catch (logErr) {
       console.error('[pims] Failed to log import:', logErr)
