@@ -53,6 +53,7 @@ const ProductDetail = () => {
       base_price: product.base_price ?? "",
       cost_price: product.cost_price ?? "",
       book_price: (product as any).book_price ?? "",
+      retail_price: (product as any).retail_price ?? "",
       vat_rate: product.vat_rate ?? 21,
       unit: product.unit || "stuk",
       sku: product.sku || "",
@@ -60,6 +61,16 @@ const ProductDetail = () => {
       width_mm: product.width_mm ?? "",
       height_mm: product.height_mm ?? "",
       depth_mm: product.depth_mm ?? "",
+      niche_height_min_mm: (product as any).niche_height_min_mm ?? "",
+      niche_height_max_mm: (product as any).niche_height_max_mm ?? "",
+      niche_width_min_mm: (product as any).niche_width_min_mm ?? "",
+      niche_width_max_mm: (product as any).niche_width_max_mm ?? "",
+      niche_depth_mm: (product as any).niche_depth_mm ?? "",
+      energy_class: (product as any).energy_class || "",
+      energy_consumption_kwh: (product as any).energy_consumption_kwh ?? "",
+      noise_db: (product as any).noise_db ?? "",
+      noise_class: (product as any).noise_class || "",
+      color_main: (product as any).color_main || "",
       supplier_id: product.supplier_id || "",
       category_id: product.category_id || "",
       is_active: product.is_active ?? true,
@@ -81,6 +92,7 @@ const ProductDetail = () => {
         base_price: form.base_price !== "" ? Number(form.base_price) : null,
         cost_price: form.cost_price !== "" ? Number(form.cost_price) : null,
         book_price: form.book_price !== "" ? Number(form.book_price) : null,
+        retail_price: form.retail_price !== "" ? Number(form.retail_price) : null,
         vat_rate: form.vat_rate !== "" ? Number(form.vat_rate) : null,
         unit: form.unit || null,
         sku: form.sku || null,
@@ -88,6 +100,16 @@ const ProductDetail = () => {
         width_mm: form.width_mm !== "" ? Number(form.width_mm) : null,
         height_mm: form.height_mm !== "" ? Number(form.height_mm) : null,
         depth_mm: form.depth_mm !== "" ? Number(form.depth_mm) : null,
+        niche_height_min_mm: form.niche_height_min_mm !== "" ? Number(form.niche_height_min_mm) : null,
+        niche_height_max_mm: form.niche_height_max_mm !== "" ? Number(form.niche_height_max_mm) : null,
+        niche_width_min_mm: form.niche_width_min_mm !== "" ? Number(form.niche_width_min_mm) : null,
+        niche_width_max_mm: form.niche_width_max_mm !== "" ? Number(form.niche_width_max_mm) : null,
+        niche_depth_mm: form.niche_depth_mm !== "" ? Number(form.niche_depth_mm) : null,
+        energy_class: form.energy_class || null,
+        energy_consumption_kwh: form.energy_consumption_kwh !== "" ? Number(form.energy_consumption_kwh) : null,
+        noise_db: form.noise_db !== "" ? Number(form.noise_db) : null,
+        noise_class: form.noise_class || null,
+        color_main: form.color_main || null,
         supplier_id: form.supplier_id || null,
         category_id: form.category_id || null,
         is_active: form.is_active,
@@ -332,47 +354,117 @@ const ProductDetail = () => {
             </CardHeader>
             <CardContent>
               {isEditing ? (
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Breedte (mm)</Label>
-                    <Input
-                      type="number"
-                      value={form.width_mm}
-                      onChange={(e) => setForm({ ...form, width_mm: e.target.value })}
-                    />
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Breedte (mm)</Label>
+                      <Input type="number" value={form.width_mm} onChange={(e) => setForm({ ...form, width_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Hoogte (mm)</Label>
+                      <Input type="number" value={form.height_mm} onChange={(e) => setForm({ ...form, height_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Diepte (mm)</Label>
+                      <Input type="number" value={form.depth_mm} onChange={(e) => setForm({ ...form, depth_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Normuren</Label>
+                      <Input type="number" step="0.01" value={form.norm_hours} onChange={(e) => setForm({ ...form, norm_hours: e.target.value })} />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Hoogte (mm)</Label>
-                    <Input
-                      type="number"
-                      value={form.height_mm}
-                      onChange={(e) => setForm({ ...form, height_mm: e.target.value })}
-                    />
+                  <Separator />
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Inbouwmaten</div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nishoogte min (mm)</Label>
+                      <Input type="number" value={form.niche_height_min_mm} onChange={(e) => setForm({ ...form, niche_height_min_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nishoogte max (mm)</Label>
+                      <Input type="number" value={form.niche_height_max_mm} onChange={(e) => setForm({ ...form, niche_height_max_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nisbreedte min (mm)</Label>
+                      <Input type="number" value={form.niche_width_min_mm} onChange={(e) => setForm({ ...form, niche_width_min_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nisbreedte max (mm)</Label>
+                      <Input type="number" value={form.niche_width_max_mm} onChange={(e) => setForm({ ...form, niche_width_max_mm: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nisdiepte (mm)</Label>
+                      <Input type="number" value={form.niche_depth_mm} onChange={(e) => setForm({ ...form, niche_depth_mm: e.target.value })} />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Diepte (mm)</Label>
-                    <Input
-                      type="number"
-                      value={form.depth_mm}
-                      onChange={(e) => setForm({ ...form, depth_mm: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Normuren</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.norm_hours}
-                      onChange={(e) => setForm({ ...form, norm_hours: e.target.value })}
-                    />
+                  <Separator />
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Energie & Technisch</div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Energieklasse</Label>
+                      <Input value={form.energy_class} onChange={(e) => setForm({ ...form, energy_class: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Verbruik (kWh)</Label>
+                      <Input type="number" step="0.1" value={form.energy_consumption_kwh} onChange={(e) => setForm({ ...form, energy_consumption_kwh: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Geluid (dB)</Label>
+                      <Input type="number" value={form.noise_db} onChange={(e) => setForm({ ...form, noise_db: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Geluidsklasse</Label>
+                      <Input value={form.noise_class} onChange={(e) => setForm({ ...form, noise_class: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Kleur</Label>
+                      <Input value={form.color_main} onChange={(e) => setForm({ ...form, color_main: e.target.value })} />
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                  <Field label="Breedte" value={product.width_mm ? `${product.width_mm} mm` : null} />
-                  <Field label="Hoogte" value={product.height_mm ? `${product.height_mm} mm` : null} />
-                  <Field label="Diepte" value={product.depth_mm ? `${product.depth_mm} mm` : null} />
-                  <Field label="Normuren" value={product.norm_hours?.toString()} />
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                    <Field label="Breedte" value={product.width_mm ? `${product.width_mm} mm` : null} />
+                    <Field label="Hoogte" value={product.height_mm ? `${product.height_mm} mm` : null} />
+                    <Field label="Diepte" value={product.depth_mm ? `${product.depth_mm} mm` : null} />
+                    <Field label="Normuren" value={product.norm_hours?.toString()} />
+                  </div>
+                  {((product as any).niche_height_min_mm || (product as any).niche_width_min_mm || (product as any).niche_depth_mm) && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Inbouwmaten</div>
+                      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <Field label="Nishoogte" value={
+                          (product as any).niche_height_min_mm
+                            ? `${(product as any).niche_height_min_mm}${(product as any).niche_height_max_mm ? ` – ${(product as any).niche_height_max_mm}` : ''} mm`
+                            : null
+                        } />
+                        <Field label="Nisbreedte" value={
+                          (product as any).niche_width_min_mm
+                            ? `${(product as any).niche_width_min_mm}${(product as any).niche_width_max_mm ? ` – ${(product as any).niche_width_max_mm}` : ''} mm`
+                            : null
+                        } />
+                        <Field label="Nisdiepte" value={(product as any).niche_depth_mm ? `${(product as any).niche_depth_mm} mm` : null} />
+                      </div>
+                    </>
+                  )}
+                  {((product as any).energy_class || (product as any).noise_db || (product as any).color_main) && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Energie & Technisch</div>
+                      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <Field label="Energieklasse" value={(product as any).energy_class} />
+                        <Field label="Verbruik" value={(product as any).energy_consumption_kwh ? `${(product as any).energy_consumption_kwh} kWh` : null} />
+                        <Field label="Geluidsniveau" value={
+                          (product as any).noise_db
+                            ? `${(product as any).noise_db} dB${(product as any).noise_class ? ` (klasse ${(product as any).noise_class})` : ''}`
+                            : null
+                        } />
+                        <Field label="Kleur" value={(product as any).color_main} />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -392,6 +484,15 @@ const ProductDetail = () => {
             <CardContent className="space-y-4">
               {isEditing ? (
                 <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Adviesprijs (RRP)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.retail_price}
+                      onChange={(e) => setForm({ ...form, retail_price: e.target.value })}
+                    />
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Inkoopprijs</Label>
                     <Input
@@ -448,6 +549,12 @@ const ProductDetail = () => {
                 </>
               ) : (
                 <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Adviesprijs (RRP)</span>
+                    <span className="text-sm text-foreground">
+                      {formatCurrency((product as any).retail_price)}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Inkoopprijs</span>
                     <span className="text-sm text-foreground">
