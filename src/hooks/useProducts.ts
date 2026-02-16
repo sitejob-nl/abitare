@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type Product = Tables<"products">;
 export type ProductCategory = Tables<"product_categories">;
+
+type SortField = "name" | "base_price" | "cost_price" | "created_at" | "article_code";
+type SortDirection = "asc" | "desc";
 
 interface UseProductsOptions {
   supplierId?: string | null;
@@ -11,13 +14,22 @@ interface UseProductsOptions {
   search?: string;
   limit?: number;
   enabled?: boolean;
+  sortField?: SortField;
+  sortDirection?: SortDirection;
+  priceMin?: number | null;
+  priceMax?: number | null;
+  showInactive?: boolean;
 }
 
 export function useProducts(options: UseProductsOptions = {}) {
-  const { supplierId, categoryId, search, limit, enabled = true } = options;
+  const {
+    supplierId, categoryId, search, limit, enabled = true,
+    sortField = "name", sortDirection = "asc",
+    priceMin, priceMax, showInactive = false,
+  } = options;
 
   return useQuery({
-    queryKey: ["products", { supplierId, categoryId, search, limit }],
+    queryKey: ["products", { supplierId, categoryId, search, limit, sortField, sortDirection, priceMin, priceMax, showInactive }],
     queryFn: async () => {
       let query = supabase
         .from("products")
@@ -26,8 +38,11 @@ export function useProducts(options: UseProductsOptions = {}) {
           supplier:suppliers(id, name, code),
           category:product_categories(id, name, code)
         `)
-        .eq("is_active", true)
-        .order("name", { ascending: true });
+        .order(sortField, { ascending: sortDirection === "asc" });
+
+      if (!showInactive) {
+        query = query.eq("is_active", true);
+      }
 
       if (supplierId && supplierId !== "all") {
         query = query.eq("supplier_id", supplierId);
@@ -43,6 +58,13 @@ export function useProducts(options: UseProductsOptions = {}) {
         );
       }
 
+      if (priceMin !== null && priceMin !== undefined) {
+        query = query.gte("base_price", priceMin);
+      }
+      if (priceMax !== null && priceMax !== undefined) {
+        query = query.lte("base_price", priceMax);
+      }
+
       if (limit) {
         query = query.limit(limit);
       }
@@ -53,6 +75,41 @@ export function useProducts(options: UseProductsOptions = {}) {
       return data;
     },
     enabled,
+  });
+}
+
+// ── Bulk mutations ──
+export function useBulkUpdateProducts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ ids, updates }: { ids: string[]; updates: Record<string, unknown> }) => {
+      const { error } = await supabase
+        .from("products")
+        .update(updates)
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+export function useBulkDeactivateProducts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_active: false })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 }
 
