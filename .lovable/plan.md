@@ -1,121 +1,98 @@
 
 
-# Plan: Tradeplace TradePI XML parser + apparatuur-verrijking
-
-## Samenvatting
-
-De Python parser en het SQL-schema worden vertaald naar een Deno/TypeScript implementatie in de bestaande `pims-import` edge function. In plaats van aparte `appliances` tabellen worden de bestaande `products`-tabellen uitgebreid met de ontbrekende kolommen (inbouwmaten, energie, kleur, etc.). Dit voorkomt dubbele data en houdt de hele productcatalogus in een systeem.
+# Plan: URL-only modus voor alle media + bestaande queue afhandelen
 
 ## Wat er verandert
 
-### 1. Database: kolommen toevoegen aan `products`
+### 1. `pims-process-images` edge function -- vereenvoudigen naar URL-only
 
-Nieuwe kolommen op de bestaande `products` tabel:
+De hele download-logica wordt verwijderd. Alle mediatypes (foto's, maattekeningen, energielabels, datasheets, 3D) worden nu als directe bron-URL opgeslagen in `product_images`, zonder iets te downloaden naar Supabase Storage.
 
-| Kolom | Type | Doel |
-|---|---|---|
-| `depth_open_door_mm` | integer | Diepte met open deur |
-| `weight_net_kg` | numeric(10,2) | Netto gewicht |
-| `weight_gross_kg` | numeric(10,2) | Bruto gewicht |
-| `niche_height_min_mm` | integer | Minimale nishoogte |
-| `niche_height_max_mm` | integer | Maximale nishoogte |
-| `niche_width_min_mm` | integer | Minimale nisbreedte |
-| `niche_width_max_mm` | integer | Maximale nisbreedte |
-| `niche_depth_mm` | integer | Nisdiepte |
-| `energy_class` | varchar(10) | Energielabel (A-G) |
-| `energy_consumption_kwh` | numeric(10,2) | Energieverbruik |
-| `water_consumption_l` | numeric(10,2) | Waterverbruik |
-| `noise_db` | integer | Geluidsniveau |
-| `noise_class` | varchar(5) | Geluidsklasse |
-| `construction_type` | varchar(50) | Inbouw / Vrijstaand |
-| `installation_type` | varchar(100) | Installatietype |
-| `connection_power_w` | integer | Aansluitvermogen |
-| `voltage_v` | integer | Voltage |
-| `current_a` | integer | Stroomsterkte |
-| `color_main` | varchar(100) | Hoofdkleur |
-| `color_basic` | varchar(100) | Basiskleur |
-| `product_family` | varchar(100) | Productfamilie (G7000) |
-| `product_series` | varchar(100) | Productserie |
-| `product_status` | varchar(50) | Status (actief/uitlopend) |
-| `retail_price` | numeric | Adviesprijs (RRP) |
-| `datasheet_url` | text | Link naar productfiche |
+**Concreet:**
+- `downloadAndStoreImage()` functie verwijderen
+- `DOWNLOADABLE_TYPES` / `URL_ONLY_TYPES` onderscheid verwijderen
+- Alle items in de queue worden op dezelfde manier verwerkt: bron-URL opslaan in `product_images`, status naar `done`
+- Hoofdfoto (photo, index 0) update op `products.image_url` blijft behouden (maar dan met de bron-URL)
+- Batch size verhogen naar 100 (geen download meer = veel sneller)
 
-Nieuwe kolom op `pims_image_queue` en `product_images`:
+### 2. Bestaande queue-items direct afhandelen
 
-| Kolom | Type | Doel |
-|---|---|---|
-| `media_type` | varchar(50), default 'photo' | Type: photo, dimension_drawing, energy_label, datasheet, 3d_model |
+Een SQL-migratie die alle huidige `pending` en `processing` items in de `pims_image_queue` in een keer afhandelt:
+- Voor elk pending item: een `product_images` rij aanmaken met de originele `image_url`
+- Queue status naar `done` zetten
+- Hoofdfoto's (photo, index 0) direct op `products.image_url` zetten
 
-### 2. Edge function: TradePI XML parser toevoegen
+### 3. ProductDetail pagina -- adviesprijs + apparatuurgegevens tonen
 
-In `supabase/functions/pims-import/index.ts` een nieuwe parser `parseTradePlaceCatalog()` toevoegen, gebaseerd op de Python `TradeplaceParser`:
-
-- **Metadata**: `CatalogDownloadReplyHeader` -> `CatalogName`, `CatalogCreationDate`
-- **Producten**: `.//Product` -> `PIData` (artikelcode, EAN, familie) + `OtherData` (prijzen, datums, media) + `UnitOfMeasures`
-- **Properties**: `PIProperty` met de volledige `PROPERTY_MAPPING` uit de Python parser (HEIGHT, WIDTH, ENERGY_CLASS_2017, etc.)
-- **Media**: `PRODUCT_IMAGE`, `MEASURE_IMAGE`, `PANEL_IMAGE`, `ENERGY_LABEL`, `PRODUCT_FICHE`, `ADD_IMAGE*` + `Asset` blokken
-- **Prijzen**: `RecommendedRetailPrice` -> `Amount` + `NumberOfDecimal`
-- **USP's**: `USP_*` properties opslaan in specifications
-- **Categorien**: `ProductFamily@familyName` als categoriecode
-
-### 3. Format-autodetectie
-
-De edge function herkent automatisch het XML-type:
-
-```text
-if xml bevat '<Product>' en '<PIData>'     -> parseTradePlaceCatalog()
-if xml bevat '<BMECAT' of '<ARTICLE'       -> parseBMEcatXml()
-```
-
-Dit werkt zowel voor handmatige uploads als voor de M2M push-flow (raw XML content type).
-
-### 4. Verrijkingslogica uitbreiden
-
-Na het parsen worden de nieuwe velden (inbouwmaten, energie, kleur, etc.) mee-upsert naar de `products` tabel. De image queue krijgt een `media_type` veld zodat foto's, maattekeningen en documenten apart worden opgeslagen.
-
-De `pims-process-images` achtergrondprocessor wordt aangepast:
-- Foto's en tekeningen (PNG/JPG): downloaden naar Supabase Storage
-- Documenten (PDF, ZIP): alleen URL opslaan in `product_images` (niet downloaden)
-
-### 5. Frontend: extra formaatoptie
-
-`PimsImportTab.tsx` wordt uitgebreid met een derde formaatoptie: "TradePI XML (Tradeplace)". Bestandsacceptatie wordt `.xml` voor alle XML-formaten. De auto-detectie in de edge function bepaalt welke parser wordt gebruikt.
-
-### 6. Standaard categorien seeden
-
-De 21 apparatuurcategorien uit het SQL-schema (DISHWASHERS, OVENS, etc.) worden als `product_categories` aangemaakt met code en Nederlandse naam, zodat de TradePI `ProductFamily@familyName` direct matcht.
-
-## Bestanden die wijzigen
-
-1. **SQL migratie** -- Nieuwe kolommen op `products`, `pims_image_queue`, `product_images` + seed categorien
-2. **`supabase/functions/pims-import/index.ts`** -- TradePI parser, format-detectie, verrijkte upsert
-3. **`supabase/functions/pims-process-images/index.ts`** -- Media-type bewust (PDF's als URL, foto's downloaden)
-4. **`src/components/import/PimsImportTab.tsx`** -- Derde formaat-optie
-5. **`src/hooks/usePimsImport.ts`** -- Format type uitbreiden met 'tradepi'
-6. **`src/integrations/supabase/types.ts`** -- Nieuwe kolommen reflecteren
+Op `src/pages/ProductDetail.tsx`:
+- **Adviesprijs (RRP)** tonen in het prijzenoverzicht
+- **Inbouwmaten** sectie: nishoogte (min-max), nisbreedte (min-max), nisdiepte
+- **Energie & Technisch**: energieklasse, verbruik, geluid, kleur
+- Alle velden bewerkbaar in edit-modus
 
 ## Technische details
 
-### TradePI Parser (kern)
-
-De Python `TradeplaceParser` wordt 1-op-1 vertaald naar TypeScript met dezelfde `PROPERTY_MAPPING` en `_handle_media_property` logica. De XML-structuur is:
+### pims-process-images (nieuwe logica)
 
 ```text
-Product
-  PIData
-    ProductCode          -> article_code
-    EANArticleCode       -> ean_code
-    ProductFamily@name   -> category mapping
-    PIProperty[name=X]   -> mapped fields + specs
-  OtherData
-    RecommendedRetailPrice -> retail_price
-    StartingDate/ChangeDate
-    Asset[]              -> images + documents
-  UnitOfMeasures
-    UnitOfMeasure[type=PCE] -> fallback dimensions
+Per queue-item:
+1. Normaliseer URL (voeg https://pims.tradeplace.com/ prefix toe indien nodig)
+2. Upsert naar product_images met bron-URL
+3. Als photo + index 0: update products.image_url (mits geen user_override)
+4. Queue status -> done
 ```
 
-### Categorie-mapping
+Batch size: 100 (was 10). Geen netwerk-downloads meer, alleen database-operaties.
 
-De `familyName` uit TradePI (bijv. "DISHWASHERS") wordt gematcht op een vooraf geseede `product_categories` rij. Onbekende families worden automatisch aangemaakt onder de merkcategorie.
+### SQL migratie (bulk resolve)
+
+```text
+-- Stap 1: Insert product_images voor alle pending queue items
+INSERT INTO product_images (product_id, url, storage_path, type, media_type, sort_order, source)
+SELECT product_id, image_url, 'url-ref/' || supplier_id || '/' || article_code || '/' || COALESCE(media_type, 'photo'),
+       CASE WHEN media_type = 'photo' AND image_index = 0 THEN 'main'
+            WHEN media_type = 'photo' THEN 'detail'
+            ELSE COALESCE(media_type, 'photo') END,
+       COALESCE(media_type, 'photo'), image_index, 'pims'
+FROM pims_image_queue WHERE status IN ('pending', 'processing')
+ON CONFLICT (product_id, storage_path) DO UPDATE SET url = EXCLUDED.url;
+
+-- Stap 2: Update products.image_url voor hoofdfoto's
+UPDATE products SET image_url = q.image_url
+FROM pims_image_queue q
+WHERE products.id = q.product_id AND q.status IN ('pending','processing')
+  AND COALESCE(q.media_type,'photo') = 'photo' AND q.image_index = 0
+  AND NOT COALESCE((products.user_override->>'image_url')::boolean, false);
+
+-- Stap 3: Alles op done zetten
+UPDATE pims_image_queue SET status = 'done', processed_at = NOW()
+WHERE status IN ('pending', 'processing');
+```
+
+### ProductDetail uitbreiding
+
+Nieuwe secties onder de bestaande afmetingen:
+
+```text
+Prijzen
+  Adviesprijs (RRP)   € 1.789,00
+  Inkoopprijs         € -
+
+Inbouwmaten
+  Nishoogte     805 - 870 mm
+  Nisbreedte    600 mm
+  Nisdiepte     550 mm
+
+Energie & Technisch
+  Energieklasse    C
+  Verbruik         74 kWh / 100 cycli
+  Geluidsniveau    45 dB (klasse B)
+  Kleur            RVS / CleanSteel
+```
+
+## Bestanden die wijzigen
+
+1. **SQL migratie** -- Bulk resolve van alle pending queue-items
+2. **`supabase/functions/pims-process-images/index.ts`** -- Vereenvoudigen naar URL-only, geen downloads
+3. **`src/pages/ProductDetail.tsx`** -- Adviesprijs, inbouwmaten, energie-info tonen
 
