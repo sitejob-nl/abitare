@@ -1,51 +1,106 @@
 
 
-# Fix: Leverancier "BSH Huishoudapparaten B.V." koppelen
+# Plan: Bosch PIMS-data opschonen en verrijken
 
-## Probleem
+## Huidige situatie (667 producten)
 
-De PIMS-import werkt nu technisch correct (ZIP uitpakken, XML parsen). Maar de leverancier uit het bestand — **"BSH Huishoudapparaten B.V."** — matcht met geen enkele leverancier in je database.
+| Veld | Status | Probleem |
+|------|--------|----------|
+| Naam | 667/667 | Bevat artikelcode: "BBH3ALL23, Draadloze steelstofzuiger" |
+| Inkoopprijs | 654/667 | 13 producten zonder prijs |
+| Verkoopprijs | 0/667 | Ontbreekt volledig, price_factor staat op 1.0 |
+| Specificaties | 278/667 | Onleesbare codes: `EF000008: 541` in plaats van `Breedte: 541 mm` |
+| Afmetingen | 0/667 | Niet ingevuld, terwijl data in specs zit (EF000008=breedte, EF000040=hoogte, EF000049=diepte) |
+| EAN | 667/667 | Correct |
+| Afbeeldingen | 0/667 | Geen MIME_SOURCE in XML |
+| Omschrijving | 667/667 | Correct, maar bevat ook afmetingen in tekst |
 
-BSH is het moederbedrijf van Bosch en Siemens huishoudapparaten. Het Tradeplace PIMS-bestand heet "bosch export" maar de XML-afzender is BSH.
+## Wat wordt aangepast
 
-## Oplossing
+### 1. Productnamen opschonen
+De artikelcode aan het begin van de naam verwijderen.
 
-### 1. Leverancier "Bosch" toevoegen aan de database
+**Voor:** `BBH3ALL23, Draadloze steelstofzuiger`
+**Na:** `Draadloze steelstofzuiger`
 
-Een nieuwe leverancier aanmaken:
-- Naam: **Bosch**
-- Code: **BOSCH**
+Aanpassing in de PIMS parser: als `DESCRIPTION_SHORT` begint met de `SUPPLIER_AID` gevolgd door een komma, strip dat deel.
 
-### 2. Aliassen-systeem voor supplier matching
+### 2. Specificaties vertalen naar leesbare namen
+De BMEcat ETIM-codes (EF000008, EF000040, etc.) vertalen naar Nederlandse namen via een mapping-tabel. De belangrijkste codes die voorkomen:
 
-Een nieuwe kolom `pims_aliases` (text array) toevoegen aan de `suppliers` tabel. Hiermee kan elke leverancier meerdere namen hebben die het systeem herkent.
+| Code | Betekenis | Voorbeeld |
+|------|-----------|-----------|
+| EF000008 | Breedte (mm) | 541 |
+| EF000040 | Hoogte (mm) | 874 |
+| EF000049 | Diepte (mm) | 548 |
+| EF002680 | Diepte met deur (mm) | 550 |
+| EF008333 | Inbouw breedte (mm) | 560 |
+| EF008334 | Inbouw hoogte (mm) | 880 |
+| EF002065 | Energielabel | EV-codes |
+| EF004149 | Bewaartijd bij storing (uur) | 10 |
+| EF007823 | Scharnier type | EV000154 |
 
-Voorbeeld:
-- Bosch: `["BSH Huishoudapparaten", "BSH", "Bosch"]`
-- Siemens: `["BSH Huishoudapparaten", "Siemens"]` (als Siemens ook via BSH komt)
+Aanpassing in de parser: een mapping dictionary toevoegen die EF-codes vertaalt. Onbekende codes worden genegeerd in plaats van opgeslagen als onleesbare data.
 
-### 3. Matching-logica updaten
+### 3. Afmetingen automatisch extraheren
+De specificatie-codes EF000008 (breedte), EF000040 (hoogte) en EF000049 (diepte) mappen naar de `width_mm`, `height_mm` en `depth_mm` kolommen van het product.
 
-De supplier matching in `pims-import` aanpassen om ook de `pims_aliases` te checken:
+### 4. Verkoopprijs berekenen via price_factor
+De Bosch-leverancier heeft nu `price_factor = 1.0` waardoor de verkoopprijs gelijk is aan de inkoopprijs. Er zijn twee stappen:
+- **Parser**: als er geen `base_price` uit de XML komt, gebruik `cost_price * supplier.price_factor` om een verkoopprijs in te vullen
+- **Instelling**: je moet zelf de juiste `price_factor` instellen bij de Bosch leverancier (bijv. 1.4 voor 40% marge)
 
+### 5. Bestaande data corrigeren (eenmalig)
+Na het deployen van de verbeterde parser, een SQL-update uitvoeren om de 667 bestaande producten te corrigeren:
+- Namen opschonen (artikelcode verwijderen)
+- Specificaties opnieuw opslaan is niet mogelijk zonder de XML, dus alleen de namen worden gecorrigeerd
+- Afmetingen worden bij de volgende import automatisch ingevuld
+
+## Technische details
+
+### Bestand: `supabase/functions/pims-import/index.ts`
+
+**Naam-opschoning (in `parseBMEcatXml`):**
 ```text
-Voor elke leverancier in DB:
-  1. Check naam/code (bestaande logica)
-  2. Check of de XML-naam een van de aliassen bevat
-  3. Check of een alias in de XML-naam voorkomt
+const rawName = xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code
+const name = rawName.startsWith(code + ',') ? rawName.slice(code.length + 1).trim() : rawName
 ```
 
-## Technische stappen
+**ETIM-specificatie mapping (nieuw):**
+```text
+const ETIM_MAP: Record<string, string> = {
+  'EF000008': 'Breedte (mm)',
+  'EF000040': 'Hoogte (mm)',
+  'EF000049': 'Diepte (mm)',
+  'EF002680': 'Diepte met deur (mm)',
+  'EF008333': 'Inbouw breedte (mm)',
+  'EF008334': 'Inbouw hoogte (mm)',
+  'EF002065': 'Energielabel',
+  'EF004149': 'Bewaartijd storing (uur)',
+  ... (ca. 20 meest voorkomende codes)
+}
+```
 
-### Database migratie
-- `ALTER TABLE suppliers ADD COLUMN pims_aliases text[] DEFAULT '{}'`
-- Insert leverancier Bosch met code BOSCH en alias `BSH Huishoudapparaten`
-- Update bestaande Siemens-leverancier (optioneel: ook BSH alias toevoegen als Siemens-exports dezelfde afzender gebruiken)
+Onbekende EF-codes worden overgeslagen. Specificaties worden opgeslagen met leesbare keys.
 
-### Edge function update (`pims-import/index.ts`)
-- Query `pims_aliases` mee ophalen bij supplier lookup
-- Matching uitbreiden: als naam/code niet matcht, loop door aliassen
-- Als meerdere leveranciers matchen op aliassen, neem de eerste (of log een waarschuwing)
+**Afmetingen extractie (in upsert-logica):**
+```text
+if (specs['EF000008']) productData.width_mm = parseInt(specs['EF000008'])
+if (specs['EF000040']) productData.height_mm = parseInt(specs['EF000040'])
+if (specs['EF000049']) productData.depth_mm = parseInt(specs['EF000049'])
+```
 
-### Alternatief (sneller, maar minder flexibel)
-Als je geen aliassen-systeem wilt, kunnen we ook alleen een Bosch-leverancier aanmaken en een hardcoded mapping toevoegen voor "BSH" naar "Bosch". Maar het aliassen-systeem is beter schaalbaar voor toekomstige leveranciers.
+**Verkoopprijs berekening (in upsert-logica):**
+De supplier's `price_factor` wordt opgehaald en toegepast als er geen `base_price` in de XML zit.
+
+### Eenmalige data-correctie (SQL via insert tool)
+```text
+UPDATE products 
+SET name = TRIM(SUBSTRING(name FROM POSITION(',' IN name) + 1))
+WHERE supplier_id = 'e70c4a1a-...' 
+  AND name LIKE article_code || ',%'
+```
+
+### Geen wijzigingen nodig aan
+- Frontend code (productdetailpagina toont al specifications als key-value pairs)
+- Andere hooks of componenten
