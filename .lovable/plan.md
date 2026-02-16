@@ -1,89 +1,59 @@
 
 
-# Optimalisatie PIMS Import: Batch Processing zonder Time-outs
+# Fix PIMS Import: XML Parsing en Logging
 
 ## Probleem
 
-De huidige `pims-import` edge function doet alles in een enkel request:
-- XML parsen (snel)
-- Producten upserten (matig snel)
-- Afbeeldingen downloaden en uploaden naar Storage (TRAAG - 15s timeout per image x honderden producten)
+De `pims-import` functie ontvangt de 1.2MB BMEcat XML van Tradeplace maar retourneert direct een 400 error. Er zijn geen logs na "Received raw XML" omdat de error-paden geen logging bevatten. De oorzaak is waarschijnlijk:
 
-Supabase Edge Functions hebben een executielimiet van ~150 seconden. Een BMEcat bestand van 1.2MB met honderden producten en afbeeldingen overschrijdt dit ruim.
+1. De XML-supplier detectie (`SUPPLIER_NAME` tag) matcht niet met de werkelijke BMEcat structuur
+2. Of de product parser vindt 0 artikelen (BMEcat 2005 wraps artikelen in `T_NEW_CATALOG`)
 
-## Oplossing: Twee-fasen architectuur
+## Oplossing
 
-**Fase 1 - Snel (pims-import):** Parse XML, upsert alle producten, sla image-URLs op in een wachtrij-tabel. Reageert direct met succes naar Tradeplace.
+### 1. Betere logging toevoegen
 
-**Fase 2 - Achtergrond (pims-process-images):** Een aparte edge function die de wachtrij verwerkt in batches. Wordt automatisch aangeroepen door fase 1 na het upserten.
+Op **elk 400-error pad** een `console.error` toevoegen zodat we exact zien waar het fout gaat:
+- Na de supplier naam extractie: log wat gevonden werd (of `null`)
+- Na de supplier matching: log welke suppliers vergeleken werden
+- Na het parsen: log hoeveel producten er gevonden zijn
 
+### 2. Robuustere supplier-detectie
+
+De huidige `xmlGetTagFirst` zoekt alleen naar directe tags. BMEcat XML heeft soms:
+- Geneste structuren: `<SUPPLIER><SUPPLIER_NAME>...</SUPPLIER_NAME></SUPPLIER>`  
+- Namespace prefixes: `<bme:SUPPLIER_NAME>`
+- `<PARTY>` blokken met `<PARTY_ROLE>supplier</PARTY_ROLE>` + `<PARTY_ID>`
+
+Aanpassingen:
+- Fallback: als `SUPPLIER_NAME` niet direct gevonden wordt, zoek binnen een `<SUPPLIER>` of `<HEADER>` blok
+- Namespace-tolerante regex (negeer prefixes)
+
+### 3. Robuustere product-parsing
+
+BMEcat 2005 structuur is typisch:
 ```text
-Tradeplace POST XML
-        |
-        v
- [pims-import]  ──>  Parse XML + Upsert producten + Vul image_queue
-        |                        (< 30 sec)
-        |── Return 200 OK naar Tradeplace
-        |
-        └──> Fire-and-forget call naar [pims-process-images]
-                        |
-                        v
-              Download images in batches van 10
-              Upload naar Storage
-              Update product records
-              (draait los, geen time-out druk)
+<BMECAT>
+  <HEADER>...</HEADER>
+  <T_NEW_CATALOG>
+    <ARTICLE>...</ARTICLE>
+    <ARTICLE>...</ARTICLE>
+  </T_NEW_CATALOG>
+</BMECAT>
 ```
 
-## Technische stappen
+De huidige parser zoekt `ARTICLE` blocks in de hele XML string, wat zou moeten werken. Maar als het niet matcht, voeg fallbacks toe voor `PRODUCT` en `T_NEW_CATALOG > ARTICLE` patronen.
 
-### 1. Nieuwe database tabel: `pims_image_queue`
+### 4. Debug-modus
 
-Migratie aanmaken met kolommen:
-- `id` (uuid, PK)
-- `product_id` (uuid, FK naar products)
-- `supplier_id` (uuid)
-- `article_code` (text)
-- `image_url` (text)
-- `image_index` (integer)
-- `status` (text: pending / processing / done / failed)
-- `error_message` (text, nullable)
-- `created_at`, `processed_at` (timestamps)
+Voeg een `?debug=true` query parameter toe die extra details retourneert in de response (eerste 500 chars van de XML header, gevonden tags, etc.) zodat je vanuit Tradeplace kan troubleshooten.
 
-RLS uitschakelen (alleen service role gebruikt deze tabel).
+## Technische wijzigingen
 
-### 2. Aanpassen `pims-import` edge function
+**Bestand: `supabase/functions/pims-import/index.ts`**
 
-- **Verwijder** alle image-download logica uit de hoofdflow
-- Na het upserten van producten: bulk-insert image URLs in `pims_image_queue` met status `pending`
-- Aan het einde: fire-and-forget fetch naar `pims-process-images`
-- Retourneer direct het resultaat (inserted/updated counts) zonder te wachten op images
-
-### 3. Nieuwe edge function: `pims-process-images`
-
-- Haalt batches van 10 `pending` items uit `pims_image_queue`
-- Markeert ze als `processing`
-- Downloadt en uploadt parallel (Promise.allSettled)
-- Update status naar `done` of `failed`
-- Herhaalt tot de queue leeg is of een eigen tijdslimiet van ~120 seconden bereikt
-- Als er nog items over zijn: roept zichzelf opnieuw aan (self-chaining)
-
-### 4. Config update
-
-Toevoegen aan `supabase/config.toml`:
-```toml
-[functions.pims-process-images]
-verify_jwt = false
-```
-
-### 5. UI aanpassing (optioneel, klein)
-
-- `PimsImportTab` resultaatscherm toont een melding dat afbeeldingen op de achtergrond worden verwerkt
-- Eventueel een indicator op de producten-pagina voor "images pending"
-
-## Voordelen
-
-- Tradeplace krijgt binnen ~10-20 seconden een 200 OK (geen time-out meer)
-- Afbeeldingen worden betrouwbaar verwerkt, ook bij honderden producten
-- Bij fouten: individuele items in de queue zijn traceerbaar
-- De UI-upload flow blijft ook werken (dezelfde twee-fasen aanpak)
-
+- Voeg `console.log/error` toe op regels 239, 264, 270, 304 (de faal-paden)
+- Maak `xmlGetTagFirst` namespace-tolerant met regex: `<(?:\\w+:)?SUPPLIER_NAME>`
+- Voeg een debug-response optie toe
+- Voeg een fallback toe die de `HEADER` sectie doorzoekt voor supplier info
+- Log een sample van de XML (eerste 500 chars) bij onbekende fouten
