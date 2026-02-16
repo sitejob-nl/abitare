@@ -623,21 +623,34 @@ Deno.serve(async (req) => {
         if (row) categoryIdMap.set(g.id, row.id)
       }
 
-      // Upsert child groups under their parent
-      for (const g of catalogGroups) {
-        if (rootGroupIds.has(g.id)) continue
-        const parentDbId = g.parent_id ? categoryIdMap.get(g.parent_id) : brandId
-        if (!parentDbId) continue
-        const code = `${supplier_id}-${g.id}`
-        const { data: row } = await supabase
-          .from('product_categories')
-          .upsert(
-            { code, name: g.name, parent_id: parentDbId, supplier_id, is_active: true },
-            { onConflict: 'code' }
-          )
-          .select('id')
-          .single()
-        if (row) categoryIdMap.set(g.id, row.id)
+      // Multi-pass: upsert child groups level by level until all resolved
+      const remaining = catalogGroups.filter(g => !rootGroupIds.has(g.id))
+      let maxPasses = 10
+      let toProcess = [...remaining]
+      while (toProcess.length > 0 && maxPasses-- > 0) {
+        const stillUnresolved: typeof toProcess = []
+        for (const g of toProcess) {
+          const parentDbId = g.parent_id ? categoryIdMap.get(g.parent_id) : brandId
+          if (!parentDbId) {
+            stillUnresolved.push(g)
+            continue
+          }
+          const code = `${supplier_id}-${g.id}`
+          const { data: row } = await supabase
+            .from('product_categories')
+            .upsert(
+              { code, name: g.name, parent_id: parentDbId, supplier_id, is_active: true },
+              { onConflict: 'code' }
+            )
+            .select('id')
+            .single()
+          if (row) categoryIdMap.set(g.id, row.id)
+        }
+        if (stillUnresolved.length === toProcess.length) {
+          console.warn(`[pims] ${stillUnresolved.length} orphan groups could not be resolved: ${stillUnresolved.map(g => g.id).join(', ')}`)
+          break
+        }
+        toProcess = stillUnresolved
       }
 
       console.log(`[pims] Upserted ${categoryIdMap.size} categories`)
