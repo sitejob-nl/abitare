@@ -27,9 +27,10 @@ interface PimsRequest {
   products?: PimsProduct[]
 }
 
-// ── Regex-based XML helpers (no DOMParser needed) ──
+// ── Regex-based XML helpers (namespace-tolerant) ──
 function xmlGetTag(xml: string, tagName: string): string | null {
-  const re = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i')
+  // Match tags with optional namespace prefix: <ns:TAG> or <TAG>
+  const re = new RegExp(`<(?:\\w+:)?${tagName}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tagName}>`, 'i')
   const m = xml.match(re)
   return m ? m[1].trim() : null
 }
@@ -43,14 +44,40 @@ function xmlGetTagFirst(xml: string, tagNames: string[]): string | null {
 }
 
 function xmlGetAllBlocks(xml: string, tagName: string): string[] {
-  const re = new RegExp(`<${tagName}[^>]*>[\\s\\S]*?<\\/${tagName}>`, 'gi')
+  const re = new RegExp(`<(?:\\w+:)?${tagName}[^>]*>[\\s\\S]*?<\\/(?:\\w+:)?${tagName}>`, 'gi')
   return Array.from(xml.matchAll(re)).map(m => m[0])
 }
 
 function xmlGetAttr(xml: string, tagName: string, attrName: string): string | null {
-  const re = new RegExp(`<${tagName}[^>]*\\b${attrName}="([^"]*)"`, 'i')
+  const re = new RegExp(`<(?:\\w+:)?${tagName}[^>]*\\b${attrName}="([^"]*)"`, 'i')
   const m = xml.match(re)
   return m ? m[1] : null
+}
+
+// Extract supplier name with multiple fallback strategies
+function extractSupplierName(xml: string): string | null {
+  // Strategy 1: Direct SUPPLIER_NAME tag
+  let name = xmlGetTagFirst(xml, ['SUPPLIER_NAME', 'SUPPLIER_ID'])
+  if (name) return name
+
+  // Strategy 2: Look inside <SUPPLIER> or <HEADER> block
+  const supplierBlock = xmlGetTag(xml, 'SUPPLIER') || xmlGetTag(xml, 'HEADER')
+  if (supplierBlock) {
+    name = xmlGetTagFirst(supplierBlock, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'NAME'])
+    if (name) return name
+  }
+
+  // Strategy 3: PARTY block with supplier role
+  const partyBlocks = xmlGetAllBlocks(xml, 'PARTY')
+  for (const party of partyBlocks) {
+    const role = xmlGetTag(party, 'PARTY_ROLE')
+    if (role && role.toLowerCase().includes('supplier')) {
+      return xmlGetTagFirst(party, ['PARTY_ID', 'NAME', 'PARTY_NAME']) || null
+    }
+  }
+
+  // Strategy 4: Try PARTY_ID as last resort
+  return xmlGetTagFirst(xml, ['PARTY_ID']) || null
 }
 
 // ── BMEcat XML Parser ──
@@ -232,12 +259,14 @@ Deno.serve(async (req) => {
     if (isRawXml) {
       category_id = url.searchParams.get('category_id') || undefined
       file_name = url.searchParams.get('file_name') || 'tradeplace-push.xml'
+      const debug = url.searchParams.get('debug') === 'true'
 
       const xmlText = await req.text()
-      console.log(`[pims] Received raw XML (${xmlText.length} bytes)`)
+      console.log(`[pims] Received raw XML (${xmlText.length} bytes), first 500 chars: ${xmlText.substring(0, 500)}`)
 
-      const xmlSupplierName = xmlGetTagFirst(xmlText, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'PARTY_ID'])
+      const xmlSupplierName = extractSupplierName(xmlText)
       const qsSupplierId = url.searchParams.get('supplier_id')
+      console.log(`[pims] Supplier detection: qs=${qsSupplierId}, xml="${xmlSupplierName}"`)
 
       if (qsSupplierId) {
         supplier_id = qsSupplierId
@@ -250,6 +279,8 @@ Deno.serve(async (req) => {
           .select('id, name, code')
           .eq('is_active', true)
 
+        console.log(`[pims] Active suppliers in DB: ${(suppliers || []).map((s: any) => `${s.name} (${s.code})`).join(', ')}`)
+
         const match = (suppliers || []).find((s: any) => {
           const sName = s.name.toLowerCase()
           const sCode = (s.code || '').toLowerCase()
@@ -261,19 +292,24 @@ Deno.serve(async (req) => {
           supplier_id = match.id
           console.log(`[pims] Matched supplier: ${match.name} (${match.id})`)
         } else {
+          console.error(`[pims] No supplier match for "${xmlSupplierName}". Available: ${(suppliers || []).map((s: any) => s.name).join(', ')}`)
+          const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_name: xmlSupplierName, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code })) } : undefined
           return new Response(
-            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.` }),
+            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.`, debug: debugInfo }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
       } else {
+        console.error(`[pims] No supplier found in XML. First 500 chars: ${xmlText.substring(0, 500)}`)
+        const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), tags_found: { SUPPLIER_NAME: !!xmlGetTag(xmlText, 'SUPPLIER_NAME'), HEADER: !!xmlGetTag(xmlText, 'HEADER'), PARTY: xmlGetAllBlocks(xmlText, 'PARTY').length } } : undefined
         return new Response(
-          JSON.stringify({ error: 'Geen leverancier gevonden in XML en geen supplier_id meegegeven.' }),
+          JSON.stringify({ error: 'Geen leverancier gevonden in XML en geen supplier_id meegegeven.', debug: debugInfo }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
       products = parseBMEcatXml(xmlText)
+      console.log(`[pims] Parsed ${products.length} products from XML`)
     } else {
       const body: PimsRequest = await req.json()
       supplier_id = body.supplier_id
@@ -302,6 +338,7 @@ Deno.serve(async (req) => {
     }
 
     if (products.length === 0) {
+      console.error(`[pims] No products found. Format: ${isRawXml ? 'raw-xml' : 'json-upload'}, supplier_id: ${supplier_id}`)
       return new Response(
         JSON.stringify({ error: 'No products found in input' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
