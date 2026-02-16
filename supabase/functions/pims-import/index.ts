@@ -54,6 +54,68 @@ function xmlGetAttr(xml: string, tagName: string, attrName: string): string | nu
   return m ? m[1] : null
 }
 
+// ── ZIP Detection & Extraction ──
+function isZipFile(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04
+}
+
+async function unzipFirstXml(zipBytes: Uint8Array): Promise<string> {
+  let offset = 0
+  while (offset + 30 < zipBytes.length) {
+    if (zipBytes[offset] !== 0x50 || zipBytes[offset + 1] !== 0x4B ||
+        zipBytes[offset + 2] !== 0x03 || zipBytes[offset + 3] !== 0x04) {
+      break
+    }
+
+    const compressionMethod = zipBytes[offset + 8] | (zipBytes[offset + 9] << 8)
+    const compressedSize = zipBytes[offset + 18] | (zipBytes[offset + 19] << 8) |
+                           (zipBytes[offset + 20] << 16) | (zipBytes[offset + 21] << 24)
+    const fileNameLength = zipBytes[offset + 26] | (zipBytes[offset + 27] << 8)
+    const extraFieldLength = zipBytes[offset + 28] | (zipBytes[offset + 29] << 8)
+
+    const fileName = new TextDecoder().decode(zipBytes.slice(offset + 30, offset + 30 + fileNameLength))
+    const dataStart = offset + 30 + fileNameLength + extraFieldLength
+
+    console.log(`[pims-zip] Entry: "${fileName}", compression=${compressionMethod}, compressed=${compressedSize}`)
+
+    if (fileName.toLowerCase().endsWith('.xml') || fileName.toLowerCase().endsWith('.bmecat')) {
+      const compressedData = zipBytes.slice(dataStart, dataStart + compressedSize)
+
+      if (compressionMethod === 0) {
+        return new TextDecoder().decode(compressedData)
+      } else if (compressionMethod === 8) {
+        const ds = new DecompressionStream('deflate-raw')
+        const writer = ds.writable.getWriter()
+        const reader = ds.readable.getReader()
+        writer.write(compressedData).then(() => writer.close())
+
+        const chunks: Uint8Array[] = []
+        let totalLength = 0
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          totalLength += value.length
+        }
+
+        const result = new Uint8Array(totalLength)
+        let pos = 0
+        for (const chunk of chunks) {
+          result.set(chunk, pos)
+          pos += chunk.length
+        }
+        return new TextDecoder().decode(result)
+      } else {
+        throw new Error(`Unsupported ZIP compression method: ${compressionMethod}`)
+      }
+    }
+
+    offset = dataStart + compressedSize
+  }
+
+  throw new Error('No XML file found in ZIP archive')
+}
+
 // Extract supplier name with multiple fallback strategies
 function extractSupplierName(xml: string): string | null {
   // Strategy 1: Direct SUPPLIER_NAME tag
@@ -261,8 +323,17 @@ Deno.serve(async (req) => {
       file_name = url.searchParams.get('file_name') || 'tradeplace-push.xml'
       const debug = url.searchParams.get('debug') === 'true'
 
-      const xmlText = await req.text()
-      console.log(`[pims] Received raw XML (${xmlText.length} bytes), first 500 chars: ${xmlText.substring(0, 500)}`)
+      const rawBytes = new Uint8Array(await req.arrayBuffer())
+      let xmlText: string
+
+      if (isZipFile(rawBytes)) {
+        console.log(`[pims] Detected ZIP file (${rawBytes.length} bytes), extracting XML...`)
+        xmlText = await unzipFirstXml(rawBytes)
+        console.log(`[pims] Extracted XML from ZIP (${xmlText.length} chars), first 500: ${xmlText.substring(0, 500)}`)
+      } else {
+        xmlText = new TextDecoder().decode(rawBytes)
+        console.log(`[pims] Received raw XML (${xmlText.length} chars), first 500: ${xmlText.substring(0, 500)}`)
+      }
 
       const xmlSupplierName = extractSupplierName(xmlText)
       const qsSupplierId = url.searchParams.get('supplier_id')
