@@ -1,98 +1,110 @@
 
 
-# Plan: URL-only modus voor alle media + bestaande queue afhandelen
+# Plan: Sneller laden van het systeem
 
-## Wat er verandert
+## Probleem
 
-### 1. `pims-process-images` edge function -- vereenvoudigen naar URL-only
+Het systeem heeft 18.400+ actieve producten. De productenpagina laadt ze **allemaal in een keer** zonder paginatie. Daarnaast worden alle 30+ pagina's **eager geimporteerd** in `App.tsx` — dus de hele applicatie wordt als een groot JavaScript-bestand geladen, ook als je alleen het dashboard nodig hebt.
 
-De hele download-logica wordt verwijderd. Alle mediatypes (foto's, maattekeningen, energielabels, datasheets, 3D) worden nu als directe bron-URL opgeslagen in `product_images`, zonder iets te downloaden naar Supabase Storage.
+## Oplossingen (in volgorde van impact)
 
-**Concreet:**
-- `downloadAndStoreImage()` functie verwijderen
-- `DOWNLOADABLE_TYPES` / `URL_ONLY_TYPES` onderscheid verwijderen
-- Alle items in de queue worden op dezelfde manier verwerkt: bron-URL opslaan in `product_images`, status naar `done`
-- Hoofdfoto (photo, index 0) update op `products.image_url` blijft behouden (maar dan met de bron-URL)
-- Batch size verhogen naar 100 (geen download meer = veel sneller)
+### 1. Server-side paginatie op producten (grootste impact)
 
-### 2. Bestaande queue-items direct afhandelen
+De `useProducts` hook en productenpagina krijgen echte paginatie:
 
-Een SQL-migratie die alle huidige `pending` en `processing` items in de `pims_image_queue` in een keer afhandelt:
-- Voor elk pending item: een `product_images` rij aanmaken met de originele `image_url`
-- Queue status naar `done` zetten
-- Hoofdfoto's (photo, index 0) direct op `products.image_url` zetten
+- Supabase `.range(from, to)` toevoegen aan de query (bijv. 50 per pagina)
+- Pagina-navigatie component onderaan de tabel
+- Totaal-telling via een aparte `count` query (Supabase `{ count: 'exact', head: true }`)
+- Zoeken, filteren en sorteren blijven server-side
 
-### 3. ProductDetail pagina -- adviesprijs + apparatuurgegevens tonen
+**Bestanden:**
+- `src/hooks/useProducts.ts` -- `page` parameter toevoegen, `.range()` gebruiken
+- `src/pages/Products.tsx` -- Paginatie-buttons toevoegen
 
-Op `src/pages/ProductDetail.tsx`:
-- **Adviesprijs (RRP)** tonen in het prijzenoverzicht
-- **Inbouwmaten** sectie: nishoogte (min-max), nisbreedte (min-max), nisdiepte
-- **Energie & Technisch**: energieklasse, verbruik, geluid, kleur
-- Alle velden bewerkbaar in edit-modus
+### 2. Lazy loading van pagina's (snellere eerste load)
+
+Alle route-pagina's worden `React.lazy()` met `Suspense`, zodat alleen de code voor de huidige pagina wordt geladen. Dit verkleint de initiiele bundle aanzienlijk.
+
+**Bestand:**
+- `src/App.tsx` -- Alle imports omzetten naar `React.lazy(() => import(...))`
+
+### 3. React Query staleTime instellen
+
+Momenteel wordt elke query opnieuw opgehaald bij elke navigatie (staleTime = 0). Door een standaard `staleTime` van 30 seconden in te stellen, worden herhaalde API-calls vermeden bij snel navigeren.
+
+**Bestand:**
+- `src/App.tsx` -- `QueryClient` configureren met `defaultOptions.queries.staleTime: 30_000`
+
+### 4. Debounce fixen op productzoeken
+
+De huidige debounce is een `setTimeout` zonder cleanup, wat dubbele requests veroorzaakt. Dit wordt vervangen door een echte debounce.
+
+**Bestand:**
+- `src/pages/Products.tsx` -- Debounce met `useEffect` + cleanup
 
 ## Technische details
 
-### pims-process-images (nieuwe logica)
+### Paginatie (useProducts)
 
 ```text
-Per queue-item:
-1. Normaliseer URL (voeg https://pims.tradeplace.com/ prefix toe indien nodig)
-2. Upsert naar product_images met bron-URL
-3. Als photo + index 0: update products.image_url (mits geen user_override)
-4. Queue status -> done
+Nieuwe parameters:
+  page: number (default 1)
+  pageSize: number (default 50)
+
+Query aanpassing:
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  query = query.range(from, to);
+
+Aparte count-query:
+  supabase.from("products").select("*", { count: "exact", head: true })
+    .eq("is_active", true)
+    ... (zelfde filters)
+
+Return: { data, count, page, pageSize, totalPages }
 ```
 
-Batch size: 100 (was 10). Geen netwerk-downloads meer, alleen database-operaties.
-
-### SQL migratie (bulk resolve)
+### Lazy loading (App.tsx)
 
 ```text
--- Stap 1: Insert product_images voor alle pending queue items
-INSERT INTO product_images (product_id, url, storage_path, type, media_type, sort_order, source)
-SELECT product_id, image_url, 'url-ref/' || supplier_id || '/' || article_code || '/' || COALESCE(media_type, 'photo'),
-       CASE WHEN media_type = 'photo' AND image_index = 0 THEN 'main'
-            WHEN media_type = 'photo' THEN 'detail'
-            ELSE COALESCE(media_type, 'photo') END,
-       COALESCE(media_type, 'photo'), image_index, 'pims'
-FROM pims_image_queue WHERE status IN ('pending', 'processing')
-ON CONFLICT (product_id, storage_path) DO UPDATE SET url = EXCLUDED.url;
+// Voor (eager):
+import Dashboard from "./pages/Dashboard";
 
--- Stap 2: Update products.image_url voor hoofdfoto's
-UPDATE products SET image_url = q.image_url
-FROM pims_image_queue q
-WHERE products.id = q.product_id AND q.status IN ('pending','processing')
-  AND COALESCE(q.media_type,'photo') = 'photo' AND q.image_index = 0
-  AND NOT COALESCE((products.user_override->>'image_url')::boolean, false);
+// Na (lazy):
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 
--- Stap 3: Alles op done zetten
-UPDATE pims_image_queue SET status = 'done', processed_at = NOW()
-WHERE status IN ('pending', 'processing');
+// Routes wrappen in:
+<Suspense fallback={<PageLoader />}>
+  <Routes>...</Routes>
+</Suspense>
 ```
 
-### ProductDetail uitbreiding
-
-Nieuwe secties onder de bestaande afmetingen:
+### QueryClient optimalisatie
 
 ```text
-Prijzen
-  Adviesprijs (RRP)   € 1.789,00
-  Inkoopprijs         € -
-
-Inbouwmaten
-  Nishoogte     805 - 870 mm
-  Nisbreedte    600 mm
-  Nisdiepte     550 mm
-
-Energie & Technisch
-  Energieklasse    C
-  Verbruik         74 kWh / 100 cycli
-  Geluidsniveau    45 dB (klasse B)
-  Kleur            RVS / CleanSteel
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000,      // 30 sec: voorkom onnodige refetches
+      gcTime: 10 * 60 * 1000,    // 10 min cache
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 ```
+
+## Verwacht resultaat
+
+| Maatregel | Effect |
+|---|---|
+| Paginatie producten | Laadtijd productpagina van ~5s naar <0.5s |
+| Lazy loading routes | Initiiele bundle ~60% kleiner |
+| staleTime | Minder API-calls bij navigatie |
+| Debounce fix | Geen dubbele zoek-requests |
 
 ## Bestanden die wijzigen
 
-1. **SQL migratie** -- Bulk resolve van alle pending queue-items
-2. **`supabase/functions/pims-process-images/index.ts`** -- Vereenvoudigen naar URL-only, geen downloads
-3. **`src/pages/ProductDetail.tsx`** -- Adviesprijs, inbouwmaten, energie-info tonen
+1. `src/hooks/useProducts.ts` -- Paginatie toevoegen
+2. `src/pages/Products.tsx` -- Paginatie UI + debounce fix
+3. `src/App.tsx` -- Lazy imports + QueryClient configuratie
 
