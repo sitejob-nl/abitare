@@ -124,16 +124,32 @@ async function unzipFirstXml(zipBytes: Uint8Array): Promise<string> {
 }
 
 // Extract supplier name with multiple fallback strategies
-function extractSupplierName(xml: string): string | null {
+// Returns an array of candidate names (most specific first) for matching
+function extractSupplierNames(xml: string): string[] {
+  const candidates: string[] = []
+
+  // Strategy 0 (highest priority): CATALOG_NAME from HEADER
+  // This distinguishes e.g. "Gaggenau producten" from a shared sender like "BSH"
+  const headerBlock = xmlGetTag(xml, 'HEADER')
+  if (headerBlock) {
+    const catalogName = xmlGetTag(headerBlock, 'CATALOG_NAME')
+    if (catalogName) {
+      // Strip generic words for better matching
+      const cleaned = catalogName.replace(/\b(producten|products|catalog(ue)?|prijslijst|price\s?list)\b/gi, '').trim()
+      if (cleaned.length > 2) candidates.push(cleaned)
+      candidates.push(catalogName) // also try full name
+    }
+  }
+
   // Strategy 1: Direct SUPPLIER_NAME tag
-  let name = xmlGetTagFirst(xml, ['SUPPLIER_NAME', 'SUPPLIER_ID'])
-  if (name) return name
+  const directName = xmlGetTagFirst(xml, ['SUPPLIER_NAME', 'SUPPLIER_ID'])
+  if (directName) candidates.push(directName)
 
   // Strategy 2: Look inside <SUPPLIER> or <HEADER> block
-  const supplierBlock = xmlGetTag(xml, 'SUPPLIER') || xmlGetTag(xml, 'HEADER')
+  const supplierBlock = xmlGetTag(xml, 'SUPPLIER') || headerBlock
   if (supplierBlock) {
-    name = xmlGetTagFirst(supplierBlock, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'NAME'])
-    if (name) return name
+    const blockName = xmlGetTagFirst(supplierBlock, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'NAME'])
+    if (blockName && !candidates.includes(blockName)) candidates.push(blockName)
   }
 
   // Strategy 3: PARTY block with supplier role
@@ -141,12 +157,22 @@ function extractSupplierName(xml: string): string | null {
   for (const party of partyBlocks) {
     const role = xmlGetTag(party, 'PARTY_ROLE')
     if (role && role.toLowerCase().includes('supplier')) {
-      return xmlGetTagFirst(party, ['PARTY_ID', 'NAME', 'PARTY_NAME']) || null
+      const partyName = xmlGetTagFirst(party, ['PARTY_ID', 'NAME', 'PARTY_NAME'])
+      if (partyName && !candidates.includes(partyName)) candidates.push(partyName)
     }
   }
 
   // Strategy 4: Try PARTY_ID as last resort
-  return xmlGetTagFirst(xml, ['PARTY_ID']) || null
+  const partyId = xmlGetTagFirst(xml, ['PARTY_ID'])
+  if (partyId && !candidates.includes(partyId)) candidates.push(partyId)
+
+  return candidates
+}
+
+// Legacy wrapper - returns first candidate
+function extractSupplierName(xml: string): string | null {
+  const names = extractSupplierNames(xml)
+  return names.length > 0 ? names[0] : null
 }
 
 // ── ETIM Feature Code Mapping ──
@@ -190,18 +216,51 @@ const ETIM_EV_MAP: Record<string, string> = {
   'EV000091': 'RVS',
 }
 
-// ── Catalog Group System Parser ──
+// ── Catalog Group System Parser (with fallback tag support) ──
 function parseCatalogGroups(xmlString: string): CatalogGroup[] {
-  const groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
-  if (!groupSystem) return []
+  // Try primary tag first, then fallbacks for different XML schemas
+  let groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
+  let structureTag = 'CATALOG_STRUCTURE'
+  let idTag = ['GROUP_ID', 'CATALOG_GROUP_ID']
+  let nameTag = ['GROUP_NAME', 'GROUP_DESCRIPTION']
+  let parentTag = ['PARENT_ID', 'PARENT_GROUP_ID']
 
-  const structureBlocks = xmlGetAllBlocks(groupSystem, 'CATALOG_STRUCTURE')
+  if (!groupSystem) {
+    // Fallback: CLASSIFICATION_SYSTEM (used by some manufacturers like Gaggenau)
+    groupSystem = xmlGetTag(xmlString, 'CLASSIFICATION_SYSTEM')
+    if (groupSystem) {
+      structureTag = 'CLASSIFICATION_GROUP'
+      idTag = ['CLASS_ID', 'CLASSIFICATION_GROUP_ID', 'GROUP_ID']
+      nameTag = ['CLASS_NAME', 'CLASSIFICATION_GROUP_NAME', 'GROUP_NAME', 'GROUP_DESCRIPTION']
+      parentTag = ['PARENT_ID', 'PARENT_CLASS_ID', 'PARENT_GROUP_ID']
+      console.log(`[pims] Using CLASSIFICATION_SYSTEM fallback for catalog groups`)
+    }
+  }
+
+  if (!groupSystem) {
+    // Debug: log which top-level tags exist to help diagnose future issues
+    const topTags = ['CATALOG_GROUP_SYSTEM', 'CLASSIFICATION_SYSTEM', 'CATALOG_STRUCTURE', 
+                     'T_NEW_CATALOG', 'HEADER', 'ARTICLE', 'PRODUCT']
+    const found = topTags.filter(t => xmlGetTag(xmlString, t) !== null)
+    console.warn(`[pims] No catalog group system found. Top-level tags present: ${found.join(', ')}`)
+    return []
+  }
+
+  // Try primary structure tag, then fallback alternatives
+  let structureBlocks = xmlGetAllBlocks(groupSystem, structureTag)
+  if (structureBlocks.length === 0 && structureTag === 'CLASSIFICATION_GROUP') {
+    structureBlocks = xmlGetAllBlocks(groupSystem, 'CLASSIFICATION')
+  }
+  if (structureBlocks.length === 0) {
+    structureBlocks = xmlGetAllBlocks(groupSystem, 'CATALOG_STRUCTURE')
+  }
+
   const groups: CatalogGroup[] = []
 
   for (const block of structureBlocks) {
-    const groupId = xmlGetTagFirst(block, ['GROUP_ID', 'CATALOG_GROUP_ID'])
-    const groupName = xmlGetTagFirst(block, ['GROUP_NAME', 'GROUP_DESCRIPTION'])
-    const parentId = xmlGetTagFirst(block, ['PARENT_ID', 'PARENT_GROUP_ID'])
+    const groupId = xmlGetTagFirst(block, idTag)
+    const groupName = xmlGetTagFirst(block, nameTag)
+    const parentId = xmlGetTagFirst(block, parentTag)
     if (!groupId || !groupName) continue
 
     groups.push({
@@ -441,15 +500,15 @@ Deno.serve(async (req) => {
         console.log(`[pims] Received raw XML (${xmlText.length} chars), first 500: ${xmlText.substring(0, 500)}`)
       }
 
-      const xmlSupplierName = extractSupplierName(xmlText)
+      const xmlSupplierNames = extractSupplierNames(xmlText)
+      const xmlSupplierName = xmlSupplierNames.length > 0 ? xmlSupplierNames[0] : null
       const qsSupplierId = url.searchParams.get('supplier_id')
-      console.log(`[pims] Supplier detection: qs=${qsSupplierId}, xml="${xmlSupplierName}"`)
+      console.log(`[pims] Supplier detection: qs=${qsSupplierId}, candidates=${JSON.stringify(xmlSupplierNames)}`)
 
       if (qsSupplierId) {
         supplier_id = qsSupplierId
-      } else if (xmlSupplierName) {
-        const normalizedName = xmlSupplierName.trim().toLowerCase()
-        console.log(`[pims] Auto-detecting supplier from XML: "${xmlSupplierName}"`)
+      } else if (xmlSupplierNames.length > 0) {
+        console.log(`[pims] Auto-detecting supplier from XML candidates: ${JSON.stringify(xmlSupplierNames)}`)
 
         const { data: suppliers } = await supabase
           .from('suppliers')
@@ -458,26 +517,34 @@ Deno.serve(async (req) => {
 
         console.log(`[pims] Active suppliers in DB: ${(suppliers || []).map((s: any) => `${s.name} (${s.code}) aliases=${(s.pims_aliases || []).join(',')}`).join('; ')}`)
 
-        const match = (suppliers || []).find((s: any) => {
-          const sName = s.name.toLowerCase()
-          const sCode = (s.code || '').toLowerCase()
-          // Direct name/code match
-          if (normalizedName.includes(sName) || sName.includes(normalizedName)
-            || normalizedName.includes(sCode) || sCode === normalizedName) return true
-          // Alias match
-          const aliases: string[] = s.pims_aliases || []
-          return aliases.some((alias: string) => {
-            const a = alias.toLowerCase()
-            return normalizedName.includes(a) || a.includes(normalizedName)
+        // Try each candidate name in priority order (most specific first)
+        let match: any = null
+        let matchedCandidate = ''
+        for (const candidate of xmlSupplierNames) {
+          const normalizedName = candidate.trim().toLowerCase()
+          match = (suppliers || []).find((s: any) => {
+            const sName = s.name.toLowerCase()
+            const sCode = (s.code || '').toLowerCase()
+            if (normalizedName.includes(sName) || sName.includes(normalizedName)
+              || normalizedName.includes(sCode) || sCode === normalizedName) return true
+            const aliases: string[] = s.pims_aliases || []
+            return aliases.some((alias: string) => {
+              const a = alias.toLowerCase()
+              return normalizedName.includes(a) || a.includes(normalizedName)
+            })
           })
-        })
+          if (match) {
+            matchedCandidate = candidate
+            break
+          }
+        }
 
         if (match) {
           supplier_id = match.id
-          console.log(`[pims] Matched supplier: ${match.name} (${match.id})`)
+          console.log(`[pims] Matched supplier: ${match.name} (${match.id}) via candidate "${matchedCandidate}"`)
         } else {
-          console.error(`[pims] No supplier match for "${xmlSupplierName}". Available: ${(suppliers || []).map((s: any) => s.name).join(', ')}`)
-          const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_name: xmlSupplierName, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code })) } : undefined
+          console.error(`[pims] No supplier match for candidates ${JSON.stringify(xmlSupplierNames)}. Available: ${(suppliers || []).map((s: any) => s.name).join(', ')}`)
+          const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_names: xmlSupplierNames, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code })) } : undefined
           return new Response(
             JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.`, debug: debugInfo }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
