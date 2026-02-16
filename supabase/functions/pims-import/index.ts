@@ -347,16 +347,23 @@ Deno.serve(async (req) => {
 
         const { data: suppliers } = await supabase
           .from('suppliers')
-          .select('id, name, code')
+          .select('id, name, code, pims_aliases')
           .eq('is_active', true)
 
-        console.log(`[pims] Active suppliers in DB: ${(suppliers || []).map((s: any) => `${s.name} (${s.code})`).join(', ')}`)
+        console.log(`[pims] Active suppliers in DB: ${(suppliers || []).map((s: any) => `${s.name} (${s.code}) aliases=${(s.pims_aliases || []).join(',')}`).join('; ')}`)
 
         const match = (suppliers || []).find((s: any) => {
           const sName = s.name.toLowerCase()
           const sCode = (s.code || '').toLowerCase()
-          return normalizedName.includes(sName) || sName.includes(normalizedName)
-            || normalizedName.includes(sCode) || sCode === normalizedName
+          // Direct name/code match
+          if (normalizedName.includes(sName) || sName.includes(normalizedName)
+            || normalizedName.includes(sCode) || sCode === normalizedName) return true
+          // Alias match
+          const aliases: string[] = s.pims_aliases || []
+          return aliases.some((alias: string) => {
+            const a = alias.toLowerCase()
+            return normalizedName.includes(a) || a.includes(normalizedName)
+          })
         })
 
         if (match) {

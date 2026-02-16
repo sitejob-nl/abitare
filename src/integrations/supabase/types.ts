@@ -3168,6 +3168,7 @@ export type Database = {
           is_active: boolean | null
           lead_time_weeks: number | null
           name: string
+          pims_aliases: string[] | null
           points_to_eur: number | null
           price_factor: number | null
           price_system: string | null
@@ -3188,6 +3189,7 @@ export type Database = {
           is_active?: boolean | null
           lead_time_weeks?: number | null
           name: string
+          pims_aliases?: string[] | null
           points_to_eur?: number | null
           price_factor?: number | null
           price_system?: string | null
@@ -3208,6 +3210,7 @@ export type Database = {
           is_active?: boolean | null
           lead_time_weeks?: number | null
           name?: string
+          pims_aliases?: string[] | null
           points_to_eur?: number | null
           price_factor?: number | null
           price_system?: string | null
