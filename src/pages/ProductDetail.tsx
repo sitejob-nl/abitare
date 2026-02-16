@@ -16,6 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Loader2, Save, Package } from "lucide-react";
+import { ProductImageGallery } from "@/components/products/ProductImageGallery";
 import { useProduct, useProductCategories, useSuppliers } from "@/hooks/useProducts";
 import { useProductPrices } from "@/hooks/useProductPrices";
 import { supabase } from "@/integrations/supabase/client";
@@ -380,6 +381,9 @@ const ProductDetail = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Product Images */}
+          {id && <ProductImageGallery productId={id} />}
+
           {/* Pricing */}
           <Card>
             <CardHeader>

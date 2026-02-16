@@ -1,0 +1,460 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from '../_shared/cors.ts'
+
+// ============================================================
+// PIMS Import Edge Function
+// Accepts BMEcat XML or CSV via base64, or pre-parsed JSON products
+// Downloads images to Supabase Storage, upserts products
+// ============================================================
+
+interface PimsProduct {
+  article_code: string
+  ean_code?: string
+  name: string
+  description?: string
+  specifications?: Record<string, unknown>
+  image_urls?: string[]
+  cost_price?: number
+  base_price?: number
+}
+
+interface PimsRequest {
+  supplier_id: string
+  category_id?: string
+  format?: 'bmecat' | 'csv'
+  file_content?: string // base64
+  file_name?: string
+  products?: PimsProduct[]
+}
+
+// ── BMEcat XML Parser ──
+function parseBMEcatXml(xmlString: string): PimsProduct[] {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(xmlString, 'text/xml')
+  const products: PimsProduct[] = []
+
+  // Support both BMEcat 1.2 and 2005 structures
+  const articles = doc.querySelectorAll('ARTICLE, T_NEW_CATALOG ARTICLE')
+  if (articles.length === 0) {
+    // Try alternative root elements
+    const items = doc.querySelectorAll('PRODUCT, ITEM')
+    items.forEach(item => {
+      const code = getTextContent(item, 'SUPPLIER_PID, SUPPLIER_AID, PRODUCT_ID')
+      if (!code) return
+      products.push(parseArticleNode(item, code))
+    })
+  } else {
+    articles.forEach(article => {
+      const code = getTextContent(article, 'SUPPLIER_AID, SUPPLIER_PID')
+      if (!code) return
+      products.push(parseArticleNode(article, code))
+    })
+  }
+
+  return products
+}
+
+function parseArticleNode(node: Element, articleCode: string): PimsProduct {
+  const product: PimsProduct = {
+    article_code: articleCode,
+    name: getTextContent(node, 'DESCRIPTION_SHORT') || articleCode,
+    description: getTextContent(node, 'DESCRIPTION_LONG') || undefined,
+    ean_code: getTextContent(node, 'EAN, INTERNATIONAL_PID') || undefined,
+  }
+
+  // Parse MIME (images)
+  const mimeNodes = node.querySelectorAll('MIME, MIME_INFO MIME')
+  const imageUrls: string[] = []
+  mimeNodes.forEach(mime => {
+    const source = getTextContent(mime, 'MIME_SOURCE')
+    const mimeType = getTextContent(mime, 'MIME_TYPE') || ''
+    if (source && (mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i.test(source))) {
+      imageUrls.push(source)
+    }
+  })
+  if (imageUrls.length > 0) product.image_urls = imageUrls
+
+  // Parse prices
+  const priceNodes = node.querySelectorAll('ARTICLE_PRICE, PRODUCT_PRICE_DETAILS PRODUCT_PRICE')
+  priceNodes.forEach(priceNode => {
+    const priceType = priceNode.getAttribute('price_type') || getTextContent(priceNode, 'PRICE_TYPE') || ''
+    const amount = parseFloat(getTextContent(priceNode, 'PRICE_AMOUNT, PRICE') || '0')
+    if (amount > 0) {
+      if (priceType.toLowerCase().includes('net') || priceType === 'net_list') {
+        product.cost_price = amount
+      } else if (priceType.toLowerCase().includes('gros') || priceType === 'nrp') {
+        product.base_price = amount
+      } else if (!product.cost_price) {
+        product.cost_price = amount
+      }
+    }
+  })
+
+  // Parse features/specifications
+  const featureNodes = node.querySelectorAll('FEATURE, ARTICLE_FEATURES FEATURE')
+  const specs: Record<string, unknown> = {}
+  featureNodes.forEach(feat => {
+    const fname = getTextContent(feat, 'FNAME, FEATURE_NAME')
+    const fvalue = getTextContent(feat, 'FVALUE, FEATURE_VALUE')
+    if (fname && fvalue) {
+      specs[fname] = fvalue
+    }
+  })
+  if (Object.keys(specs).length > 0) product.specifications = specs
+
+  return product
+}
+
+function getTextContent(parent: Element, selectors: string): string | null {
+  for (const sel of selectors.split(',').map(s => s.trim())) {
+    const el = parent.querySelector(sel)
+    if (el?.textContent) return el.textContent.trim()
+  }
+  return null
+}
+
+// ── CSV Parser ──
+function parseCsv(csvString: string): PimsProduct[] {
+  const lines = csvString.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  if (lines.length < 2) return []
+
+  // Detect delimiter
+  const firstLine = lines[0]
+  const delimiter = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ','
+
+  const headers = parseCsvLine(firstLine, delimiter).map(h => h.toLowerCase().trim())
+  const products: PimsProduct[] = []
+
+  // Auto-detect column indices
+  const colMap = {
+    article_code: findCol(headers, ['article_code', 'artikelcode', 'supplier_aid', 'ean', 'code', 'sku']),
+    name: findCol(headers, ['name', 'naam', 'description_short', 'omschrijving', 'description']),
+    description: findCol(headers, ['description_long', 'long_description', 'beschrijving']),
+    ean_code: findCol(headers, ['ean', 'ean_code', 'ean13', 'gtin']),
+    cost_price: findCol(headers, ['cost_price', 'inkoopprijs', 'netto', 'net_price']),
+    base_price: findCol(headers, ['base_price', 'verkoopprijs', 'adviesprijs', 'price', 'prijs']),
+    image_url: findCol(headers, ['image_url', 'image', 'afbeelding', 'mime_source', 'picture', 'foto']),
+  }
+
+  if (colMap.article_code === -1) return []
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCsvLine(lines[i], delimiter)
+    const code = values[colMap.article_code]?.trim()
+    if (!code) continue
+
+    const product: PimsProduct = {
+      article_code: code,
+      name: colMap.name !== -1 ? values[colMap.name]?.trim() || code : code,
+      description: colMap.description !== -1 ? values[colMap.description]?.trim() || undefined : undefined,
+      ean_code: colMap.ean_code !== -1 ? values[colMap.ean_code]?.trim() || undefined : undefined,
+      cost_price: colMap.cost_price !== -1 ? parseFloat(values[colMap.cost_price]?.replace(',', '.') || '0') || undefined : undefined,
+      base_price: colMap.base_price !== -1 ? parseFloat(values[colMap.base_price]?.replace(',', '.') || '0') || undefined : undefined,
+    }
+
+    if (colMap.image_url !== -1) {
+      const url = values[colMap.image_url]?.trim()
+      if (url) product.image_urls = [url]
+    }
+
+    products.push(product)
+  }
+
+  return products
+}
+
+function parseCsvLine(line: string, delimiter: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (const char of line) {
+    if (char === '"') { inQuotes = !inQuotes; continue }
+    if (char === delimiter && !inQuotes) { result.push(current); current = ''; continue }
+    current += char
+  }
+  result.push(current)
+  return result
+}
+
+function findCol(headers: string[], patterns: string[]): number {
+  for (const pattern of patterns) {
+    const idx = headers.findIndex(h => h.includes(pattern))
+    if (idx !== -1) return idx
+  }
+  return -1
+}
+
+// ── Image downloader ──
+async function downloadAndStoreImage(
+  supabase: any,
+  imageUrl: string,
+  supplierId: string,
+  articleCode: string,
+  index: number,
+): Promise<{ url: string; storage_path: string } | null> {
+  try {
+    // Resolve relative URLs (PIMS often uses relative paths)
+    let fullUrl = imageUrl
+    if (!imageUrl.startsWith('http')) {
+      // Skip non-URL entries
+      if (!imageUrl.includes('/') && !imageUrl.includes('.')) return null
+      fullUrl = `https://pims.tradeplace.com/${imageUrl.replace(/^\//, '')}`
+    }
+
+    const response = await fetch(fullUrl, { signal: AbortSignal.timeout(15000) })
+    if (!response.ok) {
+      console.warn(`[pims] Failed to download image: ${fullUrl} (${response.status})`)
+      return null
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg'
+    const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+    const cleanCode = articleCode.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const storagePath = `${supplierId}/${cleanCode}/${index === 0 ? 'main' : `detail_${index}`}.${ext}`
+
+    const blob = await response.arrayBuffer()
+
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(storagePath, blob, {
+        contentType,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      console.warn(`[pims] Upload failed for ${storagePath}: ${uploadError.message}`)
+      return null
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(storagePath)
+
+    return {
+      url: publicUrlData.publicUrl,
+      storage_path: storagePath,
+    }
+  } catch (err) {
+    console.warn(`[pims] Image download error for ${imageUrl}:`, err)
+    return null
+  }
+}
+
+// ── Main handler ──
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Auth check
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    )
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const body: PimsRequest = await req.json()
+    const { supplier_id, category_id, format, file_content, file_name } = body
+
+    if (!supplier_id) {
+      return new Response(
+        JSON.stringify({ error: 'supplier_id is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Parse products from file or use pre-parsed
+    let products: PimsProduct[] = []
+
+    if (body.products && body.products.length > 0) {
+      products = body.products
+    } else if (file_content && format) {
+      const decoded = atob(file_content)
+      const text = new TextDecoder().decode(Uint8Array.from(decoded.split('').map(c => c.charCodeAt(0))))
+
+      if (format === 'bmecat') {
+        products = parseBMEcatXml(text)
+      } else if (format === 'csv') {
+        products = parseCsv(text)
+      }
+    }
+
+    if (products.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'No products found in input' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`[pims] Processing ${products.length} products for supplier ${supplier_id}`)
+
+    // Fetch existing products for safe upsert
+    const existingMap = new Map<string, { id: string; user_override: Record<string, boolean> | null }>()
+    let offset = 0
+    while (true) {
+      const { data: page } = await supabase
+        .from('products')
+        .select('id, article_code, user_override')
+        .eq('supplier_id', supplier_id)
+        .range(offset, offset + 999)
+      if (!page || page.length === 0) break
+      page.forEach((p: any) => existingMap.set(p.article_code, { id: p.id, user_override: p.user_override }))
+      offset += 1000
+      if (page.length < 1000) break
+    }
+
+    let inserted = 0
+    let updated = 0
+    let imagesDownloaded = 0
+    let imageErrors = 0
+    const errors: string[] = []
+
+    // Process products in chunks
+    const chunkSize = 50
+    for (let i = 0; i < products.length; i += chunkSize) {
+      const chunk = products.slice(i, i + chunkSize)
+
+      for (const p of chunk) {
+        const existing = existingMap.get(p.article_code)
+        const overrides = existing?.user_override || {}
+
+        // Build upsert data respecting user_override
+        const productData: Record<string, unknown> = {
+          article_code: p.article_code,
+          supplier_id,
+          category_id: category_id || null,
+          is_active: true,
+          pims_last_synced: new Date().toISOString(),
+        }
+
+        if (!overrides['name']) productData.name = p.name
+        if (!overrides['description'] && p.description) productData.description = p.description
+        if (!overrides['ean_code'] && p.ean_code) productData.ean_code = p.ean_code
+        if (!overrides['cost_price'] && p.cost_price) productData.cost_price = p.cost_price
+        if (!overrides['base_price'] && p.base_price) productData.base_price = p.base_price
+        if (p.specifications && !overrides['specifications']) productData.specifications = p.specifications
+
+        // For new products, always set name
+        if (!existing) {
+          productData.name = p.name
+          productData.vat_rate = 21
+          productData.unit = 'stuk'
+        }
+
+        // Upsert product
+        const { data: upsertedProduct, error: upsertError } = await supabase
+          .from('products')
+          .upsert(productData, { onConflict: 'supplier_id,article_code' })
+          .select('id')
+          .single()
+
+        if (upsertError) {
+          errors.push(`Product ${p.article_code}: ${upsertError.message}`)
+          continue
+        }
+
+        const productId = upsertedProduct?.id || existing?.id
+        if (!productId) continue
+
+        if (existing) updated++
+        else inserted++
+
+        // Download images (max 5 per product to avoid timeouts)
+        if (p.image_urls && p.image_urls.length > 0) {
+          const maxImages = Math.min(p.image_urls.length, 5)
+          let mainImageUrl: string | null = null
+
+          for (let imgIdx = 0; imgIdx < maxImages; imgIdx++) {
+            const result = await downloadAndStoreImage(
+              supabase,
+              p.image_urls[imgIdx],
+              supplier_id,
+              p.article_code,
+              imgIdx,
+            )
+
+            if (result) {
+              // Insert into product_images
+              await supabase.from('product_images').upsert({
+                product_id: productId,
+                url: result.url,
+                storage_path: result.storage_path,
+                type: imgIdx === 0 ? 'main' : 'detail',
+                sort_order: imgIdx,
+                source: 'pims',
+              }, { onConflict: 'product_id,storage_path', ignoreDuplicates: false })
+
+              if (imgIdx === 0) mainImageUrl = result.url
+              imagesDownloaded++
+            } else {
+              imageErrors++
+            }
+          }
+
+          // Update product's image_url with main image
+          if (mainImageUrl && !overrides['image_url']) {
+            await supabase.from('products').update({ image_url: mainImageUrl }).eq('id', productId)
+          }
+        }
+      }
+    }
+
+    // Log import
+    try {
+      const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: user.id })
+      await supabase.from('import_logs').insert({
+        supplier_id,
+        division_id: divisionRow || null,
+        source: 'pims',
+        file_name: file_name || null,
+        total_rows: inserted + updated,
+        inserted,
+        updated,
+        skipped: 0,
+        errors: errors.length,
+        error_details: errors.length > 0 ? errors : null,
+        imported_by: user.id,
+      })
+    } catch (logErr) {
+      console.error('[pims] Failed to log import:', logErr)
+    }
+
+    console.log(`[pims] Done: ${inserted} inserted, ${updated} updated, ${imagesDownloaded} images, ${imageErrors} image errors`)
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        inserted,
+        updated,
+        total: inserted + updated,
+        images_downloaded: imagesDownloaded,
+        image_errors: imageErrors,
+        errors: errors.length > 0 ? errors : undefined,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (err) {
+    console.error('[pims] Error:', err)
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})
