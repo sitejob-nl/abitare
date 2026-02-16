@@ -1,106 +1,93 @@
 
 
-# Plan: Bosch PIMS-data opschonen en verrijken
+# Plan: Productcategorisatie uit PIMS-data
 
-## Huidige situatie (667 producten)
+## Huidige situatie
 
-| Veld | Status | Probleem |
-|------|--------|----------|
-| Naam | 667/667 | Bevat artikelcode: "BBH3ALL23, Draadloze steelstofzuiger" |
-| Inkoopprijs | 654/667 | 13 producten zonder prijs |
-| Verkoopprijs | 0/667 | Ontbreekt volledig, price_factor staat op 1.0 |
-| Specificaties | 278/667 | Onleesbare codes: `EF000008: 541` in plaats van `Breedte: 541 mm` |
-| Afmetingen | 0/667 | Niet ingevuld, terwijl data in specs zit (EF000008=breedte, EF000040=hoogte, EF000049=diepte) |
-| EAN | 667/667 | Correct |
-| Afbeeldingen | 0/667 | Geen MIME_SOURCE in XML |
-| Omschrijving | 667/667 | Correct, maar bevat ook afmetingen in tekst |
+- Alle 667 Bosch-producten hebben **geen categorie** (`category_id = null`)
+- De `product_categories` tabel ondersteunt al hierarchie via `parent_id`
+- Bestaande top-level categorien: Keukenmeubelen, Apparatuur, Werkbladen, Montage, Transport, Accessoires
+- De BMEcat XML bevat classificatie-data in `CATALOG_GROUP_SYSTEM` en `ARTICLE_TO_CATALOGGROUP_MAP` tags
+
+## Gewenste structuur
+
+```text
+Apparatuur (bestaand)
+  └── Bosch (merk-niveau, nieuw)
+        ├── MDA - Inbouw (hoofdgroep)
+        │     ├── Baking oven
+        │     ├── Cooker hood
+        │     ├── Dishwasher
+        │     ├── Hob
+        │     └── ...
+        ├── MDA - Vrijstaand (hoofdgroep)
+        │     ├── Washing machine
+        │     └── ...
+        └── Accessory (hoofdgroep)
+              └── Other
+```
 
 ## Wat wordt aangepast
 
-### 1. Productnamen opschonen
-De artikelcode aan het begin van de naam verwijderen.
+### 1. Supplier-kolom op categorien
 
-**Voor:** `BBH3ALL23, Draadloze steelstofzuiger`
-**Na:** `Draadloze steelstofzuiger`
+Een `supplier_id` kolom toevoegen aan `product_categories` zodat leverancier-specifieke categorien (Bosch > MDA - Inbouw > Dishwasher) gescheiden zijn van generieke categorien (Apparatuur, Werkbladen).
 
-Aanpassing in de PIMS parser: als `DESCRIPTION_SHORT` begint met de `SUPPLIER_AID` gevolgd door een komma, strip dat deel.
+### 2. BMEcat classificatie-parser
 
-### 2. Specificaties vertalen naar leesbare namen
-De BMEcat ETIM-codes (EF000008, EF000040, etc.) vertalen naar Nederlandse namen via een mapping-tabel. De belangrijkste codes die voorkomen:
+De XML bevat een `CATALOG_GROUP_SYSTEM` blok met `CATALOG_STRUCTURE` entries die de hiearchie beschrijven (groep-id, naam, parent-id). Elk product is gekoppeld via `ARTICLE_TO_CATALOGGROUP_MAP`.
 
-| Code | Betekenis | Voorbeeld |
-|------|-----------|-----------|
-| EF000008 | Breedte (mm) | 541 |
-| EF000040 | Hoogte (mm) | 874 |
-| EF000049 | Diepte (mm) | 548 |
-| EF002680 | Diepte met deur (mm) | 550 |
-| EF008333 | Inbouw breedte (mm) | 560 |
-| EF008334 | Inbouw hoogte (mm) | 880 |
-| EF002065 | Energielabel | EV-codes |
-| EF004149 | Bewaartijd bij storing (uur) | 10 |
-| EF007823 | Scharnier type | EV000154 |
+Nieuwe parsing-logica:
+1. Alle `CATALOG_STRUCTURE` entries uitlezen (groep-id, naam, parent-groep-id)
+2. Hiearchie opbouwen: hoofdgroep > productgroep
+3. Per product de `ARTICLE_TO_CATALOGGROUP_MAP` uitlezen voor de classificatie-link
+4. Categorien automatisch aanmaken in `product_categories` (upsert op code + supplier_id)
+5. Product toewijzen aan de juiste leaf-categorie
 
-Aanpassing in de parser: een mapping dictionary toevoegen die EF-codes vertaalt. Onbekende codes worden genegeerd in plaats van opgeslagen als onleesbare data.
+### 3. Bestaande producten categoriseren
 
-### 3. Afmetingen automatisch extraheren
-De specificatie-codes EF000008 (breedte), EF000040 (hoogte) en EF000049 (diepte) mappen naar de `width_mm`, `height_mm` en `depth_mm` kolommen van het product.
-
-### 4. Verkoopprijs berekenen via price_factor
-De Bosch-leverancier heeft nu `price_factor = 1.0` waardoor de verkoopprijs gelijk is aan de inkoopprijs. Er zijn twee stappen:
-- **Parser**: als er geen `base_price` uit de XML komt, gebruik `cost_price * supplier.price_factor` om een verkoopprijs in te vullen
-- **Instelling**: je moet zelf de juiste `price_factor` instellen bij de Bosch leverancier (bijv. 1.4 voor 40% marge)
-
-### 5. Bestaande data corrigeren (eenmalig)
-Na het deployen van de verbeterde parser, een SQL-update uitvoeren om de 667 bestaande producten te corrigeren:
-- Namen opschonen (artikelcode verwijderen)
-- Specificaties opnieuw opslaan is niet mogelijk zonder de XML, dus alleen de namen worden gecorrigeerd
-- Afmetingen worden bij de volgende import automatisch ingevuld
+Na het opnieuw importeren van de Bosch-data worden de 667 producten automatisch aan de juiste categorie gekoppeld. Er is geen aparte SQL-correctie nodig; de volgende import doet dit automatisch.
 
 ## Technische details
 
-### Bestand: `supabase/functions/pims-import/index.ts`
+### Database migratie
 
-**Naam-opschoning (in `parseBMEcatXml`):**
 ```text
-const rawName = xmlGetTagFirst(block, ['DESCRIPTION_SHORT']) || code
-const name = rawName.startsWith(code + ',') ? rawName.slice(code.length + 1).trim() : rawName
+ALTER TABLE product_categories ADD COLUMN supplier_id uuid REFERENCES suppliers(id);
 ```
 
-**ETIM-specificatie mapping (nieuw):**
+Een index toevoegen voor snelle lookups:
 ```text
-const ETIM_MAP: Record<string, string> = {
-  'EF000008': 'Breedte (mm)',
-  'EF000040': 'Hoogte (mm)',
-  'EF000049': 'Diepte (mm)',
-  'EF002680': 'Diepte met deur (mm)',
-  'EF008333': 'Inbouw breedte (mm)',
-  'EF008334': 'Inbouw hoogte (mm)',
-  'EF002065': 'Energielabel',
-  'EF004149': 'Bewaartijd storing (uur)',
-  ... (ca. 20 meest voorkomende codes)
+CREATE INDEX idx_product_categories_supplier ON product_categories(supplier_id) WHERE supplier_id IS NOT NULL;
+```
+
+### Parser-wijzigingen (`pims-import/index.ts`)
+
+**Nieuwe functie: `parseCatalogGroups`**
+- Leest `CATALOG_GROUP_SYSTEM` uit de XML
+- Bouwt een map van groep-id naar `{ name, parent_id }`
+- Retourneert de hiearchie
+
+**Nieuwe functie: `parseProductGroupMapping`**
+- Leest `ARTICLE_TO_CATALOGGROUP_MAP` per product
+- Koppelt artikel aan groep-id
+
+**Upsert-logica uitbreiden:**
+- Voor elke unieke groep: upsert in `product_categories` met `code = groep-id`, `supplier_id`, en correcte `parent_id`
+- Merk-categorie (bijv. "Bosch") automatisch aanmaken als tussenniveau onder "Apparatuur"
+- Product `category_id` vullen met de leaf-categorie
+
+### PimsProduct interface uitbreiden
+
+```text
+interface PimsProduct {
+  // ... bestaande velden
+  catalog_group_id?: string  // classificatie-groep uit XML
 }
 ```
 
-Onbekende EF-codes worden overgeslagen. Specificaties worden opgeslagen met leesbare keys.
-
-**Afmetingen extractie (in upsert-logica):**
-```text
-if (specs['EF000008']) productData.width_mm = parseInt(specs['EF000008'])
-if (specs['EF000040']) productData.height_mm = parseInt(specs['EF000040'])
-if (specs['EF000049']) productData.depth_mm = parseInt(specs['EF000049'])
-```
-
-**Verkoopprijs berekening (in upsert-logica):**
-De supplier's `price_factor` wordt opgehaald en toegepast als er geen `base_price` in de XML zit.
-
-### Eenmalige data-correctie (SQL via insert tool)
-```text
-UPDATE products 
-SET name = TRIM(SUBSTRING(name FROM POSITION(',' IN name) + 1))
-WHERE supplier_id = 'e70c4a1a-...' 
-  AND name LIKE article_code || ',%'
-```
-
 ### Geen wijzigingen nodig aan
-- Frontend code (productdetailpagina toont al specifications als key-value pairs)
-- Andere hooks of componenten
+
+- Frontend: de productlijst/filter pagina gebruikt al `category_id` met de bestaande categorien
+- Andere edge functions
+
