@@ -2,9 +2,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 // ============================================================
-// PIMS Import Edge Function
-// Accepts BMEcat XML or CSV via base64, or pre-parsed JSON products
-// Downloads images to Supabase Storage, upserts products
+// PIMS Import Edge Function - Phase 1: Parse & Upsert
+// Accepts BMEcat XML or CSV, upserts products, queues images
+// for background processing by pims-process-images
 // ============================================================
 
 interface PimsProduct {
@@ -57,14 +57,9 @@ function xmlGetAttr(xml: string, tagName: string, attrName: string): string | nu
 function parseBMEcatXml(xmlString: string): PimsProduct[] {
   const products: PimsProduct[] = []
 
-  // Find all ARTICLE blocks
   let articleBlocks = xmlGetAllBlocks(xmlString, 'ARTICLE')
-  if (articleBlocks.length === 0) {
-    articleBlocks = xmlGetAllBlocks(xmlString, 'PRODUCT')
-  }
-  if (articleBlocks.length === 0) {
-    articleBlocks = xmlGetAllBlocks(xmlString, 'ITEM')
-  }
+  if (articleBlocks.length === 0) articleBlocks = xmlGetAllBlocks(xmlString, 'PRODUCT')
+  if (articleBlocks.length === 0) articleBlocks = xmlGetAllBlocks(xmlString, 'ITEM')
 
   for (const block of articleBlocks) {
     const code = xmlGetTagFirst(block, ['SUPPLIER_AID', 'SUPPLIER_PID', 'PRODUCT_ID'])
@@ -128,14 +123,12 @@ function parseCsv(csvString: string): PimsProduct[] {
   const lines = csvString.split('\n').map(l => l.trim()).filter(l => l.length > 0)
   if (lines.length < 2) return []
 
-  // Detect delimiter
   const firstLine = lines[0]
   const delimiter = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ','
 
   const headers = parseCsvLine(firstLine, delimiter).map(h => h.toLowerCase().trim())
   const products: PimsProduct[] = []
 
-  // Auto-detect column indices
   const colMap = {
     article_code: findCol(headers, ['article_code', 'artikelcode', 'supplier_aid', 'ean', 'code', 'sku']),
     name: findCol(headers, ['name', 'naam', 'description_short', 'omschrijving', 'description']),
@@ -194,62 +187,6 @@ function findCol(headers: string[], patterns: string[]): number {
   return -1
 }
 
-// ── Image downloader ──
-async function downloadAndStoreImage(
-  supabase: any,
-  imageUrl: string,
-  supplierId: string,
-  articleCode: string,
-  index: number,
-): Promise<{ url: string; storage_path: string } | null> {
-  try {
-    // Resolve relative URLs (PIMS often uses relative paths)
-    let fullUrl = imageUrl
-    if (!imageUrl.startsWith('http')) {
-      // Skip non-URL entries
-      if (!imageUrl.includes('/') && !imageUrl.includes('.')) return null
-      fullUrl = `https://pims.tradeplace.com/${imageUrl.replace(/^\//, '')}`
-    }
-
-    const response = await fetch(fullUrl, { signal: AbortSignal.timeout(15000) })
-    if (!response.ok) {
-      console.warn(`[pims] Failed to download image: ${fullUrl} (${response.status})`)
-      return null
-    }
-
-    const contentType = response.headers.get('content-type') || 'image/jpeg'
-    const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
-    const cleanCode = articleCode.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const storagePath = `${supplierId}/${cleanCode}/${index === 0 ? 'main' : `detail_${index}`}.${ext}`
-
-    const blob = await response.arrayBuffer()
-
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(storagePath, blob, {
-        contentType,
-        upsert: true,
-      })
-
-    if (uploadError) {
-      console.warn(`[pims] Upload failed for ${storagePath}: ${uploadError.message}`)
-      return null
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(storagePath)
-
-    return {
-      url: publicUrlData.publicUrl,
-      storage_path: storagePath,
-    }
-  } catch (err) {
-    console.warn(`[pims] Image download error for ${imageUrl}:`, err)
-    return null
-  }
-}
-
 // ── Main handler ──
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -265,11 +202,9 @@ Deno.serve(async (req) => {
     const contentType = (req.headers.get('content-type') || '').toLowerCase()
     const isRawXml = contentType.includes('xml')
 
-    // Determine auth mode: raw XML from Tradeplace skips user auth (M2M)
     let userId: string | null = null
 
     if (!isRawXml) {
-      // Standard UI flow: require Bearer token
       const authHeader = req.headers.get('Authorization')
       if (!authHeader) {
         return new Response(
@@ -288,7 +223,6 @@ Deno.serve(async (req) => {
       }
       userId = user.id
     }
-    // For raw XML: Tradeplace sends directly, no user auth needed (M2M integration)
 
     let supplier_id: string
     let category_id: string | undefined
@@ -296,22 +230,18 @@ Deno.serve(async (req) => {
     let products: PimsProduct[] = []
 
     if (isRawXml) {
-      // ── Raw XML mode (Tradeplace PIMS HTTP transport) ──
       category_id = url.searchParams.get('category_id') || undefined
       file_name = url.searchParams.get('file_name') || 'tradeplace-push.xml'
 
       const xmlText = await req.text()
       console.log(`[pims] Received raw XML (${xmlText.length} bytes)`)
 
-      // Auto-detect supplier from XML content (SUPPLIER_NAME or SUPPLIER_ID in BMEcat)
       const xmlSupplierName = xmlGetTagFirst(xmlText, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'PARTY_ID'])
-      // Also allow override via query param
       const qsSupplierId = url.searchParams.get('supplier_id')
 
       if (qsSupplierId) {
         supplier_id = qsSupplierId
       } else if (xmlSupplierName) {
-        // Match against suppliers table (case-insensitive, partial match)
         const normalizedName = xmlSupplierName.trim().toLowerCase()
         console.log(`[pims] Auto-detecting supplier from XML: "${xmlSupplierName}"`)
 
@@ -332,7 +262,7 @@ Deno.serve(async (req) => {
           console.log(`[pims] Matched supplier: ${match.name} (${match.id})`)
         } else {
           return new Response(
-            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem. Voeg de leverancier eerst toe of geef supplier_id mee als query parameter.` }),
+            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.` }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
@@ -345,7 +275,6 @@ Deno.serve(async (req) => {
 
       products = parseBMEcatXml(xmlText)
     } else {
-      // ── JSON mode (UI upload) ──
       const body: PimsRequest = await req.json()
       supplier_id = body.supplier_id
       category_id = body.category_id
@@ -398,9 +327,9 @@ Deno.serve(async (req) => {
 
     let inserted = 0
     let updated = 0
-    let imagesDownloaded = 0
-    let imageErrors = 0
+    let imagesQueued = 0
     const errors: string[] = []
+    const imageQueueRows: any[] = []
 
     // Process products in chunks
     const chunkSize = 50
@@ -411,7 +340,6 @@ Deno.serve(async (req) => {
         const existing = existingMap.get(p.article_code)
         const overrides = existing?.user_override || {}
 
-        // Build upsert data respecting user_override
         const productData: Record<string, unknown> = {
           article_code: p.article_code,
           supplier_id,
@@ -427,14 +355,12 @@ Deno.serve(async (req) => {
         if (!overrides['base_price'] && p.base_price) productData.base_price = p.base_price
         if (p.specifications && !overrides['specifications']) productData.specifications = p.specifications
 
-        // For new products, always set name
         if (!existing) {
           productData.name = p.name
           productData.vat_rate = 21
           productData.unit = 'stuk'
         }
 
-        // Upsert product
         const { data: upsertedProduct, error: upsertError } = await supabase
           .from('products')
           .upsert(productData, { onConflict: 'supplier_id,article_code' })
@@ -452,43 +378,31 @@ Deno.serve(async (req) => {
         if (existing) updated++
         else inserted++
 
-        // Download images (max 5 per product to avoid timeouts)
+        // Queue images instead of downloading them
         if (p.image_urls && p.image_urls.length > 0) {
           const maxImages = Math.min(p.image_urls.length, 5)
-          let mainImageUrl: string | null = null
-
           for (let imgIdx = 0; imgIdx < maxImages; imgIdx++) {
-            const result = await downloadAndStoreImage(
-              supabase,
-              p.image_urls[imgIdx],
+            imageQueueRows.push({
+              product_id: productId,
               supplier_id,
-              p.article_code,
-              imgIdx,
-            )
-
-            if (result) {
-              // Insert into product_images
-              await supabase.from('product_images').upsert({
-                product_id: productId,
-                url: result.url,
-                storage_path: result.storage_path,
-                type: imgIdx === 0 ? 'main' : 'detail',
-                sort_order: imgIdx,
-                source: 'pims',
-              }, { onConflict: 'product_id,storage_path', ignoreDuplicates: false })
-
-              if (imgIdx === 0) mainImageUrl = result.url
-              imagesDownloaded++
-            } else {
-              imageErrors++
-            }
-          }
-
-          // Update product's image_url with main image
-          if (mainImageUrl && !overrides['image_url']) {
-            await supabase.from('products').update({ image_url: mainImageUrl }).eq('id', productId)
+              article_code: p.article_code,
+              image_url: p.image_urls[imgIdx],
+              image_index: imgIdx,
+              status: 'pending',
+            })
           }
         }
+      }
+    }
+
+    // Bulk insert image queue in batches of 500
+    for (let i = 0; i < imageQueueRows.length; i += 500) {
+      const batch = imageQueueRows.slice(i, i + 500)
+      const { error: queueError } = await supabase.from('pims_image_queue').insert(batch)
+      if (queueError) {
+        console.error(`[pims] Queue insert error: ${queueError.message}`)
+      } else {
+        imagesQueued += batch.length
       }
     }
 
@@ -516,7 +430,23 @@ Deno.serve(async (req) => {
       console.error('[pims] Failed to log import:', logErr)
     }
 
-    console.log(`[pims] Done: ${inserted} inserted, ${updated} updated, ${imagesDownloaded} images, ${imageErrors} image errors`)
+    console.log(`[pims] Done: ${inserted} inserted, ${updated} updated, ${imagesQueued} images queued`)
+
+    // Fire-and-forget: trigger background image processing
+    if (imagesQueued > 0) {
+      try {
+        fetch(`${supabaseUrl}/functions/v1/pims-process-images`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ supplier_id }),
+        }).catch(err => console.warn('[pims] Failed to trigger image processor:', err))
+      } catch {
+        // Fire and forget - don't block response
+      }
+    }
 
     return new Response(
       JSON.stringify({
@@ -524,8 +454,7 @@ Deno.serve(async (req) => {
         inserted,
         updated,
         total: inserted + updated,
-        images_downloaded: imagesDownloaded,
-        image_errors: imageErrors,
+        images_queued: imagesQueued,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
