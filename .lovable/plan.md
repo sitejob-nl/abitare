@@ -1,59 +1,51 @@
 
 
-# Fix PIMS Import: ZIP-bestand ondersteuning
+# Fix: Leverancier "BSH Huishoudapparaten B.V." koppelen
 
 ## Probleem
 
-Tradeplace stuurt de BMEcat export als een **ZIP-bestand** (niet als raw XML). Dit is te zien aan:
-- De eerste bytes zijn `PK\x03\x04` -- de standaard ZIP file signature
-- De bestandsnaam `bosch export.xml` is zichtbaar in de ZIP-header
-- De functie probeert de ZIP-bytes als XML te parsen, vindt geen tags, en geeft een 400 error
+De PIMS-import werkt nu technisch correct (ZIP uitpakken, XML parsen). Maar de leverancier uit het bestand — **"BSH Huishoudapparaten B.V."** — matcht met geen enkele leverancier in je database.
+
+BSH is het moederbedrijf van Bosch en Siemens huishoudapparaten. Het Tradeplace PIMS-bestand heet "bosch export" maar de XML-afzender is BSH.
 
 ## Oplossing
 
-Voeg ZIP-detectie en -decompressie toe aan de `pims-import` edge function.
+### 1. Leverancier "Bosch" toevoegen aan de database
 
-### Technische aanpak
+Een nieuwe leverancier aanmaken:
+- Naam: **Bosch**
+- Code: **BOSCH**
 
-**Bestand: `supabase/functions/pims-import/index.ts`**
+### 2. Aliassen-systeem voor supplier matching
 
-1. **ZIP-detectie**: Controleer of de eerste 2 bytes van de ontvangen data `PK` zijn (hex `50 4B`)
-2. **Decompressie**: Gebruik de ingebouwde `DecompressionStream("deflate-raw")` Web API (beschikbaar in Deno) om het ZIP-bestand uit te pakken, of gebruik een lichtgewicht ZIP-parser die het eerste `.xml` bestand uit het archief extraheert
-3. **Fallback**: Als het geen ZIP is, verwerk het als voorheen (raw XML)
+Een nieuwe kolom `pims_aliases` (text array) toevoegen aan de `suppliers` tabel. Hiermee kan elke leverancier meerdere namen hebben die het systeem herkent.
 
-### ZIP-parsing strategie
+Voorbeeld:
+- Bosch: `["BSH Huishoudapparaten", "BSH", "Bosch"]`
+- Siemens: `["BSH Huishoudapparaten", "Siemens"]` (als Siemens ook via BSH komt)
 
-Een ZIP-bestand heeft een eenvoudige structuur:
-- Local file headers beginnen met `PK\x03\x04`
-- Na de header volgt de compressed data
-- We zoeken het eerste bestand dat op `.xml` eindigt
-- De compressed data wordt gedecomprimeerd met `DecompressionStream("deflate-raw")`
+### 3. Matching-logica updaten
 
-Dit is een lichtgewicht oplossing zonder externe dependencies -- alleen Web APIs die Deno/Edge Functions al ondersteunen.
-
-### Wijzigingen
-
-In `pims-import/index.ts`:
-- Voeg een `unzipFirstXml(rawBytes: Uint8Array): string` functie toe die:
-  - De ZIP local file header parsed (offset, compressed size, bestandsnaam)
-  - Het eerste `.xml` bestand vindt
-  - De data decomprimeert met `DecompressionStream`
-  - De XML string retourneert
-- Voeg ZIP-detectie toe direct na het ontvangen van de raw data, voor de XML-parsing
-- Log duidelijk of het bestand als ZIP of raw XML werd verwerkt
-
-### Flow na de fix
+De supplier matching in `pims-import` aanpassen om ook de `pims_aliases` te checken:
 
 ```text
-Tradeplace POST data
-        |
-        v
-  Is het een ZIP? (check PK header)
-    |           |
-   Ja          Nee
-    |           |
-  Unzip XML   Gebruik raw XML
-    |           |
-    v           v
-  Parse BMEcat XML (bestaande logica)
+Voor elke leverancier in DB:
+  1. Check naam/code (bestaande logica)
+  2. Check of de XML-naam een van de aliassen bevat
+  3. Check of een alias in de XML-naam voorkomt
 ```
+
+## Technische stappen
+
+### Database migratie
+- `ALTER TABLE suppliers ADD COLUMN pims_aliases text[] DEFAULT '{}'`
+- Insert leverancier Bosch met code BOSCH en alias `BSH Huishoudapparaten`
+- Update bestaande Siemens-leverancier (optioneel: ook BSH alias toevoegen als Siemens-exports dezelfde afzender gebruiken)
+
+### Edge function update (`pims-import/index.ts`)
+- Query `pims_aliases` mee ophalen bij supplier lookup
+- Matching uitbreiden: als naam/code niet matcht, loop door aliassen
+- Als meerdere leveranciers matchen op aliassen, neem de eerste (of log een waarschuwing)
+
+### Alternatief (sneller, maar minder flexibel)
+Als je geen aliassen-systeem wilt, kunnen we ook alleen een Bosch-leverancier aanmaken en een hardcoded mapping toevoegen voor "BSH" naar "Bosch". Maar het aliassen-systeem is beter schaalbaar voor toekomstige leveranciers.
