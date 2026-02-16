@@ -1,117 +1,89 @@
 
 
-# PIMS Productdata Import - Edge Function + Storage + UI
+# Optimalisatie PIMS Import: Batch Processing zonder Time-outs
 
-## Overzicht
+## Probleem
 
-Een nieuwe edge function `pims-import` die BMEcat XML of CSV bestanden accepteert via HTTP POST, de productdata parsed, en synchroniseert met de `products` tabel. Productafbeeldingen worden gedownload en opgeslagen in een nieuwe Supabase Storage bucket.
+De huidige `pims-import` edge function doet alles in een enkel request:
+- XML parsen (snel)
+- Producten upserten (matig snel)
+- Afbeeldingen downloaden en uploaden naar Storage (TRAAG - 15s timeout per image x honderden producten)
 
-## 1. Database wijzigingen
+Supabase Edge Functions hebben een executielimiet van ~150 seconden. Een BMEcat bestand van 1.2MB met honderden producten en afbeeldingen overschrijdt dit ruim.
 
-**Nieuwe tabel `product_images`** om meerdere afbeeldingen per product op te slaan:
+## Oplossing: Twee-fasen architectuur
+
+**Fase 1 - Snel (pims-import):** Parse XML, upsert alle producten, sla image-URLs op in een wachtrij-tabel. Reageert direct met succes naar Tradeplace.
+
+**Fase 2 - Achtergrond (pims-process-images):** Een aparte edge function die de wachtrij verwerkt in batches. Wordt automatisch aangeroepen door fase 1 na het upserten.
 
 ```text
-product_images (
-  id          uuid PK default gen_random_uuid(),
-  product_id  uuid FK -> products(id) ON DELETE CASCADE,
-  url         text NOT NULL,        -- storage public URL
-  storage_path text NOT NULL,       -- pad in bucket
-  type        text default 'main',  -- main / detail / swatch / datasheet
-  sort_order  int default 0,
-  source      text default 'pims',  -- pims / manual
-  created_at  timestamptz default now()
-)
+Tradeplace POST XML
+        |
+        v
+ [pims-import]  ──>  Parse XML + Upsert producten + Vul image_queue
+        |                        (< 30 sec)
+        |── Return 200 OK naar Tradeplace
+        |
+        └──> Fire-and-forget call naar [pims-process-images]
+                        |
+                        v
+              Download images in batches van 10
+              Upload naar Storage
+              Update product records
+              (draait los, geen time-out druk)
 ```
 
-RLS policies: SELECT voor authenticated, INSERT/UPDATE/DELETE voor admin/manager.
+## Technische stappen
 
-**Nieuw kolom op `products`**:
-- `image_url text` -- snelle referentie naar hoofdafbeelding (optioneel, voor lijstweergaves)
-- `pims_last_synced timestamptz` -- wanneer laatst via PIMS bijgewerkt
-- `specifications jsonb` -- technische specificaties uit PIMS (energielabel, gewicht, etc.)
+### 1. Nieuwe database tabel: `pims_image_queue`
 
-**Nieuwe Storage bucket**: `product-images` (public)
+Migratie aanmaken met kolommen:
+- `id` (uuid, PK)
+- `product_id` (uuid, FK naar products)
+- `supplier_id` (uuid)
+- `article_code` (text)
+- `image_url` (text)
+- `image_index` (integer)
+- `status` (text: pending / processing / done / failed)
+- `error_message` (text, nullable)
+- `created_at`, `processed_at` (timestamps)
 
-## 2. Edge Function: `pims-import`
+RLS uitschakelen (alleen service role gebruikt deze tabel).
 
-Accepteert een POST met multipart/form-data of JSON body:
+### 2. Aanpassen `pims-import` edge function
 
-**Optie A - JSON met base64 bestand:**
-```text
-{
-  "supplier_id": "uuid",
-  "format": "bmecat" | "csv",
-  "file_content": "base64-encoded file",
-  "file_name": "catalog.xml"
-}
+- **Verwijder** alle image-download logica uit de hoofdflow
+- Na het upserten van producten: bulk-insert image URLs in `pims_image_queue` met status `pending`
+- Aan het einde: fire-and-forget fetch naar `pims-process-images`
+- Retourneer direct het resultaat (inserted/updated counts) zonder te wachten op images
+
+### 3. Nieuwe edge function: `pims-process-images`
+
+- Haalt batches van 10 `pending` items uit `pims_image_queue`
+- Markeert ze als `processing`
+- Downloadt en uploadt parallel (Promise.allSettled)
+- Update status naar `done` of `failed`
+- Herhaalt tot de queue leeg is of een eigen tijdslimiet van ~120 seconden bereikt
+- Als er nog items over zijn: roept zichzelf opnieuw aan (self-chaining)
+
+### 4. Config update
+
+Toevoegen aan `supabase/config.toml`:
+```toml
+[functions.pims-process-images]
+verify_jwt = false
 ```
 
-**Optie B - JSON met geparsede data (vanuit frontend):**
-```text
-{
-  "supplier_id": "uuid",
-  "products": [
-    {
-      "article_code": "BSH-12345",
-      "ean_code": "8710103...",
-      "name": "Vaatwasser 60cm",
-      "description": "...",
-      "specifications": { "energy_label": "A++", "weight_kg": 45 },
-      "image_urls": ["https://pims.tradeplace.com/...jpg"],
-      "cost_price": 450.00
-    }
-  ]
-}
-```
+### 5. UI aanpassing (optioneel, klein)
 
-**Verwerkingslogica:**
-1. Authenticatie controleren (Bearer token)
-2. Als format = `bmecat`: XML parsen naar productarray (BMEcat T_NEW_CATALOG structuur)
-3. Als format = `csv`: CSV parsen met kolomherkenning
-4. Per product: upsert op `supplier_id + article_code` (safe upsert, `user_override` respecteren)
-5. Per afbeelding-URL: downloaden, opslaan in `product-images/{supplier_id}/{article_code}/main.jpg`, URL opslaan in `product_images` tabel
-6. `image_url` op product updaten naar eerste afbeelding
-7. Import loggen in `import_logs`
+- `PimsImportTab` resultaatscherm toont een melding dat afbeeldingen op de achtergrond worden verwerkt
+- Eventueel een indicator op de producten-pagina voor "images pending"
 
-**BMEcat XML parsing** ondersteunt de standaard elementen:
-- `SUPPLIER_AID` -> article_code
-- `DESCRIPTION_SHORT` / `DESCRIPTION_LONG` -> name / description
-- `EAN` -> ean_code
-- `MIME_SOURCE` -> image URLs om te downloaden
-- `ARTICLE_PRICE` -> cost_price / base_price
-- `ARTICLE_FEATURES` -> specifications JSONB
+## Voordelen
 
-## 3. Frontend: PIMS Import tab op ProductImport pagina
-
-Toevoegen van een "PIMS Import" tab aan de bestaande import-pagina (`/product-import`):
-
-- Leverancier selecteren
-- Bestandsformaat kiezen (BMEcat XML / CSV)
-- Bestand uploaden
-- Voortgangsindicator tonen
-- Resultaat tonen (aantal producten, afbeeldingen, fouten)
-
-## 4. ProductDetail: Afbeeldingen tonen
-
-Op de productdetailpagina een afbeeldingenkaart toevoegen die afbeeldingen uit `product_images` toont.
-
-## Bestanden die worden aangemaakt/gewijzigd
-
-| Bestand | Actie |
-|---------|-------|
-| Migration SQL | Nieuw: `product_images` tabel, kolommen op `products`, storage bucket |
-| `supabase/functions/pims-import/index.ts` | Nieuw: edge function |
-| `supabase/config.toml` | Aanpassen: pims-import toevoegen |
-| `src/hooks/usePimsImport.ts` | Nieuw: hook voor PIMS import |
-| `src/hooks/useProductImages.ts` | Nieuw: hook voor product afbeeldingen |
-| `src/pages/ProductImport.tsx` | Wijzigen: PIMS tab toevoegen |
-| `src/pages/ProductDetail.tsx` | Wijzigen: afbeeldingen sectie toevoegen |
-
-## Technische details
-
-- BMEcat parsing: handmatige XML parsing met DOMParser (beschikbaar in Deno)
-- Afbeeldingen: fetch van externe URL, upload naar Supabase Storage via service role key
-- Safe upsert: `user_override` kolom wordt gerespecteerd (bestaand patroon uit import-products)
-- Chunk verwerking: afbeeldingen worden sequentieel gedownload om rate limits te respecteren
-- Maximaal 50 afbeeldingen per import-batch om edge function timeouts te voorkomen
+- Tradeplace krijgt binnen ~10-20 seconden een 200 OK (geen time-out meer)
+- Afbeeldingen worden betrouwbaar verwerkt, ook bij honderden producten
+- Bij fouten: individuele items in de queue zijn traceerbaar
+- De UI-upload flow blijft ook werken (dezelfde twee-fasen aanpak)
 
