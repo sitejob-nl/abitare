@@ -1318,6 +1318,7 @@ export type Database = {
           id: string
           image_index: number
           image_url: string
+          media_type: string | null
           processed_at: string | null
           product_id: string
           status: string
@@ -1331,6 +1332,7 @@ export type Database = {
           id?: string
           image_index?: number
           image_url: string
+          media_type?: string | null
           processed_at?: string | null
           product_id: string
           status?: string
@@ -1344,6 +1346,7 @@ export type Database = {
           id?: string
           image_index?: number
           image_url?: string
+          media_type?: string | null
           processed_at?: string | null
           product_id?: string
           status?: string
@@ -1610,6 +1613,7 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          media_type: string | null
           product_id: string
           sort_order: number | null
           source: string | null
@@ -1620,6 +1624,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          media_type?: string | null
           product_id: string
           sort_order?: number | null
           source?: string | null
@@ -1630,6 +1635,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          media_type?: string | null
           product_id?: string
           sort_order?: number | null
           source?: string | null
@@ -1768,20 +1774,41 @@ export type Database = {
           book_price: number | null
           catalog_code: string | null
           category_id: string | null
+          color_basic: string | null
+          color_main: string | null
+          connection_power_w: number | null
+          construction_type: string | null
           cost_price: number | null
           created_at: string | null
+          current_a: number | null
+          datasheet_url: string | null
           depth_mm: number | null
+          depth_open_door_mm: number | null
           description: string | null
           discount_group: string | null
           ean_code: string | null
+          energy_class: string | null
+          energy_consumption_kwh: number | null
           height_mm: number | null
           id: string
           image_url: string | null
+          installation_type: string | null
           is_active: boolean | null
           manufacturer_product_id: string | null
           name: string
+          niche_depth_mm: number | null
+          niche_height_max_mm: number | null
+          niche_height_min_mm: number | null
+          niche_width_max_mm: number | null
+          niche_width_min_mm: number | null
+          noise_class: string | null
+          noise_db: number | null
           norm_hours: number | null
           pims_last_synced: string | null
+          product_family: string | null
+          product_series: string | null
+          product_status: string | null
+          retail_price: number | null
           sku: string | null
           specifications: Json | null
           supplier_id: string | null
@@ -1789,6 +1816,10 @@ export type Database = {
           updated_at: string | null
           user_override: Json | null
           vat_rate: number | null
+          voltage_v: number | null
+          water_consumption_l: number | null
+          weight_gross_kg: number | null
+          weight_net_kg: number | null
           width_mm: number | null
         }
         Insert: {
@@ -1797,20 +1828,41 @@ export type Database = {
           book_price?: number | null
           catalog_code?: string | null
           category_id?: string | null
+          color_basic?: string | null
+          color_main?: string | null
+          connection_power_w?: number | null
+          construction_type?: string | null
           cost_price?: number | null
           created_at?: string | null
+          current_a?: number | null
+          datasheet_url?: string | null
           depth_mm?: number | null
+          depth_open_door_mm?: number | null
           description?: string | null
           discount_group?: string | null
           ean_code?: string | null
+          energy_class?: string | null
+          energy_consumption_kwh?: number | null
           height_mm?: number | null
           id?: string
           image_url?: string | null
+          installation_type?: string | null
           is_active?: boolean | null
           manufacturer_product_id?: string | null
           name: string
+          niche_depth_mm?: number | null
+          niche_height_max_mm?: number | null
+          niche_height_min_mm?: number | null
+          niche_width_max_mm?: number | null
+          niche_width_min_mm?: number | null
+          noise_class?: string | null
+          noise_db?: number | null
           norm_hours?: number | null
           pims_last_synced?: string | null
+          product_family?: string | null
+          product_series?: string | null
+          product_status?: string | null
+          retail_price?: number | null
           sku?: string | null
           specifications?: Json | null
           supplier_id?: string | null
@@ -1818,6 +1870,10 @@ export type Database = {
           updated_at?: string | null
           user_override?: Json | null
           vat_rate?: number | null
+          voltage_v?: number | null
+          water_consumption_l?: number | null
+          weight_gross_kg?: number | null
+          weight_net_kg?: number | null
           width_mm?: number | null
         }
         Update: {
@@ -1826,20 +1882,41 @@ export type Database = {
           book_price?: number | null
           catalog_code?: string | null
           category_id?: string | null
+          color_basic?: string | null
+          color_main?: string | null
+          connection_power_w?: number | null
+          construction_type?: string | null
           cost_price?: number | null
           created_at?: string | null
+          current_a?: number | null
+          datasheet_url?: string | null
           depth_mm?: number | null
+          depth_open_door_mm?: number | null
           description?: string | null
           discount_group?: string | null
           ean_code?: string | null
+          energy_class?: string | null
+          energy_consumption_kwh?: number | null
           height_mm?: number | null
           id?: string
           image_url?: string | null
+          installation_type?: string | null
           is_active?: boolean | null
           manufacturer_product_id?: string | null
           name?: string
+          niche_depth_mm?: number | null
+          niche_height_max_mm?: number | null
+          niche_height_min_mm?: number | null
+          niche_width_max_mm?: number | null
+          niche_width_min_mm?: number | null
+          noise_class?: string | null
+          noise_db?: number | null
           norm_hours?: number | null
           pims_last_synced?: string | null
+          product_family?: string | null
+          product_series?: string | null
+          product_status?: string | null
+          retail_price?: number | null
           sku?: string | null
           specifications?: Json | null
           supplier_id?: string | null
@@ -1847,6 +1924,10 @@ export type Database = {
           updated_at?: string | null
           user_override?: Json | null
           vat_rate?: number | null
+          voltage_v?: number | null
+          water_consumption_l?: number | null
+          weight_gross_kg?: number | null
+          weight_net_kg?: number | null
           width_mm?: number | null
         }
         Relationships: [

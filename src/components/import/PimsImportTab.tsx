@@ -11,7 +11,19 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePimsImport } from '@/hooks/usePimsImport';
 
-type PimsFormat = 'bmecat' | 'csv';
+type PimsFormat = 'bmecat' | 'csv' | 'tradepi';
+
+const FORMAT_LABELS: Record<PimsFormat, string> = {
+  bmecat: 'BMEcat XML',
+  tradepi: 'TradePI XML (Tradeplace)',
+  csv: 'CSV',
+};
+
+const FORMAT_ACCEPT: Record<PimsFormat, string> = {
+  bmecat: '.xml,.bmecat,.zip',
+  tradepi: '.xml,.zip',
+  csv: '.csv,.txt',
+};
 
 export function PimsImportTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,11 +72,10 @@ export function PimsImportTab() {
 
     // Auto-detect format
     const ext = file.name.toLowerCase();
-    if (ext.endsWith('.xml') || ext.endsWith('.bmecat')) {
-      setFormat('bmecat');
-    } else if (ext.endsWith('.csv') || ext.endsWith('.txt')) {
+    if (ext.endsWith('.csv') || ext.endsWith('.txt')) {
       setFormat('csv');
     }
+    // XML/ZIP formats are auto-detected by the edge function, keep user selection
 
     // Convert to base64
     const buffer = await file.arrayBuffer();
@@ -121,8 +132,8 @@ export function PimsImportTab() {
               PIMS Productdata Import
             </CardTitle>
             <CardDescription>
-              Importeer productdata uit Tradeplace PIMS (BMEcat XML of CSV). 
-              Inclusief afbeeldingen, specificaties en EAN-codes.
+              Importeer productdata uit Tradeplace PIMS (BMEcat XML, TradePI XML of CSV). 
+              Inclusief afbeeldingen, specificaties, inbouwmaten en energiedata.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -160,16 +171,25 @@ export function PimsImportTab() {
             {/* Format */}
             <div className="space-y-2">
               <Label>Bestandsformaat</Label>
-              <RadioGroup value={format} onValueChange={(v) => setFormat(v as PimsFormat)} className="flex gap-4">
+              <RadioGroup value={format} onValueChange={(v) => setFormat(v as PimsFormat)} className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="bmecat" id="pims-bmecat" />
                   <Label htmlFor="pims-bmecat" className="font-normal cursor-pointer">BMEcat XML</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="tradepi" id="pims-tradepi" />
+                  <Label htmlFor="pims-tradepi" className="font-normal cursor-pointer">TradePI XML (Tradeplace)</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="csv" id="pims-csv" />
                   <Label htmlFor="pims-csv" className="font-normal cursor-pointer">CSV</Label>
                 </div>
               </RadioGroup>
+              {format === 'tradepi' && (
+                <p className="text-xs text-muted-foreground">
+                  Voor Miele, BSH en andere fabrikanten via Tradeplace. Bevat inbouwmaten, energiedata en meerdere mediatypes.
+                </p>
+              )}
             </div>
 
             {/* File upload */}
@@ -182,7 +202,7 @@ export function PimsImportTab() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={format === 'bmecat' ? '.xml,.bmecat' : '.csv,.txt'}
+                  accept={FORMAT_ACCEPT[format]}
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -196,7 +216,7 @@ export function PimsImportTab() {
                   <div className="flex flex-col items-center gap-2">
                     <Upload className="h-10 w-10 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
-                      Klik om een {format === 'bmecat' ? 'BMEcat XML' : 'CSV'} bestand te selecteren
+                      Klik om een {FORMAT_LABELS[format]} bestand te selecteren
                     </p>
                   </div>
                 )}
@@ -207,8 +227,9 @@ export function PimsImportTab() {
             <Alert>
               <Image className="h-4 w-4" />
               <AlertDescription>
-                Afbeeldingen uit het PIMS-bestand worden automatisch gedownload en opgeslagen. 
+                Afbeeldingen en media worden automatisch gedownload en opgeslagen. 
                 Bestaande handmatige aanpassingen (user overrides) worden niet overschreven.
+                {format === 'tradepi' && ' TradePI bestanden worden automatisch herkend, ook als BMEcat is geselecteerd.'}
               </AlertDescription>
             </Alert>
 
@@ -238,7 +259,7 @@ export function PimsImportTab() {
               </div>
               <div className="p-3 bg-muted rounded-lg">
                 <div className="text-xs text-muted-foreground">Formaat</div>
-                <div className="text-sm font-medium">{format === 'bmecat' ? 'BMEcat XML' : 'CSV'}</div>
+                <div className="text-sm font-medium">{FORMAT_LABELS[format]}</div>
               </div>
               <div className="p-3 bg-muted rounded-lg">
                 <div className="text-xs text-muted-foreground">Bestand</div>
@@ -300,7 +321,7 @@ export function PimsImportTab() {
               </div>
               <div className="text-center p-4 bg-muted rounded-lg">
                 <div className="text-3xl font-bold text-primary">{importResult.images_queued || importResult.images_downloaded || 0}</div>
-                <div className="text-sm text-muted-foreground">Afbeeldingen</div>
+                <div className="text-sm text-muted-foreground">Media items</div>
               </div>
               <div className="text-center p-4 bg-muted rounded-lg">
                 <div className="text-3xl font-bold">{importResult.total}</div>
@@ -312,7 +333,7 @@ export function PimsImportTab() {
               <Alert>
                 <Image className="h-4 w-4" />
                 <AlertDescription>
-                  {importResult.images_queued} afbeelding(en) worden op de achtergrond gedownload en verwerkt. Dit kan enkele minuten duren.
+                  {importResult.images_queued} media-item(s) worden op de achtergrond gedownload en verwerkt. Dit kan enkele minuten duren.
                 </AlertDescription>
               </Alert>
             )}
@@ -321,7 +342,7 @@ export function PimsImportTab() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {importResult.image_errors} afbeelding(en) konden niet worden gedownload.
+                  {importResult.image_errors} media-item(s) konden niet worden gedownload.
                 </AlertDescription>
               </Alert>
             )}

@@ -2,13 +2,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 // ============================================================
-// PIMS Process Images - Phase 2: Background Image Downloader
-// Processes queued image downloads in batches, self-chains
+// PIMS Process Images - Phase 2: Background Media Downloader
+// Processes queued image/document downloads in batches, self-chains
 // if there are remaining items after ~120s.
+// Supports media_type: photo, dimension_drawing, energy_label, datasheet, 3d_model
 // ============================================================
 
 const BATCH_SIZE = 10
-const MAX_RUNTIME_MS = 120_000 // 2 minutes, leave buffer before 150s limit
+const MAX_RUNTIME_MS = 120_000
+
+// Media types that should be downloaded to Storage
+const DOWNLOADABLE_TYPES = new Set(['photo', 'dimension_drawing', 'energy_label'])
+// Media types that are stored as URL-only references
+const URL_ONLY_TYPES = new Set(['datasheet', '3d_model'])
 
 async function downloadAndStoreImage(
   supabase: any,
@@ -16,6 +22,7 @@ async function downloadAndStoreImage(
   supplierId: string,
   articleCode: string,
   index: number,
+  mediaType: string,
 ): Promise<{ url: string; storage_path: string } | null> {
   try {
     let fullUrl = imageUrl
@@ -33,7 +40,12 @@ async function downloadAndStoreImage(
     const contentType = response.headers.get('content-type') || 'image/jpeg'
     const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
     const cleanCode = articleCode.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const storagePath = `${supplierId}/${cleanCode}/${index === 0 ? 'main' : `detail_${index}`}.${ext}`
+    
+    // Use media_type in path for organization
+    const typePrefix = mediaType === 'photo' 
+      ? (index === 0 ? 'main' : `detail_${index}`)
+      : `${mediaType}_${index}`
+    const storagePath = `${supplierId}/${cleanCode}/${typePrefix}.${ext}`
 
     const blob = await response.arrayBuffer()
 
@@ -74,7 +86,6 @@ Deno.serve(async (req) => {
     let failed = 0
 
     while (Date.now() - startTime < MAX_RUNTIME_MS) {
-      // Fetch a batch of pending items
       const { data: batch, error: fetchErr } = await supabase
         .from('pims_image_queue')
         .select('*')
@@ -92,38 +103,60 @@ Deno.serve(async (req) => {
         break
       }
 
-      // Mark as processing
       const ids = batch.map((r: any) => r.id)
       await supabase
         .from('pims_image_queue')
         .update({ status: 'processing' })
         .in('id', ids)
 
-      // Process in parallel
       const results = await Promise.allSettled(
         batch.map(async (item: any) => {
+          const mediaType = item.media_type || 'photo'
+
+          // For URL-only types (PDF, ZIP), just store the reference
+          if (URL_ONLY_TYPES.has(mediaType)) {
+            await supabase.from('product_images').upsert({
+              product_id: item.product_id,
+              url: item.image_url,
+              storage_path: `url-ref/${item.supplier_id}/${item.article_code}/${mediaType}`,
+              type: mediaType === 'datasheet' ? 'document' : mediaType,
+              media_type: mediaType,
+              sort_order: item.image_index,
+              source: 'pims',
+            }, { onConflict: 'product_id,storage_path', ignoreDuplicates: false })
+
+            await supabase.from('pims_image_queue')
+              .update({ status: 'done', processed_at: new Date().toISOString() })
+              .eq('id', item.id)
+
+            return true
+          }
+
+          // For downloadable types (photo, dimension_drawing, energy_label), download to Storage
           const result = await downloadAndStoreImage(
             supabase,
             item.image_url,
             item.supplier_id,
             item.article_code,
             item.image_index,
+            mediaType,
           )
 
           if (result) {
-            // Upsert product_images record
             await supabase.from('product_images').upsert({
               product_id: item.product_id,
               url: result.url,
               storage_path: result.storage_path,
-              type: item.image_index === 0 ? 'main' : 'detail',
+              type: mediaType === 'photo' 
+                ? (item.image_index === 0 ? 'main' : 'detail')
+                : mediaType,
+              media_type: mediaType,
               sort_order: item.image_index,
               source: 'pims',
             }, { onConflict: 'product_id,storage_path', ignoreDuplicates: false })
 
-            // Update main image on product
-            if (item.image_index === 0) {
-              // Check user_override first
+            // Update main image on product (only for photos with index 0)
+            if (mediaType === 'photo' && item.image_index === 0) {
               const { data: prod } = await supabase
                 .from('products')
                 .select('user_override')
@@ -138,14 +171,12 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Mark done
             await supabase.from('pims_image_queue')
               .update({ status: 'done', processed_at: new Date().toISOString() })
               .eq('id', item.id)
 
             return true
           } else {
-            // Mark failed
             await supabase.from('pims_image_queue')
               .update({ status: 'failed', error_message: 'Download failed', processed_at: new Date().toISOString() })
               .eq('id', item.id)
