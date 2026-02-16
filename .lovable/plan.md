@@ -1,89 +1,121 @@
 
 
-# Plan: Gaggenau-producten correct importeren
+# Plan: Tradeplace TradePI XML parser + apparatuur-verrijking
 
-## Probleem 1: Leverancier-detectie
+## Samenvatting
 
-De Gaggenau XML wordt door "BSH Huishoudapparaten B.V." (de PARTY/afzender) gematcht op Bosch. De `CATALOG_NAME` "Gaggenau producten" wordt niet meegenomen in de detectie.
+De Python parser en het SQL-schema worden vertaald naar een Deno/TypeScript implementatie in de bestaande `pims-import` edge function. In plaats van aparte `appliances` tabellen worden de bestaande `products`-tabellen uitgebreid met de ontbrekende kolommen (inbouwmaten, energie, kleur, etc.). Dit voorkomt dubbele data en houdt de hele productcatalogus in een systeem.
 
-### Oplossing
+## Wat er verandert
 
-De supplier-detectielogica uitbreiden met een extra strategie:
+### 1. Database: kolommen toevoegen aan `products`
 
-1. Naast `SUPPLIER_NAME` / `PARTY` ook `CATALOG_NAME` uit de XML header lezen
-2. De catalogusnaam als eerste prioriteit gebruiken (specifiekere match), dan pas de afzender
-3. Gaggenau als leverancier aanmaken in de database met "BSH Huishoudapparaten" als gedeelde alias -- of beter: de match-logica aanpassen zodat `CATALOG_NAME` prioriteit krijgt
+Nieuwe kolommen op de bestaande `products` tabel:
 
-**Aanpak**: In `extractSupplierName()` eerst de `CATALOG_NAME` proberen. Dit geeft "Gaggenau producten" terug, wat matcht op een nieuw aan te maken leverancier "Gaggenau".
+| Kolom | Type | Doel |
+|---|---|---|
+| `depth_open_door_mm` | integer | Diepte met open deur |
+| `weight_net_kg` | numeric(10,2) | Netto gewicht |
+| `weight_gross_kg` | numeric(10,2) | Bruto gewicht |
+| `niche_height_min_mm` | integer | Minimale nishoogte |
+| `niche_height_max_mm` | integer | Maximale nishoogte |
+| `niche_width_min_mm` | integer | Minimale nisbreedte |
+| `niche_width_max_mm` | integer | Maximale nisbreedte |
+| `niche_depth_mm` | integer | Nisdiepte |
+| `energy_class` | varchar(10) | Energielabel (A-G) |
+| `energy_consumption_kwh` | numeric(10,2) | Energieverbruik |
+| `water_consumption_l` | numeric(10,2) | Waterverbruik |
+| `noise_db` | integer | Geluidsniveau |
+| `noise_class` | varchar(5) | Geluidsklasse |
+| `construction_type` | varchar(50) | Inbouw / Vrijstaand |
+| `installation_type` | varchar(100) | Installatietype |
+| `connection_power_w` | integer | Aansluitvermogen |
+| `voltage_v` | integer | Voltage |
+| `current_a` | integer | Stroomsterkte |
+| `color_main` | varchar(100) | Hoofdkleur |
+| `color_basic` | varchar(100) | Basiskleur |
+| `product_family` | varchar(100) | Productfamilie (G7000) |
+| `product_series` | varchar(100) | Productserie |
+| `product_status` | varchar(50) | Status (actief/uitlopend) |
+| `retail_price` | numeric | Adviesprijs (RRP) |
+| `datasheet_url` | text | Link naar productfiche |
 
-**Alternatief**: Een nieuwe leverancier "Gaggenau" aanmaken met alias "Gaggenau" en in de detectielogica de `CATALOG_NAME` mee laten wegen. De huidige flow probeert dan eerst "Gaggenau producten" te matchen (hit op Gaggenau), voordat "BSH Huishoudapparaten B.V." wordt geprobeerd.
+Nieuwe kolom op `pims_image_queue` en `product_images`:
 
-## Probleem 2: 0 catalog groups
+| Kolom | Type | Doel |
+|---|---|---|
+| `media_type` | varchar(50), default 'photo' | Type: photo, dimension_drawing, energy_label, datasheet, 3d_model |
 
-Het log toont "Parsed 0 catalog groups" -- de `CATALOG_GROUP_SYSTEM` tag wordt niet gevonden in de Gaggenau XML, of de structuur wijkt af. Mogelijke oorzaken:
+### 2. Edge function: TradePI XML parser toevoegen
 
-- De Gaggenau XML gebruikt andere tagnamen voor classificatie
-- De classificatiedata zit in een ander blok (bijv. `CLASSIFICATION_SYSTEM` i.p.v. `CATALOG_GROUP_SYSTEM`)
+In `supabase/functions/pims-import/index.ts` een nieuwe parser `parseTradePlaceCatalog()` toevoegen, gebaseerd op de Python `TradeplaceParser`:
 
-### Oplossing
+- **Metadata**: `CatalogDownloadReplyHeader` -> `CatalogName`, `CatalogCreationDate`
+- **Producten**: `.//Product` -> `PIData` (artikelcode, EAN, familie) + `OtherData` (prijzen, datums, media) + `UnitOfMeasures`
+- **Properties**: `PIProperty` met de volledige `PROPERTY_MAPPING` uit de Python parser (HEIGHT, WIDTH, ENERGY_CLASS_2017, etc.)
+- **Media**: `PRODUCT_IMAGE`, `MEASURE_IMAGE`, `PANEL_IMAGE`, `ENERGY_LABEL`, `PRODUCT_FICHE`, `ADD_IMAGE*` + `Asset` blokken
+- **Prijzen**: `RecommendedRetailPrice` -> `Amount` + `NumberOfDecimal`
+- **USP's**: `USP_*` properties opslaan in specifications
+- **Categorien**: `ProductFamily@familyName` als categoriecode
 
-De `parseCatalogGroups()` functie uitbreiden met fallback-tagnamen:
-- `CLASSIFICATION_SYSTEM` als alternatief voor `CATALOG_GROUP_SYSTEM`
-- `CLASSIFICATION_GROUP` als alternatief voor `CATALOG_STRUCTURE`
-- `CLASS_ID` als alternatief voor `GROUP_ID`
+### 3. Format-autodetectie
 
-En extra logging toevoegen om te zien welke tags wel aanwezig zijn als er 0 groups gevonden worden.
+De edge function herkent automatisch het XML-type:
 
-## Stappen
+```text
+if xml bevat '<Product>' en '<PIData>'     -> parseTradePlaceCatalog()
+if xml bevat '<BMECAT' of '<ARTICLE'       -> parseBMEcatXml()
+```
 
-### Stap 1: Gaggenau leverancier aanmaken
-- Nieuw record in `suppliers` tabel: naam "Gaggenau", code "GAGGENAU", pims_aliases `["Gaggenau"]`
-- Price factor instellen (standaard 1.0, later aanpasbaar)
+Dit werkt zowel voor handmatige uploads als voor de M2M push-flow (raw XML content type).
 
-### Stap 2: Supplier-detectie verbeteren
-In `extractSupplierName()`:
-- `CATALOG_NAME` als eerste strategie toevoegen (voor `SUPPLIER_NAME`)
-- Woorden als "producten", "products", "catalogue" strippen uit de naam voor betere matching
+### 4. Verrijkingslogica uitbreiden
 
-### Stap 3: Catalog group parser robuuster maken
-In `parseCatalogGroups()`:
-- Fallback tagnamen toevoegen voor classificatie-structuren
-- Debug-logging als 0 groups gevonden: welke top-level tags bestaan er in de XML?
+Na het parsen worden de nieuwe velden (inbouwmaten, energie, kleur, etc.) mee-upsert naar de `products` tabel. De image queue krijgt een `media_type` veld zodat foto's, maattekeningen en documenten apart worden opgeslagen.
 
-### Stap 4: Bestaande Gaggenau-producten corrigeren
-SQL-update om de 443 verkeerd geimporteerde producten van Bosch naar Gaggenau te verplaatsen (op basis van artikelcodes of importdatum).
+De `pims-process-images` achtergrondprocessor wordt aangepast:
+- Foto's en tekeningen (PNG/JPG): downloaden naar Supabase Storage
+- Documenten (PDF, ZIP): alleen URL opslaan in `product_images` (niet downloaden)
+
+### 5. Frontend: extra formaatoptie
+
+`PimsImportTab.tsx` wordt uitgebreid met een derde formaatoptie: "TradePI XML (Tradeplace)". Bestandsacceptatie wordt `.xml` voor alle XML-formaten. De auto-detectie in de edge function bepaalt welke parser wordt gebruikt.
+
+### 6. Standaard categorien seeden
+
+De 21 apparatuurcategorien uit het SQL-schema (DISHWASHERS, OVENS, etc.) worden als `product_categories` aangemaakt met code en Nederlandse naam, zodat de TradePI `ProductFamily@familyName` direct matcht.
+
+## Bestanden die wijzigen
+
+1. **SQL migratie** -- Nieuwe kolommen op `products`, `pims_image_queue`, `product_images` + seed categorien
+2. **`supabase/functions/pims-import/index.ts`** -- TradePI parser, format-detectie, verrijkte upsert
+3. **`supabase/functions/pims-process-images/index.ts`** -- Media-type bewust (PDF's als URL, foto's downloaden)
+4. **`src/components/import/PimsImportTab.tsx`** -- Derde formaat-optie
+5. **`src/hooks/usePimsImport.ts`** -- Format type uitbreiden met 'tradepi'
+6. **`src/integrations/supabase/types.ts`** -- Nieuwe kolommen reflecteren
 
 ## Technische details
 
-### Supplier-detectie (`extractSupplierName`)
+### TradePI Parser (kern)
+
+De Python `TradeplaceParser` wordt 1-op-1 vertaald naar TypeScript met dezelfde `PROPERTY_MAPPING` en `_handle_media_property` logica. De XML-structuur is:
 
 ```text
-// Nieuwe strategie 0: CATALOG_NAME uit HEADER
-const catalogName = xmlGetTag(headerBlock, 'CATALOG_NAME')
-if (catalogName) {
-  // Strip generieke woorden: "producten", "products", "catalog"
-  const cleaned = catalogName.replace(/\b(producten|products|catalog(ue)?)\b/gi, '').trim()
-  if (cleaned.length > 2) return cleaned
-}
+Product
+  PIData
+    ProductCode          -> article_code
+    EANArticleCode       -> ean_code
+    ProductFamily@name   -> category mapping
+    PIProperty[name=X]   -> mapped fields + specs
+  OtherData
+    RecommendedRetailPrice -> retail_price
+    StartingDate/ChangeDate
+    Asset[]              -> images + documents
+  UnitOfMeasures
+    UnitOfMeasure[type=PCE] -> fallback dimensions
 ```
 
-### Catalog group parser fallbacks
+### Categorie-mapping
 
-```text
-function parseCatalogGroups(xmlString: string): CatalogGroup[] {
-  let groupSystem = xmlGetTag(xmlString, 'CATALOG_GROUP_SYSTEM')
-  if (!groupSystem) groupSystem = xmlGetTag(xmlString, 'CLASSIFICATION_SYSTEM')
-  if (!groupSystem) {
-    // Debug: log welke top-level tags er zijn
-    console.warn('[pims] No CATALOG_GROUP_SYSTEM or CLASSIFICATION_SYSTEM found')
-    return []
-  }
-  // ... rest met fallback tagnamen
-}
-```
-
-### Bestanden die wijzigen
-
-- `supabase/functions/pims-import/index.ts` -- detectie + parser
-- SQL migratie: Gaggenau leverancier aanmaken + producten corrigeren
+De `familyName` uit TradePI (bijv. "DISHWASHERS") wordt gematcht op een vooraf geseede `product_categories` rij. Onbekende families worden automatisch aangemaakt onder de merkcategorie.
 
