@@ -1539,6 +1539,47 @@ export type Database = {
           },
         ]
       }
+      product_images: {
+        Row: {
+          created_at: string | null
+          id: string
+          product_id: string
+          sort_order: number | null
+          source: string | null
+          storage_path: string
+          type: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          product_id: string
+          sort_order?: number | null
+          source?: string | null
+          storage_path: string
+          type?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          product_id?: string
+          sort_order?: number | null
+          source?: string | null
+          storage_path?: string
+          type?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_prices: {
         Row: {
           created_at: string | null
@@ -1668,11 +1709,14 @@ export type Database = {
           ean_code: string | null
           height_mm: number | null
           id: string
+          image_url: string | null
           is_active: boolean | null
           manufacturer_product_id: string | null
           name: string
           norm_hours: number | null
+          pims_last_synced: string | null
           sku: string | null
+          specifications: Json | null
           supplier_id: string | null
           unit: string | null
           updated_at: string | null
@@ -1694,11 +1738,14 @@ export type Database = {
           ean_code?: string | null
           height_mm?: number | null
           id?: string
+          image_url?: string | null
           is_active?: boolean | null
           manufacturer_product_id?: string | null
           name: string
           norm_hours?: number | null
+          pims_last_synced?: string | null
           sku?: string | null
+          specifications?: Json | null
           supplier_id?: string | null
           unit?: string | null
           updated_at?: string | null
@@ -1720,11 +1767,14 @@ export type Database = {
           ean_code?: string | null
           height_mm?: number | null
           id?: string
+          image_url?: string | null
           is_active?: boolean | null
           manufacturer_product_id?: string | null
           name?: string
           norm_hours?: number | null
+          pims_last_synced?: string | null
           sku?: string | null
+          specifications?: Json | null
           supplier_id?: string | null
           unit?: string | null
           updated_at?: string | null

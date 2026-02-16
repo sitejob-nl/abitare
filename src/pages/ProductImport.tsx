@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,6 +14,8 @@ import { useJsonImport, type JsonPayload } from '@/hooks/useJsonImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
 import { ImportHistory } from '@/components/import/ImportHistory';
+import { PimsImportTab } from '@/components/import/PimsImportTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -49,6 +51,8 @@ type ImportMode = 'standard' | 'price_groups';
 
 export default function ProductImport() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'standard';
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
   const [importMode, setImportMode] = useState<ImportMode>('standard');
@@ -697,6 +701,19 @@ export default function ProductImport() {
 
         {/* Import History */}
         <ImportHistory />
+
+        {/* Tabs for Standard vs PIMS */}
+        <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v })}>
+          <TabsList>
+            <TabsTrigger value="standard">Prijslijst Import</TabsTrigger>
+            <TabsTrigger value="pims">PIMS Import</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pims">
+            <PimsImportTab />
+          </TabsContent>
+
+          <TabsContent value="standard">
 
         {/* Step indicator */}
         <div className="flex items-center gap-2">
@@ -1581,6 +1598,8 @@ export default function ProductImport() {
             </CardContent>
           </Card>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );

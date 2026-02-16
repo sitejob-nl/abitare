@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.portal-data]
 verify_jwt = false
+
+[functions.pims-import]
+verify_jwt = false
