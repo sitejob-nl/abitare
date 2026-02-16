@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Search, Loader2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useProducts, useProductCategories, useSuppliers } from "@/hooks/useProducts";
 import { BulkActionsBar } from "@/components/products/BulkActionsBar";
@@ -26,6 +26,8 @@ function formatCurrency(value: number | null): string {
 type SortField = "name" | "base_price" | "cost_price" | "created_at" | "article_code";
 type SortDirection = "asc" | "desc";
 
+const PAGE_SIZE = 50;
+
 const Products = () => {
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -36,12 +38,22 @@ const Products = () => {
   const [priceMin, setPriceMin] = useState<string>("");
   const [priceMax, setPriceMax] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
   const navigate = useNavigate();
 
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    setTimeout(() => setDebouncedSearch(value), 300);
-  };
+  // Proper debounce with cleanup
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // reset to page 1 on search
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [supplierFilter, categoryFilter, priceMin, priceMax, sortField, sortDirection]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -59,7 +71,7 @@ const Products = () => {
 
   const { data: suppliers, isLoading: suppliersLoading } = useSuppliers();
   const { data: categories, isLoading: categoriesLoading } = useProductCategories();
-  const { data: products, isLoading: productsLoading } = useProducts({
+  const { data: result, isLoading: productsLoading } = useProducts({
     supplierId: supplierFilter === "all" ? null : supplierFilter,
     categoryId: categoryFilter === "all" ? null : categoryFilter,
     search: debouncedSearch || undefined,
@@ -67,7 +79,13 @@ const Products = () => {
     sortDirection,
     priceMin: priceMin ? parseFloat(priceMin) : null,
     priceMax: priceMax ? parseFloat(priceMax) : null,
+    page,
+    pageSize: PAGE_SIZE,
   });
+
+  const products = result?.data;
+  const totalCount = result?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const isLoading = productsLoading || suppliersLoading || categoriesLoading;
 
@@ -97,11 +115,9 @@ const Products = () => {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-[28px] font-semibold text-foreground">
           Producten
-          {products && (
-            <span className="ml-2 text-lg font-normal text-muted-foreground">
-              ({products.length})
-            </span>
-          )}
+          <span className="ml-2 text-lg font-normal text-muted-foreground">
+            ({totalCount})
+          </span>
         </h1>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
@@ -171,7 +187,7 @@ const Products = () => {
             placeholder="Zoek op artikelcode of naam..."
             className="h-9 pl-9 text-[13px]"
             value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
@@ -343,6 +359,40 @@ const Products = () => {
               );
             })}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalCount)} van {totalCount}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="gap-1"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Vorige
+                </Button>
+                <span className="px-3 text-sm text-muted-foreground">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="gap-1"
+                >
+                  Volgende
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="rounded-xl border border-border bg-card py-12 text-center">

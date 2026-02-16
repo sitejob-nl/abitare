@@ -96,11 +96,13 @@ export function AddProductDialog({
   // Supplier filter
   const [showAllSuppliers, setShowAllSuppliers] = useState(false);
 
-  const { data: products, isLoading: productsLoading } = useProducts({
+  const { data: productsResult, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
     supplierId: showAllSuppliers ? undefined : (sectionSupplierId || undefined),
     enabled: open,
+    pageSize: 100,
   });
+  const products = productsResult?.data;
 
   // Fetch ranges for override dropdown - filtered by section supplier
   const { data: ranges } = useProductRanges(sectionSupplierId || undefined);
