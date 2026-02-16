@@ -297,19 +297,52 @@ Deno.serve(async (req) => {
 
     if (isRawXml) {
       // ── Raw XML mode (Tradeplace PIMS HTTP transport) ──
-      supplier_id = url.searchParams.get('supplier_id') || ''
       category_id = url.searchParams.get('category_id') || undefined
       file_name = url.searchParams.get('file_name') || 'tradeplace-push.xml'
 
-      if (!supplier_id) {
+      const xmlText = await req.text()
+      console.log(`[pims] Received raw XML (${xmlText.length} bytes)`)
+
+      // Auto-detect supplier from XML content (SUPPLIER_NAME or SUPPLIER_ID in BMEcat)
+      const xmlSupplierName = xmlGetTagFirst(xmlText, ['SUPPLIER_NAME', 'SUPPLIER_ID', 'PARTY_ID'])
+      // Also allow override via query param
+      const qsSupplierId = url.searchParams.get('supplier_id')
+
+      if (qsSupplierId) {
+        supplier_id = qsSupplierId
+      } else if (xmlSupplierName) {
+        // Match against suppliers table (case-insensitive, partial match)
+        const normalizedName = xmlSupplierName.trim().toLowerCase()
+        console.log(`[pims] Auto-detecting supplier from XML: "${xmlSupplierName}"`)
+
+        const { data: suppliers } = await supabase
+          .from('suppliers')
+          .select('id, name, code')
+          .eq('is_active', true)
+
+        const match = (suppliers || []).find((s: any) => {
+          const sName = s.name.toLowerCase()
+          const sCode = (s.code || '').toLowerCase()
+          return normalizedName.includes(sName) || sName.includes(normalizedName)
+            || normalizedName.includes(sCode) || sCode === normalizedName
+        })
+
+        if (match) {
+          supplier_id = match.id
+          console.log(`[pims] Matched supplier: ${match.name} (${match.id})`)
+        } else {
+          return new Response(
+            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem. Voeg de leverancier eerst toe of geef supplier_id mee als query parameter.` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      } else {
         return new Response(
-          JSON.stringify({ error: 'supplier_id query parameter is required for raw XML' }),
+          JSON.stringify({ error: 'Geen leverancier gevonden in XML en geen supplier_id meegegeven.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const xmlText = await req.text()
-      console.log(`[pims] Received raw XML (${xmlText.length} bytes) for supplier ${supplier_id}`)
       products = parseBMEcatXml(xmlText)
     } else {
       // ── JSON mode (UI upload) ──
