@@ -1,110 +1,99 @@
 
 
-# Plan: Sneller laden van het systeem
+# Plan: WhatsApp ontvangen via SiteJob Connect
 
-## Probleem
+## Wat er gebouwd wordt
 
-Het systeem heeft 18.400+ actieve producten. De productenpagina laadt ze **allemaal in een keer** zonder paginatie. Daarnaast worden alle 30+ pagina's **eager geimporteerd** in `App.tsx` — dus de hele applicatie wordt als een groot JavaScript-bestand geladen, ook als je alleen het dashboard nodig hebt.
+Inkomende WhatsApp-berichten ontvangen via SiteJob Connect en tonen in de communicatie-tijdlijn van orders, klanten en service tickets. Berichten versturen wordt later toegevoegd.
 
-## Oplossingen (in volgorde van impact)
+## Overzicht
 
-### 1. Server-side paginatie op producten (grootste impact)
+SiteJob Connect stuurt inkomende WhatsApp-berichten als standaard Meta webhook payload door naar een edge function. De edge function valideert het bericht, koppelt het telefoonnummer aan een klant, en slaat het op in `communication_log`. De bestaande communicatie-tabs tonen WhatsApp-berichten automatisch, aangevuld met een WhatsApp-icoon.
 
-De `useProducts` hook en productenpagina krijgen echte paginatie:
+## Stappen
 
-- Supabase `.range(from, to)` toevoegen aan de query (bijv. 50 per pagina)
-- Pagina-navigatie component onderaan de tabel
-- Totaal-telling via een aparte `count` query (Supabase `{ count: 'exact', head: true }`)
-- Zoeken, filteren en sorteren blijven server-side
+### 1. Secret toevoegen
 
-**Bestanden:**
-- `src/hooks/useProducts.ts` -- `page` parameter toevoegen, `.range()` gebruiken
-- `src/pages/Products.tsx` -- Paginatie-buttons toevoegen
+Een secret `WHATSAPP_WEBHOOK_SECRET` met waarde `77c76847b89506c13c390997e695930809aebc8c5d434132bdd504a5f0789d42`.
 
-### 2. Lazy loading van pagina's (snellere eerste load)
+### 2. Edge function: `whatsapp-webhook`
 
-Alle route-pagina's worden `React.lazy()` met `Suspense`, zodat alleen de code voor de huidige pagina wordt geladen. Dit verkleint de initiiele bundle aanzienlijk.
+Nieuw bestand: `supabase/functions/whatsapp-webhook/index.ts`
 
-**Bestand:**
-- `src/App.tsx` -- Alle imports omzetten naar `React.lazy(() => import(...))`
+Logica:
+- **POST**: Valideer `X-Webhook-Secret` header tegen de secret
+- Parse de Meta webhook entry: haal `from` (telefoonnummer), `text.body`, `timestamp`, en `contacts[0].profile.name` op
+- Zoek klant op basis van telefoonnummer (vergelijk met `phone`, `phone_2`, `mobile` velden in `customers` tabel, genormaliseerd zonder + en spaties)
+- Insert in `communication_log`:
+  - `type` = `'whatsapp'`
+  - `direction` = `'inbound'`
+  - `subject` = `'WhatsApp van {naam}'`
+  - `body_preview` = berichttekst (max 500 tekens)
+  - `customer_id` = gevonden klant of `null`
+  - `sent_at` = timestamp uit het bericht
+- Return `200 OK` (SiteJob Connect verwacht een snelle response)
 
-### 3. React Query staleTime instellen
+Config in `supabase/config.toml`:
+```text
+[functions.whatsapp-webhook]
+verify_jwt = false
+```
 
-Momenteel wordt elke query opnieuw opgehaald bij elke navigatie (staleTime = 0). Door een standaard `staleTime` van 30 seconden in te stellen, worden herhaalde API-calls vermeden bij snel navigeren.
+### 3. UI: WhatsApp-icoon in communicatie-tijdlijn
 
-**Bestand:**
-- `src/App.tsx` -- `QueryClient` configureren met `defaultOptions.queries.staleTime: 30_000`
+De `OrderCommunicationTab` en `CustomerCommunicationTab` tonen al items uit `communication_log`. Aanpassingen:
 
-### 4. Debounce fixen op productzoeken
+**OrderCommunicationTab:**
+- Voeg een groen WhatsApp-icoon toe naast het pijl-icoon wanneer `log.type === 'whatsapp'`
+- Verwijder de blokkade die de tab verbergt als Microsoft niet verbonden is (communicatie is nu breder dan alleen email)
+- Toon de tab ook als er geen customerEmail is (WhatsApp werkt op telefoonnummer)
 
-De huidige debounce is een `setTimeout` zonder cleanup, wat dubbele requests veroorzaakt. Dit wordt vervangen door een echte debounce.
+**CustomerCommunicationTab:**
+- Voeg WhatsApp-berichten toe aan de tijdlijn (de tab haalt nu alleen Microsoft emails op; er moet ook een query op `communication_log` komen voor WhatsApp-berichten, gecombineerd met de email-lijst)
 
-**Bestand:**
-- `src/pages/Products.tsx` -- Debounce met `useEffect` + cleanup
+### 4. Settings: WhatsApp status tonen
+
+In `src/pages/Settings.tsx` onder het koppelingen-tab een `WhatsAppSettings` component toevoegen dat toont:
+- Verbindingsstatus (webhook URL is geconfigureerd)
+- De webhook URL: `https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/whatsapp-webhook`
+- Instructie om de SiteJob Connect setup te voltooien
+
+## Bestanden
+
+| Bestand | Actie |
+|---|---|
+| `supabase/functions/whatsapp-webhook/index.ts` | Nieuw |
+| `supabase/config.toml` | Toevoegen webhook config |
+| `src/components/orders/OrderCommunicationTab.tsx` | WhatsApp icoon + verwijder Microsoft-blokkade |
+| `src/components/customers/CustomerCommunicationTab.tsx` | WhatsApp berichten in tijdlijn |
+| `src/components/settings/WhatsAppSettings.tsx` | Nieuw: status component |
+| `src/pages/Settings.tsx` | WhatsApp settings toevoegen |
 
 ## Technische details
 
-### Paginatie (useProducts)
+### Webhook payload verwerking
 
 ```text
-Nieuwe parameters:
-  page: number (default 1)
-  pageSize: number (default 50)
+// Binnenkomend payload (Meta format via SiteJob Connect):
+entry.changes[0].value.messages[0].from      -> afzender telefoonnummer
+entry.changes[0].value.messages[0].text.body  -> berichttekst
+entry.changes[0].value.messages[0].timestamp  -> unix timestamp
+entry.changes[0].value.contacts[0].profile.name -> naam afzender
 
-Query aanpassing:
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-  query = query.range(from, to);
-
-Aparte count-query:
-  supabase.from("products").select("*", { count: "exact", head: true })
-    .eq("is_active", true)
-    ... (zelfde filters)
-
-Return: { data, count, page, pageSize, totalPages }
+// Klant matching:
+Normaliseer telefoonnummer (strip +, spaties, landcode varianten)
+Zoek in customers: phone, phone_2, mobile
 ```
 
-### Lazy loading (App.tsx)
+### Telefoonnummer normalisatie
+
+Het telefoonnummer van de afzender komt binnen als `31687654321` (zonder +). Bij het zoeken in de klantentabel worden alle telefoonnummervelden genormaliseerd door niet-numerieke tekens te verwijderen, zodat `+31 6-87654321`, `0687654321` en `31687654321` allemaal matchen.
+
+### Communicatie-iconen
 
 ```text
-// Voor (eager):
-import Dashboard from "./pages/Dashboard";
-
-// Na (lazy):
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-
-// Routes wrappen in:
-<Suspense fallback={<PageLoader />}>
-  <Routes>...</Routes>
-</Suspense>
+type === 'email'    -> Mail icoon (blauw)
+type === 'whatsapp' -> MessageCircle icoon (groen, WhatsApp-groen #25D366)
+type === 'note'     -> bestaand gedrag
 ```
-
-### QueryClient optimalisatie
-
-```text
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30 * 1000,      // 30 sec: voorkom onnodige refetches
-      gcTime: 10 * 60 * 1000,    // 10 min cache
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-```
-
-## Verwacht resultaat
-
-| Maatregel | Effect |
-|---|---|
-| Paginatie producten | Laadtijd productpagina van ~5s naar <0.5s |
-| Lazy loading routes | Initiiele bundle ~60% kleiner |
-| staleTime | Minder API-calls bij navigatie |
-| Debounce fix | Geen dubbele zoek-requests |
-
-## Bestanden die wijzigen
-
-1. `src/hooks/useProducts.ts` -- Paginatie toevoegen
-2. `src/pages/Products.tsx` -- Paginatie UI + debounce fix
-3. `src/App.tsx` -- Lazy imports + QueryClient configuratie
 
