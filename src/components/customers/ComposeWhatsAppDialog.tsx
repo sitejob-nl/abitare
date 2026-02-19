@@ -12,8 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MessageCircle, Send, Loader2 } from "lucide-react";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
+import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates";
 
 interface ComposeWhatsAppDialogProps {
   open: boolean;
@@ -40,6 +48,17 @@ export function ComposeWhatsAppDialog({
   const [templateName, setTemplateName] = useState("");
   const [templateLang, setTemplateLang] = useState("nl");
   const { sendMessage } = useWhatsApp();
+  const { data: templates, isLoading: templatesLoading } = useWhatsAppTemplates(open);
+
+  const approvedTemplates = templates?.filter((t) => t.status === "APPROVED") ?? [];
+
+  const handleTemplateSelect = (value: string) => {
+    const tpl = approvedTemplates.find((t) => `${t.name}__${t.language}` === value);
+    if (tpl) {
+      setTemplateName(tpl.name);
+      setTemplateLang(typeof tpl.language === "string" ? tpl.language : (tpl.language as any)?.code ?? "nl");
+    }
+  };
 
   const handleSend = () => {
     if (messageType === "text" && !message.trim()) return;
@@ -67,7 +86,6 @@ export function ComposeWhatsAppDialog({
     );
   };
 
-  // Reset phone when dialog opens with new number
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) setTo(phoneNumber);
     onOpenChange(isOpen);
@@ -114,26 +132,33 @@ export function ComposeWhatsAppDialog({
 
             <TabsContent value="template" className="mt-3 space-y-3">
               <div>
-                <Label htmlFor="wa-template">Template naam</Label>
-                <Input
-                  id="wa-template"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  placeholder="bijv. afspraak_bevestiging"
-                />
+                <Label>Template</Label>
+                <Select onValueChange={handleTemplateSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={templatesLoading ? "Laden..." : "Kies een template..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {approvedTemplates.map((t) => {
+                      const lang = typeof t.language === "string" ? t.language : (t.language as any)?.code ?? "?";
+                      return (
+                        <SelectItem key={`${t.name}__${lang}`} value={`${t.name}__${lang}`}>
+                          {t.name} ({t.category} · {lang})
+                        </SelectItem>
+                      );
+                    })}
+                    {!templatesLoading && approvedTemplates.length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Geen goedgekeurde templates gevonden
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <Label htmlFor="wa-lang">Taal</Label>
-                <Input
-                  id="wa-lang"
-                  value={templateLang}
-                  onChange={(e) => setTemplateLang(e.target.value)}
-                  placeholder="nl"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                De template moet vooraf zijn goedgekeurd in Meta Business Manager.
-              </p>
+              {templateName && (
+                <p className="text-xs text-muted-foreground">
+                  Geselecteerd: <span className="font-medium">{templateName}</span> ({templateLang})
+                </p>
+              )}
             </TabsContent>
           </Tabs>
         </div>

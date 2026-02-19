@@ -74,6 +74,52 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Fetch message templates from Meta
+    if (body.action === "templates") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: config } = await supabase
+        .from("whatsapp_config")
+        .select("*")
+        .single();
+
+      if (!config) {
+        return new Response(JSON.stringify({ error: "Niet gekoppeld" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const res = await fetch(
+        `https://graph.facebook.com/v21.0/${config.waba_id}/message_templates?limit=100`,
+        { headers: { Authorization: `Bearer ${config.access_token}` } }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Meta templates error:", data);
+        return new Response(JSON.stringify({ error: "Kon templates niet ophalen", details: data }), {
+          status: res.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const templates = (data.data || []).map((t: any) => ({
+        name: t.name,
+        status: t.status,
+        category: t.category,
+        language: t.language,
+        components: t.components,
+      }));
+
+      return new Response(JSON.stringify({ templates }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { to, message, type = "text", template, customer_id, order_id, ticket_id } = body;
 
     if (!to) {
