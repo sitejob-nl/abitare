@@ -7,6 +7,7 @@ export interface ProductImage {
   url: string;
   storage_path: string;
   type: string;
+  media_type: string | null;
   sort_order: number;
   source: string;
   created_at: string;
