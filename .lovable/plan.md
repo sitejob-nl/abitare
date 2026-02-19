@@ -1,46 +1,77 @@
 
+# Ontbrekende productdata zichtbaar maken
 
-# Leveranciers toevoegen voor PIMS-imports
+## Overzicht
+Alle data die via PIMS wordt geimporteerd (Miele, straks Atag/Electrolux) wordt al opgeslagen in de database, maar veel velden worden niet getoond op de productdetailpagina. Dit plan maakt alles zichtbaar.
 
-## Probleem
+## Wijzigingen
 
-De PIMS-imports van Atag en Electrolux falen met "Onbekende fout" omdat deze leveranciers niet bestaan in de database. Het systeem herkent de XML correct als TradePI-formaat en extraheert de fabrikantnaam, maar kan die niet matchen aan een bekende leverancier.
+### 1. ProductDetail.tsx - Extra velden in "Afmetingen en Technisch" kaart
 
-- **Atag**: XML bevat `"Atag"` -- geen leverancier met die naam in de database
-- **Electrolux**: XML bevat `"Electronux"` (typfout in hun systeem) -- geen leverancier en de naam klopt niet eens
+**Nieuwe velden in lees- en bewerkingsmodus:**
 
-Miele werkt wel omdat die leverancier al bestaat.
+Afmetingen-sectie:
+- Diepte met open deur (depth_open_door_mm)
 
-## Oplossing
+Nieuwe sectie "Gewicht":
+- Netto gewicht (weight_net_kg)
+- Bruto gewicht (weight_gross_kg)
 
-### Stap 1: Leveranciers aanmaken
+Nieuwe sectie "Aansluiting":
+- Bouwtype (construction_type)
+- Installatietype (installation_type)
+- Aansluitvermogen in W (connection_power_w)
+- Spanning in V (voltage_v)
+- Stroom in A (current_a)
 
-Twee nieuwe leveranciers toevoegen in de `suppliers` tabel:
+Uitbreiding "Energie en Technisch":
+- Waterverbruik in L (water_consumption_l)
+- Basiskleur (color_basic)
 
-| Naam | Code | pims_aliases |
-|---|---|---|
-| Atag | ATAG | `Atag, atag_benelux` |
-| Electrolux | ELECTROLUX | `Electrolux, Electronux, Electrolux.nl` |
+Nieuwe sectie "Productinfo":
+- Productfamilie (product_family)
+- Productserie (product_series)
+- Productstatus (product_status)
 
-De aliases dekken zowel de namen uit de XML-routing (`<From>atag_benelux@tradeplace.com`) als de typfout in Electrolux' systeem ("Electronux").
+Datasheet-link:
+- Downloadknop wanneer datasheet_url beschikbaar is
 
-### Stap 2: Verbeterde foutmelding
+### 2. ProductDetail.tsx - Nieuwe "Specificaties" kaart
 
-De huidige foutmelding is vaag ("Onbekende fout"). De edge function moet een duidelijkere melding teruggeven wanneer een leverancier niet gevonden wordt, zodat je direct ziet welke naam er niet matcht.
+Een nieuwe Card onder de "Afmetingen en Technisch" kaart die het `specifications` JSONB-veld uitleest en toont:
+- Alle key-value paren in een overzichtelijk grid
+- Array-waarden (zoals USPs) als bullet-lijst
+- Alleen getoond wanneer het specifications-veld data bevat
 
-### Stap 3: Alias-matching robuuster maken
+### 3. ProductImageGallery.tsx - Media-galerij met tabs
 
-De matching-logica uitbreiden zodat ook e-mail-prefixes uit de `<From>`-tag in de XML-routing worden meegenomen als kandidaat (bijv. `atag_benelux` uit `atag_benelux@tradeplace.com`).
+De galerij uitbreiden om alle media_types te tonen:
+- Tabs: Foto's | Maattekeningen | Energielabels | Datasheets | 3D
+- Alleen tabs tonen die data bevatten
+- PDF/document-types als downloadlinks in plaats van afbeeldingen
+- Klikbare thumbnails om een grotere preview te tonen
+
+### 4. useProductImages.ts - media_type toevoegen
+
+Het `media_type` veld toevoegen aan de ProductImage interface zodat we erop kunnen filteren.
 
 ## Technische details
 
-### Database insert (stap 1)
-- SQL migration die Atag en Electrolux toevoegt aan `suppliers` met de juiste `pims_aliases`
+### ProductDetail.tsx aanpassingen
+- `startEditing()`: extra velden toevoegen aan form state (depth_open_door_mm, weight_net_kg, weight_gross_kg, water_consumption_l, construction_type, installation_type, connection_power_w, voltage_v, current_a, color_basic, product_family, product_series, product_status, datasheet_url)
+- `handleSave()`: deze velden meenemen in de updateData
+- Lees-modus: nieuwe Field-componenten voor elk veld, gegroepeerd in logische secties
+- Bewerkingsmodus: bijbehorende Input-velden
+- Specificaties-kaart: `product.specifications` als JSON parsen en renderen
 
-### Edge function wijziging (stap 2)
-- In `pims-import/index.ts`: de error response aanpassen van generiek naar een bericht als `"Leverancier 'Atag' niet gevonden. Voeg deze toe via Instellingen → Leveranciers, of configureer een alias."`
+### ProductImageGallery.tsx herschrijven
+- Groepeer images op `media_type` (photo, dimension_drawing, energy_label, datasheet, 3d_model)
+- Tabs component van shadcn/ui gebruiken
+- ImageGrid sub-component met klikbare thumbnails
+- PDF-detectie voor document-links
 
-### Candidate extraction (stap 3)
-- In de supplier-detectie logica: naast de huidige kandidaten ook het e-mail-prefix uit `<From>` tags extraheren en als extra kandidaat meenemen
-- Underscore/streepje-varianten normaliseren (bijv. `atag_benelux` → `atag benelux`)
+### useProductImages.ts
+- `media_type` veld toevoegen aan ProductImage interface
 
+### Geen database-migraties nodig
+Alle kolommen bestaan al. Er zijn 6.069 foto's, 1.895 datasheets, 1.787 energielabels, 1.506 maattekeningen en 707 3D-modellen opgeslagen.
