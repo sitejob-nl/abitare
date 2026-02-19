@@ -1,41 +1,40 @@
 
 
-# WhatsApp Config endpoint + crash fix
+# Fix: WhatsApp templates worden niet getoond door stale cache
 
-## 1. Nieuwe edge function: `whatsapp-config`
+## Probleem
 
-Ontvangt credentials van SiteJob Connect via webhook en slaat ze op in `whatsapp_config`.
+De templates query liep voordat de WhatsApp config bestond in de database. Het resultaat (lege array `[]`) werd gecachet met een staleTime van 5 minuten. Wanneer de config later wel aanwezig is, wordt het gecachete lege resultaat hergebruikt en worden er geen templates getoond.
 
-**Bestand:** `supabase/functions/whatsapp-config/index.ts`
+## Oorzaak
 
-- Accepteert alleen POST
-- Verifieert `X-Webhook-Secret` header tegen `WHATSAPP_WEBHOOK_SECRET` secret
-- Upsert naar `whatsapp_config` met vast ID `00000000-0000-0000-0000-000000000001`
-- CORS headers meegeven
+In `useWhatsAppTemplates.ts` wordt bij een fout (geen config) een lege array `[]` geretourneerd. React Query behandelt dit als geldige data en cachet het. Latere calls binnen de staleTime gebruiken de gecachete lege array.
 
-**Bestand:** `supabase/config.toml`
+## Oplossing
 
-- Toevoegen: `[functions.whatsapp-config]` met `verify_jwt = false` (webhook vanuit extern systeem, geen JWT)
+Twee kleine aanpassingen:
 
-## 2. Fix: Customer pagina crash
+### 1. `src/hooks/useWhatsAppTemplates.ts`
 
-De `useWhatsAppTemplates` hook gooit een error als WhatsApp niet geconfigureerd is (400 response). React Query retry't dit 3x, wat de pagina laat hangen.
+Bij een API-error: gooi een error in plaats van `[]` terug te geven. React Query zal dit als fout markeren (niet als geldige data cachen). Gecombineerd met `retry: false` voorkomt dit loops, maar de query zal opnieuw proberen bij de volgende mount of refetch.
 
-**Bestand:** `src/hooks/useWhatsAppTemplates.ts`
+```text
+// Huidig (fout):
+if (error || data?.error) return [];
 
-- `retry: false` toevoegen
-- Bij error of `data?.error`: return lege array in plaats van gooien
+// Nieuw:
+if (error) throw new Error("WhatsApp API error");
+if (data?.error) throw new Error(data.error);
+```
 
-**Bestand:** `src/components/customers/CustomerCommunicationTab.tsx`
+### 2. `src/components/settings/WhatsAppSettings.tsx`
 
-- `ComposeWhatsAppDialog` alleen renderen als `showWhatsAppDialog === true` (regel 430-438)
-- Dit voorkomt dat de templates query start voordat de gebruiker de dialog opent
+Voeg `refetchOnMount: "always"` niet toe aan de hook (die zit in een gedeelde hook). In plaats daarvan: invalideer de templates-query wanneer de status verandert naar connected. Of simpeler: de hook ontvangt al `enabled` parameter. Als `enabled` van `false` naar `true` gaat (status query resolves), zal React Query de data opnieuw ophalen als er geen gecachete SUCCESS data is (een error-state telt niet als success).
 
-## Samenvatting bestanden
+Door stap 1 is de cache-state bij een fout nu "error" in plaats van "success met lege data". Wanneer de settings pagina laadt en `isConnected` wordt `true`, zal React Query een verse fetch doen omdat er geen succesvolle cache is.
+
+## Bestanden
 
 | Bestand | Wijziging |
 |---|---|
-| `supabase/functions/whatsapp-config/index.ts` | Nieuw |
-| `supabase/config.toml` | `whatsapp-config` entry toevoegen |
-| `src/hooks/useWhatsAppTemplates.ts` | `retry: false`, graceful error handling |
-| `src/components/customers/CustomerCommunicationTab.tsx` | Conditional render van dialog |
+| `src/hooks/useWhatsAppTemplates.ts` | Error gooien i.p.v. lege array retourneren |
