@@ -16,7 +16,8 @@ export function useWhatsAppTemplates(enabled = true) {
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
         body: { action: "templates" },
       });
-      if (error || data?.error) return [];
+      if (error) throw new Error("WhatsApp API error");
+      if (data?.error) throw new Error(data.error);
       return data.templates ?? [];
     },
     enabled,
