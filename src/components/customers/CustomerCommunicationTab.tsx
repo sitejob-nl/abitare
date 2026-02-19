@@ -427,7 +427,7 @@ export function CustomerCommunicationTab({
         />
       )}
 
-      {canSendWhatsApp && (
+      {canSendWhatsApp && showWhatsAppDialog && (
         <ComposeWhatsAppDialog
           open={showWhatsAppDialog}
           onOpenChange={setShowWhatsAppDialog}
