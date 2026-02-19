@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Loader2, Save, Package } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Package, FileDown, ListChecks } from "lucide-react";
 import { ProductImageGallery } from "@/components/products/ProductImageGallery";
 import { useProduct, useProductCategories, useSuppliers } from "@/hooks/useProducts";
 import { useProductPrices } from "@/hooks/useProductPrices";
@@ -61,6 +61,7 @@ const ProductDetail = () => {
       width_mm: product.width_mm ?? "",
       height_mm: product.height_mm ?? "",
       depth_mm: product.depth_mm ?? "",
+      depth_open_door_mm: (product as any).depth_open_door_mm ?? "",
       niche_height_min_mm: (product as any).niche_height_min_mm ?? "",
       niche_height_max_mm: (product as any).niche_height_max_mm ?? "",
       niche_width_min_mm: (product as any).niche_width_min_mm ?? "",
@@ -71,6 +72,19 @@ const ProductDetail = () => {
       noise_db: (product as any).noise_db ?? "",
       noise_class: (product as any).noise_class || "",
       color_main: (product as any).color_main || "",
+      color_basic: (product as any).color_basic || "",
+      water_consumption_l: (product as any).water_consumption_l ?? "",
+      weight_net_kg: (product as any).weight_net_kg ?? "",
+      weight_gross_kg: (product as any).weight_gross_kg ?? "",
+      construction_type: (product as any).construction_type || "",
+      installation_type: (product as any).installation_type || "",
+      connection_power_w: (product as any).connection_power_w ?? "",
+      voltage_v: (product as any).voltage_v ?? "",
+      current_a: (product as any).current_a ?? "",
+      product_family: (product as any).product_family || "",
+      product_series: (product as any).product_series || "",
+      product_status: (product as any).product_status || "",
+      datasheet_url: (product as any).datasheet_url || "",
       supplier_id: product.supplier_id || "",
       category_id: product.category_id || "",
       is_active: product.is_active ?? true,
@@ -100,6 +114,7 @@ const ProductDetail = () => {
         width_mm: form.width_mm !== "" ? Number(form.width_mm) : null,
         height_mm: form.height_mm !== "" ? Number(form.height_mm) : null,
         depth_mm: form.depth_mm !== "" ? Number(form.depth_mm) : null,
+        depth_open_door_mm: form.depth_open_door_mm !== "" ? Number(form.depth_open_door_mm) : null,
         niche_height_min_mm: form.niche_height_min_mm !== "" ? Number(form.niche_height_min_mm) : null,
         niche_height_max_mm: form.niche_height_max_mm !== "" ? Number(form.niche_height_max_mm) : null,
         niche_width_min_mm: form.niche_width_min_mm !== "" ? Number(form.niche_width_min_mm) : null,
@@ -110,6 +125,19 @@ const ProductDetail = () => {
         noise_db: form.noise_db !== "" ? Number(form.noise_db) : null,
         noise_class: form.noise_class || null,
         color_main: form.color_main || null,
+        color_basic: form.color_basic || null,
+        water_consumption_l: form.water_consumption_l !== "" ? Number(form.water_consumption_l) : null,
+        weight_net_kg: form.weight_net_kg !== "" ? Number(form.weight_net_kg) : null,
+        weight_gross_kg: form.weight_gross_kg !== "" ? Number(form.weight_gross_kg) : null,
+        construction_type: form.construction_type || null,
+        installation_type: form.installation_type || null,
+        connection_power_w: form.connection_power_w !== "" ? Number(form.connection_power_w) : null,
+        voltage_v: form.voltage_v !== "" ? Number(form.voltage_v) : null,
+        current_a: form.current_a !== "" ? Number(form.current_a) : null,
+        product_family: form.product_family || null,
+        product_series: form.product_series || null,
+        product_status: form.product_status || null,
+        datasheet_url: form.datasheet_url || null,
         supplier_id: form.supplier_id || null,
         category_id: form.category_id || null,
         is_active: form.is_active,
@@ -369,6 +397,12 @@ const ProductDetail = () => {
                       <Input type="number" value={form.depth_mm} onChange={(e) => setForm({ ...form, depth_mm: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
+                      <Label className="text-xs">Diepte open deur (mm)</Label>
+                      <Input type="number" value={form.depth_open_door_mm} onChange={(e) => setForm({ ...form, depth_open_door_mm: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
                       <Label className="text-xs">Normuren</Label>
                       <Input type="number" step="0.01" value={form.norm_hours} onChange={(e) => setForm({ ...form, norm_hours: e.target.value })} />
                     </div>
@@ -398,6 +432,42 @@ const ProductDetail = () => {
                     </div>
                   </div>
                   <Separator />
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gewicht</div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Netto gewicht (kg)</Label>
+                      <Input type="number" step="0.1" value={form.weight_net_kg} onChange={(e) => setForm({ ...form, weight_net_kg: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Bruto gewicht (kg)</Label>
+                      <Input type="number" step="0.1" value={form.weight_gross_kg} onChange={(e) => setForm({ ...form, weight_gross_kg: e.target.value })} />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Aansluiting</div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Bouwtype</Label>
+                      <Input value={form.construction_type} onChange={(e) => setForm({ ...form, construction_type: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Installatietype</Label>
+                      <Input value={form.installation_type} onChange={(e) => setForm({ ...form, installation_type: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Vermogen (W)</Label>
+                      <Input type="number" value={form.connection_power_w} onChange={(e) => setForm({ ...form, connection_power_w: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Spanning (V)</Label>
+                      <Input type="number" value={form.voltage_v} onChange={(e) => setForm({ ...form, voltage_v: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Stroom (A)</Label>
+                      <Input type="number" step="0.1" value={form.current_a} onChange={(e) => setForm({ ...form, current_a: e.target.value })} />
+                    </div>
+                  </div>
+                  <Separator />
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Energie & Technisch</div>
                   <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                     <div className="space-y-1.5">
@@ -407,6 +477,10 @@ const ProductDetail = () => {
                     <div className="space-y-1.5">
                       <Label className="text-xs">Verbruik (kWh)</Label>
                       <Input type="number" step="0.1" value={form.energy_consumption_kwh} onChange={(e) => setForm({ ...form, energy_consumption_kwh: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Waterverbruik (L)</Label>
+                      <Input type="number" step="0.1" value={form.water_consumption_l} onChange={(e) => setForm({ ...form, water_consumption_l: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Geluid (dB)</Label>
@@ -420,6 +494,30 @@ const ProductDetail = () => {
                       <Label className="text-xs">Kleur</Label>
                       <Input value={form.color_main} onChange={(e) => setForm({ ...form, color_main: e.target.value })} />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Basiskleur</Label>
+                      <Input value={form.color_basic} onChange={(e) => setForm({ ...form, color_basic: e.target.value })} />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Productinfo</div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Productfamilie</Label>
+                      <Input value={form.product_family} onChange={(e) => setForm({ ...form, product_family: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Productserie</Label>
+                      <Input value={form.product_series} onChange={(e) => setForm({ ...form, product_series: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Productstatus</Label>
+                      <Input value={form.product_status} onChange={(e) => setForm({ ...form, product_status: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Datasheet URL</Label>
+                    <Input value={form.datasheet_url} onChange={(e) => setForm({ ...form, datasheet_url: e.target.value })} />
                   </div>
                 </div>
               ) : (
@@ -428,6 +526,9 @@ const ProductDetail = () => {
                     <Field label="Breedte" value={product.width_mm ? `${product.width_mm} mm` : null} />
                     <Field label="Hoogte" value={product.height_mm ? `${product.height_mm} mm` : null} />
                     <Field label="Diepte" value={product.depth_mm ? `${product.depth_mm} mm` : null} />
+                    <Field label="Diepte open deur" value={(product as any).depth_open_door_mm ? `${(product as any).depth_open_door_mm} mm` : null} />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
                     <Field label="Normuren" value={product.norm_hours?.toString()} />
                   </div>
                   {((product as any).niche_height_min_mm || (product as any).niche_width_min_mm || (product as any).niche_depth_mm) && (
@@ -449,26 +550,118 @@ const ProductDetail = () => {
                       </div>
                     </>
                   )}
-                  {((product as any).energy_class || (product as any).noise_db || (product as any).color_main) && (
+                  {((product as any).weight_net_kg || (product as any).weight_gross_kg) && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gewicht</div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Netto" value={(product as any).weight_net_kg ? `${(product as any).weight_net_kg} kg` : null} />
+                        <Field label="Bruto" value={(product as any).weight_gross_kg ? `${(product as any).weight_gross_kg} kg` : null} />
+                      </div>
+                    </>
+                  )}
+                  {((product as any).construction_type || (product as any).installation_type || (product as any).connection_power_w) && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Aansluiting</div>
+                      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <Field label="Bouwtype" value={(product as any).construction_type} />
+                        <Field label="Installatietype" value={(product as any).installation_type} />
+                        <Field label="Vermogen" value={(product as any).connection_power_w ? `${(product as any).connection_power_w} W` : null} />
+                        <Field label="Spanning" value={(product as any).voltage_v ? `${(product as any).voltage_v} V` : null} />
+                        <Field label="Stroom" value={(product as any).current_a ? `${(product as any).current_a} A` : null} />
+                      </div>
+                    </>
+                  )}
+                  {((product as any).energy_class || (product as any).noise_db || (product as any).color_main || (product as any).water_consumption_l) && (
                     <>
                       <Separator />
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Energie & Technisch</div>
                       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                         <Field label="Energieklasse" value={(product as any).energy_class} />
                         <Field label="Verbruik" value={(product as any).energy_consumption_kwh ? `${(product as any).energy_consumption_kwh} kWh` : null} />
+                        <Field label="Waterverbruik" value={(product as any).water_consumption_l ? `${(product as any).water_consumption_l} L` : null} />
                         <Field label="Geluidsniveau" value={
                           (product as any).noise_db
                             ? `${(product as any).noise_db} dB${(product as any).noise_class ? ` (klasse ${(product as any).noise_class})` : ''}`
                             : null
                         } />
                         <Field label="Kleur" value={(product as any).color_main} />
+                        <Field label="Basiskleur" value={(product as any).color_basic} />
                       </div>
+                    </>
+                  )}
+                  {((product as any).product_family || (product as any).product_series || (product as any).product_status) && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Productinfo</div>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <Field label="Productfamilie" value={(product as any).product_family} />
+                        <Field label="Productserie" value={(product as any).product_series} />
+                        <Field label="Productstatus" value={(product as any).product_status} />
+                      </div>
+                    </>
+                  )}
+                  {(product as any).datasheet_url && (
+                    <>
+                      <Separator />
+                      <a href={(product as any).datasheet_url} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" size="sm" className="gap-2">
+                          <FileDown className="h-4 w-4" />
+                          Productfiche downloaden
+                        </Button>
+                      </a>
                     </>
                   )}
                 </div>
               )}
             </CardContent>
-          </Card>
+           </Card>
+
+          {/* Specifications */}
+          {(() => {
+            const specs = (product as any).specifications;
+            if (!specs || typeof specs !== 'object' || Object.keys(specs).length === 0) return null;
+            const entries = Object.entries(specs as Record<string, unknown>);
+            const usps = entries.filter(([k]) => k.toLowerCase().includes('usp'));
+            const regular = entries.filter(([k]) => !k.toLowerCase().includes('usp'));
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ListChecks className="h-4 w-4" />
+                    Specificaties
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                    {regular.map(([key, value]) => (
+                      <div key={key} className="flex justify-between gap-2 py-1 border-b border-border/50">
+                        <span className="text-xs text-muted-foreground truncate">{key}</span>
+                        <span className="text-xs text-foreground text-right font-medium">
+                          {Array.isArray(value) ? value.join(', ') : String(value ?? '–')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {usps.length > 0 && (
+                    <>
+                      <Separator />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">USPs</div>
+                      <ul className="list-disc list-inside space-y-1">
+                        {usps.map(([key, value]) => {
+                          const items = Array.isArray(value) ? value : [value];
+                          return items.map((item, i) => (
+                            <li key={`${key}-${i}`} className="text-sm text-foreground">{String(item)}</li>
+                          ));
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
         </div>
 
         {/* Sidebar */}
