@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, Users, Link2, Pencil, User, Percent } from "lucide-react";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
+import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { MicrosoftSettings } from "@/components/settings/MicrosoftSettings";
 import { DivisionFormDialog } from "@/components/settings/DivisionFormDialog";
 import { UserFormDialog } from "@/components/settings/UserFormDialog";
@@ -296,6 +297,7 @@ const Settings = () => {
           {/* Integrations Tab - Admin only */}
           {isAdmin && (
             <TabsContent value="integrations" className="space-y-6">
+              <WhatsAppSettings />
               <TradeplaceSettings />
               <ExactOnlineSettings />
             </TabsContent>

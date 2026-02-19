@@ -16,6 +16,7 @@ import {
   Loader2,
   Paperclip,
   AlertCircle,
+  MessageCircle,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
@@ -23,6 +24,8 @@ import { useCustomerEmails } from "@/hooks/useCustomerEmails";
 import { useMicrosoftEmail, MicrosoftEmail } from "@/hooks/useMicrosoftMail";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 interface CustomerCommunicationTabProps {
   customerId: string;
@@ -39,16 +42,42 @@ export function CustomerCommunicationTab({
   const { data: connection, isLoading: connectionLoading } = useMicrosoftConnection();
   const { data: emails, isLoading: emailsLoading } = useCustomerEmails(customerEmail);
   
+  // Fetch WhatsApp messages from communication_log
+  const { data: whatsappLogs, isLoading: whatsappLoading } = useQuery({
+    queryKey: ["customer-whatsapp-logs", customerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("communication_log")
+        .select("*")
+        .eq("customer_id", customerId)
+        .eq("type", "whatsapp")
+        .order("sent_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+  
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const [selectedWhatsAppLog, setSelectedWhatsAppLog] = useState<any | null>(null);
   const [showComposeDialog, setShowComposeDialog] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<MicrosoftEmail | null>(null);
 
+  const microsoftConnected = !connectionLoading && connection?.is_active;
+  const hasEmail = !!customerEmail;
+
   const handleEmailClick = (emailId: string) => {
     setSelectedEmailId(emailId);
+    setSelectedWhatsAppLog(null);
+  };
+
+  const handleWhatsAppClick = (log: any) => {
+    setSelectedWhatsAppLog(log);
+    setSelectedEmailId(null);
   };
 
   const handleBackToList = () => {
     setSelectedEmailId(null);
+    setSelectedWhatsAppLog(null);
   };
 
   const handleReply = (email: MicrosoftEmail) => {
@@ -61,15 +90,33 @@ export function CustomerCommunicationTab({
     setShowComposeDialog(true);
   };
 
-  // No Microsoft connection
-  if (!connectionLoading && !connection?.is_active) {
+  // Build a combined timeline
+  type TimelineItem = { kind: "email"; data: any; date: Date } | { kind: "whatsapp"; data: any; date: Date };
+  const timeline: TimelineItem[] = [];
+
+  if (microsoftConnected && emails) {
+    for (const email of emails) {
+      timeline.push({ kind: "email", data: email, date: new Date(email.receivedDateTime) });
+    }
+  }
+  if (whatsappLogs) {
+    for (const log of whatsappLogs) {
+      timeline.push({ kind: "whatsapp", data: log, date: new Date(log.sent_at) });
+    }
+  }
+  timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const isLoading = (microsoftConnected && emailsLoading) || whatsappLoading;
+
+  // No data sources available at all
+  if (!connectionLoading && !microsoftConnected && !whatsappLoading && (!whatsappLogs || whatsappLogs.length === 0) && !hasEmail) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
           <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="font-semibold mb-2">Microsoft account niet verbonden</h3>
+          <h3 className="font-semibold mb-2">Geen communicatie beschikbaar</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Verbind je Microsoft account om emails te bekijken en te versturen.
+            Verbind je Microsoft account of configureer WhatsApp om communicatie te bekijken.
           </p>
           <Button variant="outline" onClick={() => window.location.href = "/settings"}>
             Ga naar Instellingen
@@ -79,80 +126,105 @@ export function CustomerCommunicationTab({
     );
   }
 
-  // No customer email
-  if (!customerEmail) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <Mail className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="font-semibold mb-2">Geen email adres bekend</h3>
-          <p className="text-sm text-muted-foreground">
-            Voeg een email adres toe aan deze klant om de communicatie te bekijken.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const renderEmailList = () => (
+  const renderTimeline = () => (
     <div className="space-y-1">
-      {emailsLoading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : emails && emails.length > 0 ? (
-        emails.map((email) => (
-          <div
-            key={email.id}
-            className={cn(
-              "p-3 rounded-md cursor-pointer transition-colors",
-              selectedEmailId === email.id
-                ? "bg-primary/10 border-l-2 border-primary"
-                : "hover:bg-muted/50",
-              !email.isRead && "bg-muted/30"
-            )}
-            onClick={() => handleEmailClick(email.id)}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  {!email.isRead && (
-                    <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                  )}
-                  <span className={cn(
-                    "text-sm truncate",
-                    !email.isRead && "font-semibold"
-                  )}>
-                    {email.from?.emailAddress?.address?.toLowerCase() === customerEmail?.toLowerCase()
-                      ? `Van: ${customerName}`
-                      : `Aan: ${customerName}`}
+      ) : timeline.length > 0 ? (
+        timeline.map((item) => {
+          if (item.kind === "email") {
+            const email = item.data;
+            return (
+              <div
+                key={`email-${email.id}`}
+                className={cn(
+                  "p-3 rounded-md cursor-pointer transition-colors",
+                  selectedEmailId === email.id
+                    ? "bg-primary/10 border-l-2 border-primary"
+                    : "hover:bg-muted/50",
+                  !email.isRead && "bg-muted/30"
+                )}
+                onClick={() => handleEmailClick(email.id)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      {!email.isRead && (
+                        <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                      )}
+                      <span className={cn(
+                        "text-sm truncate",
+                        !email.isRead && "font-semibold"
+                      )}>
+                        {email.from?.emailAddress?.address?.toLowerCase() === customerEmail?.toLowerCase()
+                          ? `Van: ${customerName}`
+                          : `Aan: ${customerName}`}
+                      </span>
+                    </div>
+                    <p className={cn(
+                      "text-sm truncate mt-0.5",
+                      !email.isRead ? "font-medium" : "text-muted-foreground"
+                    )}>
+                      {email.subject || "(geen onderwerp)"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {email.bodyPreview}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(email.receivedDateTime), "d MMM", { locale: nl })}
+                    </span>
+                    {email.hasAttachments && (
+                      <Paperclip className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          } else {
+            const log = item.data;
+            return (
+              <div
+                key={`wa-${log.id}`}
+                className={cn(
+                  "p-3 rounded-md cursor-pointer transition-colors",
+                  selectedWhatsAppLog?.id === log.id
+                    ? "bg-primary/10 border-l-2 border-primary"
+                    : "hover:bg-muted/50"
+                )}
+                onClick={() => handleWhatsAppClick(log)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-3.5 w-3.5 text-[#25D366] shrink-0" />
+                      <span className="text-sm truncate font-medium">
+                        {log.subject || "WhatsApp bericht"}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-[#25D366] border-[#25D366]/30 shrink-0">
+                        WA
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {log.body_preview}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {format(new Date(log.sent_at), "d MMM", { locale: nl })}
                   </span>
                 </div>
-                <p className={cn(
-                  "text-sm truncate mt-0.5",
-                  !email.isRead ? "font-medium" : "text-muted-foreground"
-                )}>
-                  {email.subject || "(geen onderwerp)"}
-                </p>
-                <p className="text-xs text-muted-foreground truncate mt-1">
-                  {email.bodyPreview}
-                </p>
               </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(email.receivedDateTime), "d MMM", { locale: nl })}
-                </span>
-                {email.hasAttachments && (
-                  <Paperclip className="h-3 w-3 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </div>
-        ))
+            );
+          }
+        })
       ) : (
         <div className="text-center py-8 text-muted-foreground">
           <Mail className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">Geen emails gevonden met deze klant</p>
+          <p className="text-sm">Geen communicatie gevonden met deze klant</p>
         </div>
       )}
     </div>
@@ -237,6 +309,34 @@ export function CustomerCommunicationTab({
     );
   };
 
+  const WhatsAppDetailContent = ({ log }: { log: any }) => (
+    <div className="h-full flex flex-col">
+      <div className="p-4 border-b">
+        {isMobile && (
+          <Button variant="ghost" size="sm" className="mb-3 -ml-2" onClick={handleBackToList}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Terug
+          </Button>
+        )}
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-5 w-5 text-[#25D366]" />
+          <h2 className="font-semibold text-lg">{log.subject || "WhatsApp bericht"}</h2>
+        </div>
+        <div className="text-sm text-muted-foreground mt-2">
+          {format(new Date(log.sent_at), "d MMMM yyyy 'om' HH:mm", { locale: nl })}
+        </div>
+        {log.metadata?.from_number && (
+          <div className="text-sm text-muted-foreground mt-1">
+            Van: {log.metadata.sender_name || log.metadata.from_number} ({log.metadata.from_number})
+          </div>
+        )}
+      </div>
+      <ScrollArea className="flex-1 p-4">
+        <p className="text-sm whitespace-pre-wrap">{log.body_preview}</p>
+      </ScrollArea>
+    </div>
+  );
+
   return (
     <>
       <Card>
@@ -245,17 +345,19 @@ export function CustomerCommunicationTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Mail className="h-4 w-4" />
               Communicatie
-              {emails && emails.length > 0 && (
+              {timeline.length > 0 && (
                 <Badge variant="secondary" className="ml-1">
-                  {emails.length}
+                  {timeline.length}
                 </Badge>
               )}
             </CardTitle>
-            <Button size="sm" onClick={handleNewEmail}>
-              <Send className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Nieuwe email</span>
-              <span className="sm:hidden">Email</span>
-            </Button>
+            {microsoftConnected && hasEmail && (
+              <Button size="sm" onClick={handleNewEmail}>
+                <Send className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Nieuwe email</span>
+                <span className="sm:hidden">Email</span>
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -263,11 +365,12 @@ export function CustomerCommunicationTab({
             // Mobile: Full width list, detail in sheet
             <>
               <div className="px-4 pb-4">
-                {renderEmailList()}
+                {renderTimeline()}
               </div>
-              <Sheet open={!!selectedEmailId} onOpenChange={(open) => !open && handleBackToList()}>
+              <Sheet open={!!(selectedEmailId || selectedWhatsAppLog)} onOpenChange={(open) => !open && handleBackToList()}>
                 <SheetContent side="right" className="w-full p-0 sm:max-w-lg">
                   {selectedEmailId && <EmailDetailContent emailId={selectedEmailId} />}
+                  {selectedWhatsAppLog && <WhatsAppDetailContent log={selectedWhatsAppLog} />}
                 </SheetContent>
               </Sheet>
             </>
@@ -276,17 +379,19 @@ export function CustomerCommunicationTab({
             <div className="flex h-[500px]">
               <div className="w-1/3 border-r overflow-hidden">
                 <ScrollArea className="h-full px-2">
-                  {renderEmailList()}
+                  {renderTimeline()}
                 </ScrollArea>
               </div>
               <div className="flex-1 overflow-hidden">
                 {selectedEmailId ? (
                   <EmailDetailContent emailId={selectedEmailId} />
+                ) : selectedWhatsAppLog ? (
+                  <WhatsAppDetailContent log={selectedWhatsAppLog} />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
                     <div className="text-center">
                       <Mail className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                      <p>Selecteer een email om te bekijken</p>
+                      <p>Selecteer een bericht om te bekijken</p>
                     </div>
                   </div>
                 )}
@@ -296,15 +401,17 @@ export function CustomerCommunicationTab({
         </CardContent>
       </Card>
 
-      <ComposeEmailDialog
-        open={showComposeDialog}
-        onOpenChange={setShowComposeDialog}
-        customerEmail={customerEmail}
-        customerId={customerId}
-        customerName={customerName}
-        replyToId={replyToEmail?.id}
-        initialSubject={replyToEmail ? `Re: ${replyToEmail.subject}` : ""}
-      />
+      {microsoftConnected && hasEmail && (
+        <ComposeEmailDialog
+          open={showComposeDialog}
+          onOpenChange={setShowComposeDialog}
+          customerEmail={customerEmail!}
+          customerId={customerId}
+          customerName={customerName}
+          replyToId={replyToEmail?.id}
+          initialSubject={replyToEmail ? `Re: ${replyToEmail.subject}` : ""}
+        />
+      )}
     </>
   );
 }
