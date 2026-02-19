@@ -23,6 +23,7 @@ import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
 import { useCustomerEmails } from "@/hooks/useCustomerEmails";
 import { useMicrosoftEmail, MicrosoftEmail } from "@/hooks/useMicrosoftMail";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
+import { ComposeWhatsAppDialog } from "./ComposeWhatsAppDialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -31,12 +32,14 @@ interface CustomerCommunicationTabProps {
   customerId: string;
   customerEmail: string | null | undefined;
   customerName: string;
+  customerPhone?: string | null;
 }
 
 export function CustomerCommunicationTab({
   customerId,
   customerEmail,
   customerName,
+  customerPhone,
 }: CustomerCommunicationTabProps) {
   const isMobile = useIsMobile();
   const { data: connection, isLoading: connectionLoading } = useMicrosoftConnection();
@@ -60,10 +63,12 @@ export function CustomerCommunicationTab({
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedWhatsAppLog, setSelectedWhatsAppLog] = useState<any | null>(null);
   const [showComposeDialog, setShowComposeDialog] = useState(false);
+  const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<MicrosoftEmail | null>(null);
 
   const microsoftConnected = !connectionLoading && connection?.is_active;
   const hasEmail = !!customerEmail;
+  const canSendWhatsApp = !!customerPhone;
 
   const handleEmailClick = (emailId: string) => {
     setSelectedEmailId(emailId);
@@ -351,13 +356,22 @@ export function CustomerCommunicationTab({
                 </Badge>
               )}
             </CardTitle>
-            {microsoftConnected && hasEmail && (
-              <Button size="sm" onClick={handleNewEmail}>
-                <Send className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Nieuwe email</span>
-                <span className="sm:hidden">Email</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canSendWhatsApp && (
+                <Button size="sm" variant="outline" onClick={() => setShowWhatsAppDialog(true)} className="text-[#25D366] border-[#25D366]/30 hover:bg-[#25D366]/10">
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">WhatsApp</span>
+                  <span className="sm:hidden">WA</span>
+                </Button>
+              )}
+              {microsoftConnected && hasEmail && (
+                <Button size="sm" onClick={handleNewEmail}>
+                  <Send className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Nieuwe email</span>
+                  <span className="sm:hidden">Email</span>
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -410,6 +424,16 @@ export function CustomerCommunicationTab({
           customerName={customerName}
           replyToId={replyToEmail?.id}
           initialSubject={replyToEmail ? `Re: ${replyToEmail.subject}` : ""}
+        />
+      )}
+
+      {canSendWhatsApp && (
+        <ComposeWhatsAppDialog
+          open={showWhatsAppDialog}
+          onOpenChange={setShowWhatsAppDialog}
+          phoneNumber={customerPhone!}
+          customerId={customerId}
+          customerName={customerName}
         />
       )}
     </>

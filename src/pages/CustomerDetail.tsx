@@ -161,6 +161,7 @@ const CustomerDetail = () => {
                 customerId={customer.id}
                 customerEmail={customer.email}
                 customerName={displayName}
+                customerPhone={customer.mobile || customer.phone}
               />
             </TabsContent>
           </Tabs>

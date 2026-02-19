@@ -5,6 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
 
+function normalizePhone(phone: string): string {
+  let cleaned = phone.replace(/[^0-9+]/g, "");
+  if (cleaned.startsWith("+")) cleaned = cleaned.slice(1);
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  if (cleaned.startsWith("06")) cleaned = "316" + cleaned.slice(2);
+  return cleaned;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -42,9 +50,60 @@ Deno.serve(async (req) => {
       });
     }
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
     const value = changes[0]?.value;
+
+    // Process status updates (delivered, read, etc.)
+    if (value?.statuses && value.statuses.length > 0) {
+      for (const status of value.statuses) {
+        const wamid = status.id;
+        const newStatus = status.status; // sent, delivered, read, failed
+
+        const { error: updateError } = await supabase
+          .from("communication_log")
+          .update({
+            metadata: supabase.rpc ? undefined : undefined, // We can't merge JSON easily, so we fetch + update
+          })
+          .eq("external_message_id", wamid);
+
+        // Fetch the existing record to merge metadata
+        const { data: existing } = await supabase
+          .from("communication_log")
+          .select("metadata")
+          .eq("external_message_id", wamid)
+          .single();
+
+        if (existing) {
+          const updatedMetadata = {
+            ...(typeof existing.metadata === "object" && existing.metadata !== null ? existing.metadata : {}),
+            status: newStatus,
+            status_updated_at: new Date().toISOString(),
+          };
+
+          await supabase
+            .from("communication_log")
+            .update({ metadata: updatedMetadata })
+            .eq("external_message_id", wamid);
+
+          console.log(`Status update: ${wamid} -> ${newStatus}`);
+        }
+      }
+    }
+
+    // Process incoming messages
     if (!value?.messages || value.messages.length === 0) {
-      console.log("No messages in entry (possibly a status update), skipping");
+      if (value?.statuses) {
+        // Already processed status updates above
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.log("No messages or statuses in entry, skipping");
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -63,31 +122,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const fromNumber = message.from; // e.g. "31687654321"
+    const fromNumber = message.from;
     const bodyText = message.text?.body || "";
-    const timestamp = message.timestamp; // unix timestamp string
+    const timestamp = message.timestamp;
     const senderName = contact?.profile?.name || fromNumber;
-    const messageId = message.id; // wamid.xxxxx
+    const messageId = message.id;
 
-    // Convert unix timestamp to ISO string
     const sentAt = new Date(parseInt(timestamp) * 1000).toISOString();
-
-    // Create Supabase client with service role
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    // Normalize phone number: strip all non-digit characters
-    const normalizedFrom = fromNumber.replace(/\D/g, "");
-
-    // Also try with leading 0 (Dutch format): 31687654321 -> 0687654321
-    const dutchLocal = normalizedFrom.startsWith("31")
-      ? "0" + normalizedFrom.slice(2)
-      : null;
+    const normalizedFrom = normalizePhone(fromNumber);
 
     // Search for customer by phone, phone_2, or mobile
-    // We need to normalize the DB values too, so we use a broader approach
     const { data: customers } = await supabase
       .from("customers")
       .select("id, phone, phone_2, mobile")
@@ -99,12 +143,9 @@ Deno.serve(async (req) => {
       for (const customer of customers) {
         const phones = [customer.phone, customer.phone_2, customer.mobile]
           .filter(Boolean)
-          .map((p: string) => p.replace(/\D/g, ""));
+          .map((p: string) => normalizePhone(p));
 
-        if (
-          phones.includes(normalizedFrom) ||
-          (dutchLocal && phones.includes(dutchLocal.replace(/\D/g, "")))
-        ) {
+        if (phones.includes(normalizedFrom)) {
           customerId = customer.id;
           break;
         }
@@ -126,12 +167,12 @@ Deno.serve(async (req) => {
           from_number: fromNumber,
           sender_name: senderName,
           message_type: message.type,
+          status: "received",
         },
       });
 
     if (insertError) {
       console.error("Error inserting communication log:", insertError);
-      // Still return 200 to avoid SiteJob Connect retrying
       return new Response(JSON.stringify({ ok: true, warning: "insert_failed" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -146,7 +187,6 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("Webhook error:", err);
-    // Return 200 to avoid retries
     return new Response(JSON.stringify({ ok: true, error: "processing_failed" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
