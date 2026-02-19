@@ -3358,6 +3358,33 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_config: {
+        Row: {
+          access_token: string
+          display_phone: string | null
+          id: string
+          phone_number_id: string
+          updated_at: string | null
+          waba_id: string | null
+        }
+        Insert: {
+          access_token: string
+          display_phone?: string | null
+          id?: string
+          phone_number_id: string
+          updated_at?: string | null
+          waba_id?: string | null
+        }
+        Update: {
+          access_token?: string
+          display_phone?: string | null
+          id?: string
+          phone_number_id?: string
+          updated_at?: string | null
+          waba_id?: string | null
+        }
+        Relationships: []
+      }
       work_report_damages: {
         Row: {
           created_at: string

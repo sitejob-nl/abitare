@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
 import { ComposeEmailDialog } from "@/components/customers/ComposeEmailDialog";
+import { ComposeWhatsAppDialog } from "@/components/customers/ComposeWhatsAppDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
@@ -25,6 +26,7 @@ interface OrderCommunicationTabProps {
   customerId: string;
   customerEmail: string | null | undefined;
   customerName: string;
+  customerPhone?: string | null;
 }
 
 function useCommunicationLog(orderId: string) {
@@ -63,12 +65,15 @@ export function OrderCommunicationTab({
   customerId,
   customerEmail,
   customerName,
+  customerPhone,
 }: OrderCommunicationTabProps) {
   const { data: connection, isLoading: connectionLoading } = useMicrosoftConnection();
   const { data: logs, isLoading: logsLoading } = useCommunicationLog(orderId);
   const [showCompose, setShowCompose] = useState(false);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   const canSendEmail = !connectionLoading && connection?.is_active && customerEmail;
+  const canSendWhatsApp = !!customerPhone;
 
   return (
     <>
@@ -82,12 +87,20 @@ export function OrderCommunicationTab({
                 <Badge variant="secondary">{logs.length}</Badge>
               )}
             </CardTitle>
-            {canSendEmail && (
-              <Button size="sm" onClick={() => setShowCompose(true)}>
-                <Send className="h-4 w-4 mr-2" />
-                Email
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canSendWhatsApp && (
+                <Button size="sm" variant="outline" onClick={() => setShowWhatsApp(true)} className="text-[#25D366] border-[#25D366]/30 hover:bg-[#25D366]/10">
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  WhatsApp
+                </Button>
+              )}
+              {canSendEmail && (
+                <Button size="sm" onClick={() => setShowCompose(true)}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Email
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -145,6 +158,17 @@ export function OrderCommunicationTab({
           open={showCompose}
           onOpenChange={setShowCompose}
           customerEmail={customerEmail!}
+          customerId={customerId}
+          customerName={customerName}
+          orderId={orderId}
+        />
+      )}
+
+      {canSendWhatsApp && (
+        <ComposeWhatsAppDialog
+          open={showWhatsApp}
+          onOpenChange={setShowWhatsApp}
+          phoneNumber={customerPhone!}
           customerId={customerId}
           customerName={customerName}
           orderId={orderId}

@@ -1,19 +1,40 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Copy, Check } from "lucide-react";
+import { MessageCircle, Copy, Check, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 const WEBHOOK_URL = "https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/whatsapp-webhook";
 
 export function WhatsAppSettings() {
   const [copied, setCopied] = useState(false);
 
+  // Check if WhatsApp config exists (query will fail with RLS but we handle gracefully)
+  const { data: configStatus } = useQuery({
+    queryKey: ["whatsapp-config-status"],
+    queryFn: async () => {
+      // Use the send function to check config status (it will tell us if not configured)
+      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        body: { to: "test", message: "test", type: "text" },
+      });
+      // If we get a rate limit or success, config exists. If we get "niet gekoppeld", it doesn't.
+      if (data?.error?.includes("niet gekoppeld")) return { connected: false };
+      // Any other response means config exists (even errors like rate limit)
+      return { connected: true };
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const handleCopy = async () => {
     await navigator.clipboard.writeText(WEBHOOK_URL);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const isConnected = configStatus?.connected ?? false;
 
   return (
     <Card>
@@ -25,11 +46,17 @@ export function WhatsAppSettings() {
             </div>
             <div>
               <CardTitle className="text-base">WhatsApp via SiteJob Connect</CardTitle>
-              <CardDescription>Inkomende WhatsApp-berichten ontvangen</CardDescription>
+              <CardDescription>WhatsApp-berichten ontvangen en versturen</CardDescription>
             </div>
           </div>
-          <Badge variant="outline" className="text-[#25D366] border-[#25D366]/30">
-            Geconfigureerd
+          <Badge
+            variant="outline"
+            className={isConnected
+              ? "text-[#25D366] border-[#25D366]/30"
+              : "text-muted-foreground border-muted-foreground/30"
+            }
+          >
+            {isConnected ? "Verbonden" : "Niet gekoppeld"}
           </Badge>
         </div>
       </CardHeader>
@@ -47,7 +74,7 @@ export function WhatsAppSettings() {
         </div>
         <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground space-y-1">
           <p>
-            Inkomende WhatsApp-berichten worden automatisch gekoppeld aan klanten op basis van telefoonnummer en getoond in de communicatie-tijdlijn.
+            WhatsApp-berichten worden automatisch gekoppeld aan klanten op basis van telefoonnummer en getoond in de communicatie-tijdlijn. Je kunt ook berichten versturen vanuit het dashboard.
           </p>
           <p>
             Configureer de webhook URL in{" "}
@@ -59,7 +86,7 @@ export function WhatsAppSettings() {
             >
               SiteJob Connect
             </a>{" "}
-            om berichten te ontvangen.
+            om berichten te ontvangen en te versturen.
           </p>
         </div>
       </CardContent>

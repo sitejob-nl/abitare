@@ -366,6 +366,7 @@ const OrderDetail = () => {
             customerId={order.customer_id}
             customerEmail={customer?.email}
             customerName={getCustomerName(customer)}
+            customerPhone={customer?.mobile || customer?.phone}
           />
         </div>
 
