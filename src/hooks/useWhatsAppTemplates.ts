@@ -16,10 +16,11 @@ export function useWhatsAppTemplates(enabled = true) {
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
         body: { action: "templates" },
       });
-      if (error) throw error;
+      if (error || data?.error) return [];
       return data.templates ?? [];
     },
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
