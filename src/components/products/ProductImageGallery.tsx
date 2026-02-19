@@ -21,6 +21,14 @@ function isPdf(url: string) {
   return url.toLowerCase().endsWith('.pdf');
 }
 
+function getFileName(url: string) {
+  try {
+    const path = new URL(url).pathname;
+    const name = decodeURIComponent(path.split('/').pop() || '');
+    return name || 'Document';
+  } catch { return 'Document'; }
+}
+
 function ImageGrid({ images, onSelect }: { images: ProductImage[]; onSelect: (img: ProductImage) => void }) {
   if (images.length === 1) {
     const img = images[0];
@@ -28,7 +36,7 @@ function ImageGrid({ images, onSelect }: { images: ProductImage[]; onSelect: (im
       return (
         <a href={img.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md border p-3 text-sm text-primary hover:bg-muted transition-colors">
           <FileText className="h-4 w-4 shrink-0" />
-          <span className="truncate">Document openen</span>
+          <span className="truncate">{getFileName(img.url)}</span>
           <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
         </a>
       );
@@ -46,7 +54,7 @@ function ImageGrid({ images, onSelect }: { images: ProductImage[]; onSelect: (im
         isPdf(img.url) ? (
           <a key={img.id} href={img.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md border p-3 text-sm text-primary hover:bg-muted transition-colors">
             <FileText className="h-4 w-4 shrink-0" />
-            <span className="truncate">Document openen</span>
+            <span className="truncate">{getFileName(img.url)}</span>
             <ExternalLink className="h-3.5 w-3.5 ml-auto shrink-0" />
           </a>
         ) : (
