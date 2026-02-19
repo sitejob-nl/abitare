@@ -11,18 +11,14 @@ const WEBHOOK_URL = "https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/whats
 export function WhatsAppSettings() {
   const [copied, setCopied] = useState(false);
 
-  // Check if WhatsApp config exists (query will fail with RLS but we handle gracefully)
   const { data: configStatus } = useQuery({
     queryKey: ["whatsapp-config-status"],
     queryFn: async () => {
-      // Use the send function to check config status (it will tell us if not configured)
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-        body: { to: "test", message: "test", type: "text" },
+        body: { action: "status" },
       });
-      // If we get a rate limit or success, config exists. If we get "niet gekoppeld", it doesn't.
-      if (data?.error?.includes("niet gekoppeld")) return { connected: false };
-      // Any other response means config exists (even errors like rate limit)
-      return { connected: true };
+      if (error || !data?.connected) return { connected: false, phone: null };
+      return { connected: true, phone: data.phone || null };
     },
     retry: false,
     staleTime: 5 * 60 * 1000,
@@ -35,6 +31,7 @@ export function WhatsAppSettings() {
   };
 
   const isConnected = configStatus?.connected ?? false;
+  const connectedPhone = configStatus?.phone ?? null;
 
   return (
     <Card>
@@ -58,6 +55,9 @@ export function WhatsAppSettings() {
           >
             {isConnected ? "Verbonden" : "Niet gekoppeld"}
           </Badge>
+          {isConnected && connectedPhone && (
+            <span className="text-xs text-muted-foreground ml-2">{connectedPhone}</span>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

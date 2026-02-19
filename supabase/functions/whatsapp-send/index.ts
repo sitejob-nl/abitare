@@ -52,7 +52,29 @@ Deno.serve(async (req) => {
 
     const userId = claimsData.claims.sub as string;
 
-    const { to, message, type = "text", template, customer_id, order_id, ticket_id } = await req.json();
+    const body = await req.json();
+
+    // Lightweight status check — no message sent
+    if (body.action === "status") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: config } = await supabase
+        .from("whatsapp_config")
+        .select("display_phone")
+        .maybeSingle();
+
+      return new Response(JSON.stringify({
+        connected: !!config,
+        phone: config?.display_phone || null,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { to, message, type = "text", template, customer_id, order_id, ticket_id } = body;
 
     if (!to) {
       return new Response(JSON.stringify({ error: "Telefoonnummer is vereist" }), {
