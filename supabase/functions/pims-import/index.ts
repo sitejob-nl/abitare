@@ -210,6 +210,25 @@ function extractSupplierNames(xml: string): string[] {
   const partyId = xmlGetTagFirst(xml, ['PARTY_ID'])
   if (partyId && !candidates.includes(partyId)) candidates.push(partyId)
 
+  // Strategy 5: Extract email prefixes from <From> tags (e.g. atag_benelux@tradeplace.com → atag_benelux)
+  const fromRe = /<From[^>]*>([^<]+)<\/From>/gi
+  let fromMatch: RegExpExecArray | null
+  while ((fromMatch = fromRe.exec(xml)) !== null) {
+    const fromValue = fromMatch[1].trim()
+    const atIdx = fromValue.indexOf('@')
+    if (atIdx > 0) {
+      const prefix = fromValue.substring(0, atIdx)
+      if (prefix.length > 2 && !candidates.includes(prefix)) {
+        candidates.push(prefix)
+        // Also add normalized version (underscores/hyphens → spaces)
+        const normalized = prefix.replace(/[_-]/g, ' ')
+        if (normalized !== prefix && !candidates.includes(normalized)) {
+          candidates.push(normalized)
+        }
+      }
+    }
+  }
+
   return candidates
 }
 
@@ -896,15 +915,20 @@ Deno.serve(async (req) => {
         let matchedCandidate = ''
         for (const candidate of xmlSupplierNames) {
           const normalizedName = candidate.trim().toLowerCase()
+          const normalizedClean = normalizedName.replace(/[_-]/g, ' ')
           match = (suppliers || []).find((s: any) => {
             const sName = s.name.toLowerCase()
             const sCode = (s.code || '').toLowerCase()
+            const sNameClean = sName.replace(/[_-]/g, ' ')
             if (normalizedName.includes(sName) || sName.includes(normalizedName)
-              || normalizedName.includes(sCode) || sCode === normalizedName) return true
+              || normalizedName.includes(sCode) || sCode === normalizedName
+              || normalizedClean.includes(sNameClean) || sNameClean.includes(normalizedClean)) return true
             const aliases: string[] = s.pims_aliases || []
             return aliases.some((alias: string) => {
               const a = alias.toLowerCase()
+              const aClean = a.replace(/[_-]/g, ' ')
               return normalizedName.includes(a) || a.includes(normalizedName)
+                || normalizedClean.includes(aClean) || aClean.includes(normalizedClean)
             })
           })
           if (match) {
@@ -917,10 +941,11 @@ Deno.serve(async (req) => {
           supplier_id = match.id
           console.log(`[pims] Matched supplier: ${match.name} (${match.id}) via candidate "${matchedCandidate}"`)
         } else {
-          console.error(`[pims] No supplier match for candidates ${JSON.stringify(xmlSupplierNames)}`)
-          const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_names: xmlSupplierNames, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code })) } : undefined
+          const availableNames = (suppliers || []).map((s: any) => s.name).join(', ')
+          console.error(`[pims] No supplier match for candidates ${JSON.stringify(xmlSupplierNames)}. Available: ${availableNames}`)
+          const debugInfo = debug ? { xml_preview: xmlText.substring(0, 500), detected_names: xmlSupplierNames, available_suppliers: (suppliers || []).map((s: any) => ({ name: s.name, code: s.code, aliases: s.pims_aliases })) } : undefined
           return new Response(
-            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden in het systeem.`, debug: debugInfo }),
+            JSON.stringify({ error: `Leverancier "${xmlSupplierName}" niet gevonden. Voeg deze toe via Instellingen → Leveranciers, of configureer een alias in het veld 'pims_aliases'. Beschikbare leveranciers: ${availableNames}`, detected_candidates: xmlSupplierNames, debug: debugInfo }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
