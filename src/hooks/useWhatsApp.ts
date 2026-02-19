@@ -26,7 +26,11 @@ export function useWhatsApp() {
       });
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        const err = new Error(data.error);
+        (err as any).meta_error_code = data.meta_error_code || null;
+        throw err;
+      }
       return data;
     },
     onSuccess: (_data, variables) => {

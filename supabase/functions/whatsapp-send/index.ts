@@ -100,7 +100,16 @@ Deno.serve(async (req) => {
 
       if (!res.ok) {
         console.error("Meta templates error:", data);
-        return new Response(JSON.stringify({ error: "Kon templates niet ophalen", details: data }), {
+        const metaCode = data?.error?.code;
+        let msg = "Kon templates niet ophalen.";
+        if (metaCode === 190) {
+          msg = "WhatsApp-toegangstoken is verlopen. Koppel WhatsApp opnieuw via Instellingen.";
+        } else if (metaCode === 10 || metaCode === 200) {
+          msg = "Ontbrekende permissie bij Meta. Controleer of de WhatsApp Business App de juiste rechten heeft in Meta Business Suite.";
+        } else if (data?.error?.message) {
+          msg = `Meta API fout: ${data.error.message}`;
+        }
+        return new Response(JSON.stringify({ error: msg, meta_error_code: metaCode || null }), {
           status: res.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -198,7 +207,34 @@ Deno.serve(async (req) => {
 
     if (!metaRes.ok) {
       console.error("Meta API error:", result);
-      return new Response(JSON.stringify({ error: "Bericht kon niet worden verstuurd", details: result }), {
+      const metaError = result?.error || {};
+      const metaCode = metaError.code;
+      const metaSubcode = metaError.error_subcode;
+      let userMessage = "Bericht kon niet worden verstuurd.";
+
+      if (metaCode === 190 || metaSubcode === 463) {
+        userMessage = "WhatsApp-toegangstoken is verlopen of ongeldig. Koppel WhatsApp opnieuw via Instellingen.";
+      } else if (metaCode === 10 || metaCode === 200 || metaCode === 299) {
+        userMessage = "Ontbrekende permissie bij Meta. Controleer of de WhatsApp Business App de juiste rechten heeft (whatsapp_business_messaging). Ga naar Meta Business Suite → App-instellingen → Machtigingen.";
+      } else if (metaCode === 131030) {
+        userMessage = "Dit telefoonnummer is niet bereikbaar via WhatsApp.";
+      } else if (metaCode === 131047) {
+        userMessage = "Je kunt buiten het 24-uurs servicevenster alleen template-berichten versturen. Gebruik het tabblad 'Template'.";
+      } else if (metaCode === 131026) {
+        userMessage = "Dit bericht is niet afgeleverd. Het telefoonnummer staat mogelijk niet geregistreerd op WhatsApp.";
+      } else if (metaCode === 131031 || metaCode === 131053) {
+        userMessage = "WhatsApp Business account is niet geverifieerd of gepauzeerd door Meta. Controleer de status in Meta Business Suite.";
+      } else if (metaCode === 80007 || metaRes.status === 429) {
+        userMessage = "Rate limit van Meta bereikt. Wacht even en probeer het opnieuw.";
+      } else if (metaError.message) {
+        userMessage = `Meta API fout: ${metaError.message}`;
+      }
+
+      return new Response(JSON.stringify({
+        error: userMessage,
+        meta_error_code: metaCode || null,
+        meta_error_subcode: metaSubcode || null,
+      }), {
         status: metaRes.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
