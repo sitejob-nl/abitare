@@ -1,40 +1,69 @@
 
 
-# Fix: WhatsApp templates worden niet getoond door stale cache
+# "Koppel WhatsApp" knop in WhatsApp Settings
 
-## Probleem
+## Wat wordt er gedaan
 
-De templates query liep voordat de WhatsApp config bestond in de database. Het resultaat (lege array `[]`) werd gecachet met een staleTime van 5 minuten. Wanneer de config later wel aanwezig is, wordt het gecachete lege resultaat hergebruikt en worden er geen templates getoond.
+Een "Koppel WhatsApp" knop toevoegen aan de WhatsApp-instellingenkaart die een popup opent naar SiteJob Connect. Na succesvolle koppeling wordt de status en templates automatisch ververst via een `postMessage` listener.
 
-## Oorzaak
+## Wijzigingen
 
-In `useWhatsAppTemplates.ts` wordt bij een fout (geen config) een lege array `[]` geretourneerd. React Query behandelt dit als geldige data en cachet het. Latere calls binnen de staleTime gebruiken de gecachete lege array.
+### `src/components/settings/WhatsAppSettings.tsx`
 
-## Oplossing
+1. **Imports toevoegen**: `useEffect` en `useQueryClient` van `@tanstack/react-query`
+2. **`useQueryClient()`** aanroepen voor cache-invalidatie
+3. **`connectWhatsApp` functie**: opent popup naar `https://connect.sitejob.nl/whatsapp-setup?tenant_id=ABITARE_TENANT_ID`
+4. **`useEffect` met `message` listener**: luistert naar `e.data.type === "whatsapp-connected"` en invalidateert dan `whatsapp-config-status` en `whatsapp-templates` queries
+5. **Knop renderen** als `!isConnected`: een groene "Koppel WhatsApp" knop naast de "Niet gekoppeld" badge in de header
 
-Twee kleine aanpassingen:
+### Visueel
 
-### 1. `src/hooks/useWhatsAppTemplates.ts`
+- De knop verschijnt rechts in de card header, naast de status badge
+- Alleen zichtbaar als `isConnected === false`
+- Styling: groene knop passend bij het WhatsApp-thema (`bg-[#25D366]`)
 
-Bij een API-error: gooi een error in plaats van `[]` terug te geven. React Query zal dit als fout markeren (niet als geldige data cachen). Gecombineerd met `retry: false` voorkomt dit loops, maar de query zal opnieuw proberen bij de volgende mount of refetch.
+## Technische details
 
 ```text
-// Huidig (fout):
-if (error || data?.error) return [];
+// Nieuwe state/hooks bovenin component:
+const queryClient = useQueryClient();
 
-// Nieuw:
-if (error) throw new Error("WhatsApp API error");
-if (data?.error) throw new Error(data.error);
+const connectWhatsApp = () => {
+  window.open(
+    "https://connect.sitejob.nl/whatsapp-setup?tenant_id=ABITARE_TENANT_ID",
+    "whatsapp-setup",
+    "width=600,height=700"
+  );
+};
+
+useEffect(() => {
+  const handler = (e: MessageEvent) => {
+    if (e.data?.type === "whatsapp-connected") {
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-config-status"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
+    }
+  };
+  window.addEventListener("message", handler);
+  return () => window.removeEventListener("message", handler);
+}, [queryClient]);
 ```
 
-### 2. `src/components/settings/WhatsAppSettings.tsx`
+In de JSX header, na de badge:
 
-Voeg `refetchOnMount: "always"` niet toe aan de hook (die zit in een gedeelde hook). In plaats daarvan: invalideer de templates-query wanneer de status verandert naar connected. Of simpeler: de hook ontvangt al `enabled` parameter. Als `enabled` van `false` naar `true` gaat (status query resolves), zal React Query de data opnieuw ophalen als er geen gecachete SUCCESS data is (een error-state telt niet als success).
-
-Door stap 1 is de cache-state bij een fout nu "error" in plaats van "success met lege data". Wanneer de settings pagina laadt en `isConnected` wordt `true`, zal React Query een verse fetch doen omdat er geen succesvolle cache is.
-
-## Bestanden
+```text
+{!isConnected && (
+  <Button
+    size="sm"
+    className="bg-[#25D366] hover:bg-[#25D366]/90 text-white"
+    onClick={connectWhatsApp}
+  >
+    <MessageCircle className="h-4 w-4 mr-2" />
+    Koppel WhatsApp
+  </Button>
+)}
+```
 
 | Bestand | Wijziging |
 |---|---|
-| `src/hooks/useWhatsAppTemplates.ts` | Error gooien i.p.v. lege array retourneren |
+| `src/components/settings/WhatsAppSettings.tsx` | Knop, popup-functie en postMessage listener toevoegen |
+
