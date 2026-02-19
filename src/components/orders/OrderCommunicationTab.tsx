@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ArrowUpRight,
   ArrowDownLeft,
+  MessageCircle,
 } from "lucide-react";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
 import { ComposeEmailDialog } from "@/components/customers/ComposeEmailDialog";
@@ -42,6 +43,21 @@ function useCommunicationLog(orderId: string) {
   });
 }
 
+function getTypeIcon(type: string, direction: string) {
+  if (type === "whatsapp") {
+    return direction === "outbound" ? (
+      <ArrowUpRight className="h-4 w-4 text-[#25D366]" />
+    ) : (
+      <MessageCircle className="h-4 w-4 text-[#25D366]" />
+    );
+  }
+  return direction === "outbound" ? (
+    <ArrowUpRight className="h-4 w-4 text-blue-500" />
+  ) : (
+    <ArrowDownLeft className="h-4 w-4 text-green-500" />
+  );
+}
+
 export function OrderCommunicationTab({
   orderId,
   customerId,
@@ -52,31 +68,7 @@ export function OrderCommunicationTab({
   const { data: logs, isLoading: logsLoading } = useCommunicationLog(orderId);
   const [showCompose, setShowCompose] = useState(false);
 
-  if (!connectionLoading && !connection?.is_active) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <AlertCircle className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">
-            Verbind je Microsoft account in Instellingen om emails te versturen.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!customerEmail) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <Mail className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">
-            Geen email adres bekend voor deze klant.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const canSendEmail = !connectionLoading && connection?.is_active && customerEmail;
 
   return (
     <>
@@ -90,10 +82,12 @@ export function OrderCommunicationTab({
                 <Badge variant="secondary">{logs.length}</Badge>
               )}
             </CardTitle>
-            <Button size="sm" onClick={() => setShowCompose(true)}>
-              <Send className="h-4 w-4 mr-2" />
-              Email
-            </Button>
+            {canSendEmail && (
+              <Button size="sm" onClick={() => setShowCompose(true)}>
+                <Send className="h-4 w-4 mr-2" />
+                Email
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -111,17 +105,18 @@ export function OrderCommunicationTab({
                     className="flex items-start gap-3 rounded-lg bg-muted/50 p-3"
                   >
                     <div className="mt-0.5">
-                      {log.direction === "outbound" ? (
-                        <ArrowUpRight className="h-4 w-4 text-blue-500" />
-                      ) : (
-                        <ArrowDownLeft className="h-4 w-4 text-green-500" />
-                      )}
+                      {getTypeIcon(log.type, log.direction)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">
                           {log.subject || "(geen onderwerp)"}
                         </span>
+                        {log.type === "whatsapp" && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-[#25D366] border-[#25D366]/30">
+                            WhatsApp
+                          </Badge>
+                        )}
                       </div>
                       {log.body_preview && (
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -145,14 +140,16 @@ export function OrderCommunicationTab({
         </CardContent>
       </Card>
 
-      <ComposeEmailDialog
-        open={showCompose}
-        onOpenChange={setShowCompose}
-        customerEmail={customerEmail}
-        customerId={customerId}
-        customerName={customerName}
-        orderId={orderId}
-      />
+      {canSendEmail && (
+        <ComposeEmailDialog
+          open={showCompose}
+          onOpenChange={setShowCompose}
+          customerEmail={customerEmail!}
+          customerId={customerId}
+          customerName={customerName}
+          orderId={orderId}
+        />
+      )}
     </>
   );
 }
