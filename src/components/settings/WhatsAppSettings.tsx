@@ -2,8 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates";
 import {
@@ -19,6 +19,26 @@ const WEBHOOK_URL = "https://lqfqxspaamzhtgxhvlib.supabase.co/functions/v1/whats
 
 export function WhatsAppSettings() {
   const [copied, setCopied] = useState(false);
+  const queryClient = useQueryClient();
+
+  const connectWhatsApp = () => {
+    window.open(
+      "https://connect.sitejob.nl/whatsapp-setup?tenant_id=ABITARE_TENANT_ID",
+      "whatsapp-setup",
+      "width=600,height=700"
+    );
+  };
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "whatsapp-connected") {
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-config-status"] });
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-templates"] });
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [queryClient]);
 
   const { data: configStatus } = useQuery({
     queryKey: ["whatsapp-config-status"],
@@ -82,6 +102,16 @@ export function WhatsAppSettings() {
             </Badge>
             {isConnected && connectedPhone && (
               <span className="text-xs text-muted-foreground">{connectedPhone}</span>
+            )}
+            {!isConnected && (
+              <Button
+                size="sm"
+                className="bg-[#25D366] hover:bg-[#25D366]/90 text-white"
+                onClick={connectWhatsApp}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Koppel WhatsApp
+              </Button>
             )}
           </div>
         </div>
