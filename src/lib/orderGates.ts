@@ -8,6 +8,8 @@ export interface OrderGateContext {
   depositRequired: boolean;
   depositInvoiceSent: boolean;
   checklistComplete?: boolean;
+  hasInstallationAddress?: boolean;
+  hasDocuments?: boolean;
 }
 
 export interface GateResult {
@@ -26,7 +28,23 @@ export function validateStatusTransition(
   targetStatus: OrderStatus,
   context: OrderGateContext
 ): GateResult {
-  const { currentStatus, paymentStatus, depositRequired, checklistComplete } = context;
+  const { currentStatus, paymentStatus, depositRequired, checklistComplete, hasInstallationAddress, hasDocuments } = context;
+
+  // Gate: controle requires installation address and documents
+  if (targetStatus === "controle") {
+    if (hasInstallationAddress === false) {
+      return {
+        allowed: false,
+        reason: "Montageadres is verplicht voordat de order naar 'Controle' kan.",
+      };
+    }
+    if (hasDocuments === false) {
+      return {
+        allowed: false,
+        reason: "Er moet minimaal 1 document zijn geüpload.",
+      };
+    }
+  }
 
   // Gate: checklist must be complete before bestel_klaar
   if (targetStatus === "bestel_klaar") {

@@ -8,6 +8,7 @@ import { PhotoUploader } from "@/components/installer/PhotoUploader";
 import { TaskChecklist } from "@/components/installer/TaskChecklist";
 import { TimeTracker } from "@/components/installer/TimeTracker";
 import { SignaturePad } from "@/components/installer/SignaturePad";
+import { DamageRecordForm, type DamageRecord } from "@/components/installer/DamageRecordForm";
 import {
   useWorkReport,
   useUpdateWorkReport,
@@ -27,6 +28,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,7 +76,41 @@ export default function WorkReportForm() {
   
   // Damage state
   const [hasDamage, setHasDamage] = useState<boolean | null>(null);
-  const [damageDescription, setDamageDescription] = useState("");
+  const [damageRecords, setDamageRecords] = useState<DamageRecord[]>([]);
+
+  // Fetch order lines for article linking
+  const { data: orderLines = [] } = useQuery({
+    queryKey: ["installer-order-lines", report?.order?.id],
+    queryFn: async () => {
+      if (!report?.order?.id) return [];
+      const { data, error } = await supabase
+        .from("order_lines")
+        .select("id, description, article_code, quantity")
+        .eq("order_id", report.order.id)
+        .eq("is_group_header", false)
+        .order("sort_order");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!report?.order?.id,
+  });
+
+  // Fetch existing damage records
+  const { data: existingDamages } = useQuery({
+    queryKey: ["work-report-damages", id],
+    queryFn: async () => {
+      if (!id) return [];
+      const { data, error } = await supabase
+        .from("work_report_damages")
+        .select("*")
+        .eq("work_report_id", id)
+        .order("created_at");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   // Initialize form when report loads
   useEffect(() => {
     if (report) {
@@ -83,8 +120,22 @@ export default function WorkReportForm() {
       setWorkDescription(report.work_description || "");
       setMaterialsUsed(report.materials_used || "");
       setInternalNotes(report.internal_notes || "");
+      setHasDamage(report.has_damage ?? null);
     }
   }, [report]);
+
+  // Sync existing damages to local state
+  useEffect(() => {
+    if (existingDamages && existingDamages.length > 0) {
+      setDamageRecords(existingDamages.map(d => ({
+        id: d.id,
+        description: d.description,
+        position: d.position || "",
+        measurements: d.measurements || "",
+        order_line_id: d.order_line_id || null,
+      })));
+    }
+  }, [existingDamages]);
 
   const handleSave = async () => {
     if (!id) return;
@@ -121,13 +172,29 @@ export default function WorkReportForm() {
 
   // Validate damage flow before submit
   const canSubmit = useMemo(() => {
-    if (hasDamage === null) return false; // Must answer the question
+    if (hasDamage === null) return false;
     if (hasDamage) {
-      // Must have at least 1 damage photo + description
-      return damagePhotos.length > 0 && damageDescription.trim().length > 0;
+      return damagePhotos.length > 0 && damageRecords.length > 0;
     }
     return true;
-  }, [hasDamage, damagePhotos.length, damageDescription]);
+  }, [hasDamage, damagePhotos.length, damageRecords.length]);
+
+  const saveDamageRecords = async () => {
+    if (!id) return;
+    // Delete existing, then insert new
+    await supabase.from("work_report_damages").delete().eq("work_report_id", id);
+    if (damageRecords.length > 0) {
+      const rows = damageRecords.map(d => ({
+        work_report_id: id,
+        description: d.description,
+        position: d.position || null,
+        measurements: d.measurements || null,
+        order_line_id: d.order_line_id || null,
+        photo_urls: [],
+      }));
+      await supabase.from("work_report_damages").insert(rows);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!id) return;
@@ -140,16 +207,17 @@ export default function WorkReportForm() {
       toast.error("Voeg minimaal 1 schadefoto toe voordat je de werkbon indient");
       return;
     }
-    if (hasDamage && !damageDescription.trim()) {
-      toast.error("Voeg een schadeomschrijving toe");
+    if (hasDamage && damageRecords.length === 0) {
+      toast.error("Voeg minimaal 1 schaderegistratie toe");
       return;
     }
 
-    // Save damage flag
+    // Save damage flag + records
     await updateReport.mutateAsync({
       id,
       data: { has_damage: hasDamage } as any,
     });
+    await saveDamageRecords();
 
     await handleSave();
     await submitReport.mutateAsync(id);
@@ -447,15 +515,13 @@ export default function WorkReportForm() {
 
               {hasDamage === true && (
                 <div className="space-y-3 rounded-lg border border-destructive/30 p-3 bg-destructive/5">
-                  <div className="space-y-2">
-                    <Label>Schadeomschrijving *</Label>
-                    <Textarea
-                      placeholder="Beschrijf de schade, locatie en omvang..."
-                      value={damageDescription}
-                      onChange={(e) => setDamageDescription(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
+                  <DamageRecordForm
+                    damages={damageRecords}
+                    orderLines={orderLines}
+                    onAdd={(damage) => setDamageRecords(prev => [...prev, damage])}
+                    onRemove={(index) => setDamageRecords(prev => prev.filter((_, i) => i !== index))}
+                    onUpdate={(index, damage) => setDamageRecords(prev => prev.map((d, i) => i === index ? damage : d))}
+                  />
                   <div className="text-sm text-muted-foreground">
                     <strong>Schadefoto's ({damagePhotos.length}):</strong>
                     {damagePhotos.length === 0 ? (
@@ -463,7 +529,7 @@ export default function WorkReportForm() {
                         ⚠ Upload minimaal 1 schadefoto via het tabblad "Foto's" (type: schade)
                       </p>
                     ) : (
-                      <p className="text-green-600 mt-1">✓ {damagePhotos.length} foto('s) geüpload</p>
+                      <p className="mt-1 text-primary">✓ {damagePhotos.length} foto('s) geüpload</p>
                     )}
                   </div>
                 </div>

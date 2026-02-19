@@ -292,6 +292,8 @@ const OrderDetail = () => {
                   depositRequired: (order as any).deposit_required !== false,
                   depositInvoiceSent: !!(order as any).deposit_invoice_sent,
                   checklistComplete: checklistComplete ?? undefined,
+                  hasInstallationAddress: !!(order as any).installation_street_address,
+                  hasDocuments: ((order as any).order_documents?.length || 0) > 0,
                 }}
               />
             </div>
