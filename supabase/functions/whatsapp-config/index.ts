@@ -22,6 +22,13 @@ Deno.serve(async (req) => {
 
   const config = await req.json();
 
+  if (config.action === "disconnect") {
+    await supabase.from("whatsapp_config").delete().neq("id", "");
+    return new Response(JSON.stringify({ ok: true, disconnected: true }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const { error } = await supabase
     .from("whatsapp_config")
     .upsert(
