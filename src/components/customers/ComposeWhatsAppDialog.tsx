@@ -19,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MessageCircle, Send, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { MessageCircle, Send, Loader2, AlertTriangle } from "lucide-react";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates";
 
@@ -162,6 +163,15 @@ export function ComposeWhatsAppDialog({
             </TabsContent>
           </Tabs>
         </div>
+
+        {sendMessage.isError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              {sendMessage.error?.message || "Er is een fout opgetreden bij het versturen."}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
