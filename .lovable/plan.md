@@ -1,65 +1,41 @@
 
-# WhatsApp Templates ophalen en tonen
 
-## Overzicht
+# WhatsApp Config endpoint + crash fix
 
-Voeg een `action: "templates"` toe aan de `whatsapp-send` edge function die de goedgekeurde templates ophaalt uit de Meta Graph API. Toon deze in een dropdown in de ComposeWhatsAppDialog en als overzicht in WhatsAppSettings.
+## 1. Nieuwe edge function: `whatsapp-config`
 
-## Edge function: `whatsapp-send/index.ts`
+Ontvangt credentials van SiteJob Connect via webhook en slaat ze op in `whatsapp_config`.
 
-Voeg een nieuw `if (body.action === "templates")` blok toe naast het bestaande `action: "status"` blok (na regel 75):
+**Bestand:** `supabase/functions/whatsapp-config/index.ts`
 
-- Haal config op uit `whatsapp_config` (service_role)
-- Fetch `https://graph.facebook.com/v21.0/{waba_id}/message_templates?limit=100` met de access_token
-- Map de response naar een compact formaat: `name`, `status`, `category`, `language`, `components`
-- Return als `{ templates: [...] }`
+- Accepteert alleen POST
+- Verifieert `X-Webhook-Secret` header tegen `WHATSAPP_WEBHOOK_SECRET` secret
+- Upsert naar `whatsapp_config` met vast ID `00000000-0000-0000-0000-000000000001`
+- CORS headers meegeven
 
-## Nieuw: `src/hooks/useWhatsAppTemplates.ts`
+**Bestand:** `supabase/config.toml`
 
-Hook met `useQuery` die `supabase.functions.invoke("whatsapp-send", { body: { action: "templates" } })` aanroept. Cachet 5 minuten (`staleTime`).
+- Toevoegen: `[functions.whatsapp-config]` met `verify_jwt = false` (webhook vanuit extern systeem, geen JWT)
 
-## Aanpassen: `ComposeWhatsAppDialog.tsx`
+## 2. Fix: Customer pagina crash
 
-- Importeer `useWhatsAppTemplates`
-- Bij template-tab: vervang het handmatige template naam invoerveld door een `Select` dropdown
-- Filter op `status === "APPROVED"`
-- Toon template naam + categorie + taal in de opties
-- Bij selectie: vul `templateName` en `templateLang` automatisch in
-- Verwijder het handmatige taalveld (wordt overgenomen uit de template data)
+De `useWhatsAppTemplates` hook gooit een error als WhatsApp niet geconfigureerd is (400 response). React Query retry't dit 3x, wat de pagina laat hangen.
 
-## Aanpassen: `WhatsAppSettings.tsx`
+**Bestand:** `src/hooks/useWhatsAppTemplates.ts`
 
-- Importeer `useWhatsAppTemplates`
-- Toon alleen als `isConnected === true`
-- Render een lijst/tabel van alle templates met:
-  - Naam
-  - Status badge (groen voor APPROVED, geel voor PENDING, rood voor REJECTED)
-  - Categorie (MARKETING, UTILITY, AUTHENTICATION)
-  - Taal
+- `retry: false` toevoegen
+- Bij error of `data?.error`: return lege array in plaats van gooien
 
-## Bestanden
+**Bestand:** `src/components/customers/CustomerCommunicationTab.tsx`
+
+- `ComposeWhatsAppDialog` alleen renderen als `showWhatsAppDialog === true` (regel 430-438)
+- Dit voorkomt dat de templates query start voordat de gebruiker de dialog opent
+
+## Samenvatting bestanden
 
 | Bestand | Wijziging |
 |---|---|
-| `supabase/functions/whatsapp-send/index.ts` | `action: "templates"` toevoegen |
-| `src/hooks/useWhatsAppTemplates.ts` | Nieuw |
-| `src/components/customers/ComposeWhatsAppDialog.tsx` | Template dropdown i.p.v. handmatig invoerveld |
-| `src/components/settings/WhatsAppSettings.tsx` | Template overzicht tonen |
-
-## Technische details
-
-### Edge function templates action
-
-```text
-if (body.action === "templates") {
-  // 1. Haal config op (service_role)
-  // 2. Check of waba_id aanwezig is
-  // 3. GET https://graph.facebook.com/v21.0/{waba_id}/message_templates?limit=100
-  // 4. Map naar compact formaat
-  // 5. Return { templates: [...] }
-}
-```
-
-### Template selectie in ComposeWhatsAppDialog
-
-Wanneer een template geselecteerd wordt uit de dropdown, wordt het `template` object automatisch opgebouwd met de juiste `name` en `language.code`. De `components` worden meegestuurd zodat de Meta API weet welke parameters verwacht worden (later uit te breiden met dynamische parameter-invulvelden).
+| `supabase/functions/whatsapp-config/index.ts` | Nieuw |
+| `supabase/config.toml` | `whatsapp-config` entry toevoegen |
+| `src/hooks/useWhatsAppTemplates.ts` | `retry: false`, graceful error handling |
+| `src/components/customers/CustomerCommunicationTab.tsx` | Conditional render van dialog |
