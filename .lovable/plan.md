@@ -1,35 +1,38 @@
 
 
-# Update STOSA Import Dialog - Flexibele kolomherkenning
+# Fix: Prijsgroep-prijzen en inkoopprijs zichtbaar maken na STOSA import
 
-## Probleem
-Het huidige `StosaImportDialog` zoekt naar exacte kolomnamen zoals `"Codice gestionale"` en `"Prezzo Listino"`. Het STOSA Excel bestand bevat echter kolomnamen met extra spaties (bijv. `" Prezzo Listino "`) waardoor de kolommen niet herkend worden en het bestand als "onbekend formaat" wordt afgewezen.
+## Wat is het probleem?
 
-## Oplossing
-Het `StosaImportDialog.tsx` vervangen door de v5-2 versie met:
+De STOSA import heeft succesvol **7.541 prijzen** opgeslagen in de `product_prices` tabel, gekoppeld aan `price_group_id`. Maar de frontend zoekt alleen op `range_id` -- een ander veld. Daardoor worden de prijzen nooit getoond.
 
-1. **Flexibele kolomherkenning** via `COLUMN_ALIASES` mapping - meerdere namen per kolom worden herkend
-2. **Automatisch trimmen** van kolomnamen (spaties verwijderen)
-3. **Fuzzy matching** als fallback (bijv. kolom bevat "prezzo" EN "listino" -> match)
-4. **`normalizeRow()`** functie die alle rijen omzet naar standaard kolomnamen
-5. **Verbeterde UI** met sheet-naam weergave, herkende kolommen, batch-indicatie en eenheid-statistieken na import
+Daarnaast worden `base_price` en `cost_price` niet ingevuld op de `products` tabel zelf, waardoor de productlijst en productdetail pagina overal "EUR -" laten zien.
 
-## Wat verandert er
-De edge function (`index.ts`) en `PriceGroupSelector.tsx` zijn al up-to-date en hoeven niet te wijzigen.
+## Drie aanpassingen nodig
 
-## Technische details
+### 1. Hook `useProductPrices` uitbreiden
+Het bestand `src/hooks/useProductPrices.ts` filtert nu alleen op `range_id`. De query moet ook `price_group_id` ondersteunen, zodat prijzen die via de STOSA import zijn opgeslagen (met `price_group_id`) ook worden opgehaald.
 
-### Bestand: `src/components/products/StosaImportDialog.tsx`
-Volledig vervangen door de v5-2 versie met:
-- Import path behouden als `@/integrations/supabase/client` (niet `@/lib/supabase`)
-- `COLUMN_ALIASES` object met alternatieve namen per kolom
-- `findStandardColumnName()` met exact match + alias match + fuzzy fallback
-- `normalizeRow()` voor row-level kolomnaam-normalisatie
-- Uitgebreide `ParseResult` interface (met `warnings`, `detectedColumns`, `missingColumns`, `sheetName`)
-- Uitgebreide `ImportStats` interface (met `categories_created`, `discount_groups_created`, `by_category`, `by_unit`, `by_kitchen_group`)
-- Verbeterde UI: sheet-naam tonen, batch-info, eenheid-badges na import, waarschuwingen-sectie
+- Extra parameter `priceGroupId` toevoegen
+- Query aanpassen: als `priceGroupId` meegegeven wordt, filter op `price_group_id`
+- Join ook `price_groups` tabel zodat we de naam/code kunnen tonen
 
-| Bestand | Actie |
-|---------|-------|
-| `src/components/products/StosaImportDialog.tsx` | Vervangen door v5-2 versie (met aangepaste import path) |
+### 2. ProductDetail pagina: prijsgroep-prijzen tonen
+Het bestand `src/pages/ProductDetail.tsx` toont op regel 797-815 de "Prijsgroep-prijzen" kaart. Deze leest nu `p.range?.code` maar de STOSA prijzen hebben geen `range_id`, alleen `price_group_id`.
+
+- De query aanpassen zodat ook `price_group:price_groups(id, code, name)` wordt ge-joined
+- In de weergave: toon `p.price_group?.code` als fallback wanneer `p.range` leeg is
+
+### 3. Productlijst: inkoopprijs kolom vullen
+De STOSA import slaat geen `base_price` of `cost_price` op in de `products` tabel. Dit is correct gedrag (prijzen hangen af van de gekozen prijsgroep), maar de lijstweergave toont daardoor overal "EUR -".
+
+De productenlijst (`src/pages/Products.tsx`) uitbreiden met een aanduiding bij de "Verkoopprijs" kolom dat de prijs afhangt van de prijsgroep (bijv. een kleine badge "per PG" of het tonen van een prijsbereik min-max als dat beschikbaar is).
+
+## Technische wijzigingen
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `src/hooks/useProductPrices.ts` | Query uitbreiden met `price_group_id` filter en `price_groups` join |
+| `src/pages/ProductDetail.tsx` | Prijsgroep-prijzen kaart: fallback naar `price_group` info als `range` leeg is |
+| `src/pages/Products.tsx` | "Verkoopprijs" kolom: toon indicatie als product prijsgroep-gebaseerde prijzen heeft |
 
