@@ -1,76 +1,64 @@
 
-
-# STOSA Import Systeem - Implementatieplan
+# Upgrade STOSA Import naar v5
 
 ## Overzicht
+Het bestaande STOSA import systeem (v3) wordt geupgraded naar v5 met extra intelligentie: automatische categorie-detectie uit SKU, prijseenheid-detectie, kortingsgroepen en keukenconfiguratie-helpers.
 
-Het nieuwe STOSA import systeem vervangt de oude complexe variant-mapping met een vereenvoudigd model: 13 prijsgroepen (1-10 voor volle deuren + A, B, C voor glasdeuren). De gebruiker heeft 4 bestanden aangeleverd die geintegreerd moeten worden in het bestaande project.
-
-## Wat wordt er gedaan
+## Wat verandert er
 
 ### 1. Database Migratie
-Een nieuwe migratie aanmaken op basis van `migration.sql` met:
-- Unique constraints op `products(supplier_id, article_code)`, `price_groups(supplier_id, code)`, en `product_prices(product_id, price_group_id)`
-- Indexes voor snelle prijs-lookups
-- Vernieuwde `get_product_price` en nieuwe `get_product_price_by_code` functies
-- View `products_with_price_groups`
-- Updated_at trigger op products
+Nieuwe tabellen en kolommen toevoegen:
 
-### 2. Edge Function: `stosa-import`
-Een nieuwe edge function `supabase/functions/stosa-import/index.ts` deployen. Aanpassingen t.o.v. het aangeleverde bestand:
-- Import path `../_shared/cors.ts` blijft (bestaat al)
-- Geen wijzigingen aan logica nodig -- het bestand is klaar voor gebruik
+**Nieuwe tabel: `discount_groups`**
+- supplier_id, code (GR1/GR2/GR3), name, default_discount_percent
 
-Toevoegen aan `supabase/config.toml`:
-```
-[functions.stosa-import]
-verify_jwt = false
-```
+**Nieuwe kolommen op `products`**
+- `pricing_unit` (enum: STUK, ML, M2, SET) - prijseenheid
+- `discount_group_id` (FK naar discount_groups)
+- `type_code` (VARCHAR) - kasttype uit SKU positie 3-4 (bijv. BB, PR, CD)
+- `type_name_nl` (VARCHAR) - Nederlandse naam (bijv. "Onderkast met deur")
+- `subcategory` (VARCHAR)
+- `kitchen_group` (VARCHAR) - groepering voor keukenconfiguratie
 
-### 3. Frontend: StosaImportDialog
-Nieuw bestand `src/components/products/StosaImportDialog.tsx`. Aanpassingen t.o.v. het aangeleverde bestand:
-- Import path wijzigen: `from '@/lib/supabase'` wordt `from '@/integrations/supabase/client'`
-- `react-dropzone` is niet geinstalleerd -- vervangen door een native file input + drag/drop implementatie (geen nieuwe dependency nodig, het project gebruikt al een vergelijkbaar patroon)
-- `toast` import aanpassen: `from 'sonner'` (al aanwezig in project)
+**Nieuwe kolom op `product_categories`**
+- `kitchen_group` (VARCHAR) - keukenconfiguratie groep
 
-### 4. Frontend: PriceGroupSelector
-Nieuw bestand `src/components/quotes/PriceGroupSelector.tsx`. Aanpassingen:
-- Import path wijzigen: `from '@/lib/supabase'` wordt `from '@/integrations/supabase/client'`
+**Nieuwe kolom op `import_logs`**
+- `metadata` (JSONB) - extra statistieken per import
 
-### 5. Integratie in ProductImport pagina
-In `src/pages/ProductImport.tsx` een STOSA-specifieke import tab of knop toevoegen die de `StosaImportDialog` opent wanneer de geselecteerde leverancier STOSA is (of via een apart tabje).
+**Nieuwe views**
+- `products_full` - producten met categorie, kortingsgroep, leverancier
+- `products_by_width` - producten per breedte (voor keukenconfiguratie)
+- `kitchen_config_options` - overzicht alle keukenkast opties
 
-## Technische Details
+**Nieuwe functies**
+- `get_matching_products_by_width()` - zoek producten op breedte en keukengroep
+- `calculate_product_price()` - berekent prijs o.b.v. eenheid (stuk/ML/M2/set)
+- `get_related_products()` - vind gerelateerde producten (zelfde breedte/groep)
 
-### Dependency: react-dropzone
-Het aangeleverde `StosaImportDialog.tsx` gebruikt `react-dropzone`. Dit pakket is **niet** geinstalleerd. Twee opties:
-- **Optie A**: Installeren als dependency (simpelste aanpak)
-- **Optie B**: Vervangen door native HTML5 drag-and-drop met `<input type="file">` (geen extra dependency)
+### 2. Edge Function Update
+`supabase/functions/stosa-import/index.ts` vervangen door v5 versie met:
+- SKU type code mapping (BB=onderkast, PR=bovenkast, CD=hoge kast, etc.)
+- SKU prefix mapping (7VJ=spoelbak, 5FM=gola, etc.)
+- Automatische prijseenheid detectie uit beschrijving (ML, M2, SET)
+- Kortingsgroep tracking (GR1/GR2/GR3 uit "Cat. molt." kolom)
+- Breedte extractie uit SKU
+- Automatische categorie-aanmaak met parent/child relaties
+- Uitgebreide import statistieken (per categorie, eenheid, keukengroep)
 
-Ik ga voor **Optie A** (installeren) omdat het een kleine, veelgebruikte library is en de code er al op gebouwd is.
+### 3. Frontend
+De `StosaImportDialog.tsx` en `PriceGroupSelector.tsx` componenten zijn al up-to-date en hoeven niet te wijzigen.
 
-### Bestanden die aangemaakt/gewijzigd worden
+### 4. RLS Policies
+RLS-policies toevoegen voor de nieuwe `discount_groups` tabel (lezen voor iedereen, beheer voor admin/manager).
+
+## Bestanden
 
 | Bestand | Actie |
 |---------|-------|
-| `supabase/migrations/[timestamp]_stosa_import.sql` | Nieuw - database migratie |
-| `supabase/functions/stosa-import/index.ts` | Nieuw - edge function |
-| `supabase/config.toml` | Wijzigen - stosa-import entry toevoegen |
-| `src/components/products/StosaImportDialog.tsx` | Nieuw - import dialog component |
-| `src/components/quotes/PriceGroupSelector.tsx` | Nieuw - prijsgroep selector + `usePriceGroupPrice` hook |
-| `src/pages/ProductImport.tsx` | Wijzigen - STOSA import knop/tab toevoegen |
-| `package.json` | Wijzigen - `react-dropzone` toevoegen |
+| `supabase/migrations/[timestamp]_stosa_v5.sql` | Nieuw |
+| `supabase/functions/stosa-import/index.ts` | Vervangen door v5 |
 
-### Flow samenvatting
-
-1. Gebruiker gaat naar Product Import pagina
-2. Selecteert leverancier (STOSA) en klikt "STOSA Import"
-3. `StosaImportDialog` opent, gebruiker dropt Excel bestand
-4. Frontend parseert Excel, toont preview (producten, FPC-rijen, prijsgroepen)
-5. Gebruiker klikt "Importeren"
-6. Edge function `stosa-import` ontvangt de rijen en:
-   - Maakt 13 prijsgroepen aan (idempotent)
-   - Upsert producten
-   - Upsert prijzen per prijsgroep
-7. Resultaat wordt getoond met statistieken
-
+## Volgorde
+1. Database migratie uitvoeren (nieuwe tabel, kolommen, views, functies)
+2. Edge function vervangen en deployen
