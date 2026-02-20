@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
 import { ImportHistory } from '@/components/import/ImportHistory';
 import { PimsImportTab } from '@/components/import/PimsImportTab';
+import { StosaImportDialog } from '@/components/products/StosaImportDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
@@ -83,7 +84,9 @@ export default function ProductImport() {
   // JSON import state
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonPayloads, setJsonPayloads] = useState<JsonPayload[]>([]);
-
+  
+  // STOSA import state
+  const [stosaDialogOpen, setStosaDialogOpen] = useState(false);
   const { importProducts, isImporting, importResult } = useProductImport();
   const { importPriceGroups, isImporting: isImportingPriceGroups, importResult: priceGroupResult } = usePriceGroupImport();
   const { parseJsonFiles, importJsonChunks, isImporting: isJsonImporting, bulkProgress, resetProgress } = useJsonImport();
@@ -706,8 +709,59 @@ export default function ProductImport() {
         <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v })}>
           <TabsList>
             <TabsTrigger value="standard">Prijslijst Import</TabsTrigger>
+            <TabsTrigger value="stosa">STOSA Import</TabsTrigger>
             <TabsTrigger value="pims">PIMS Import</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="stosa">
+            <Card>
+              <CardHeader>
+                <CardTitle>STOSA Prijslijst Import</CardTitle>
+                <CardDescription>
+                  Importeer een STOSA LISTINO VENDITA Excel met het vereenvoudigde 13-prijsgroepen systeem (1-10 + A, B, C).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Leverancier</Label>
+                    <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer STOSA leverancier..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliers.filter(s => s.name.toLowerCase().includes('stosa')).length > 0
+                          ? suppliers.filter(s => s.name.toLowerCase().includes('stosa')).map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))
+                          : suppliers.map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))
+                        }
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={() => setStosaDialogOpen(true)}
+                    disabled={!selectedSupplierId}
+                    className="w-full"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    STOSA Excel Importeren
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <StosaImportDialog
+              open={stosaDialogOpen}
+              onOpenChange={setStosaDialogOpen}
+              supplierId={selectedSupplierId}
+              supplierName={suppliers.find(s => s.id === selectedSupplierId)?.name || 'STOSA'}
+              onSuccess={() => {
+                // Refresh data if needed
+              }}
+            />
+          </TabsContent>
 
           <TabsContent value="pims">
             <PimsImportTab />

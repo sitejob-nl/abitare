@@ -855,6 +855,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "order_lines_quote_line_id_fkey"
             columns: ["quote_line_id"]
             isOneToOne: false
@@ -1041,6 +1048,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
           },
           {
             foreignKeyName: "order_sections_quote_section_id_fkey"
@@ -1361,6 +1375,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pims_image_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "pims_image_queue_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
@@ -1463,6 +1484,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_group_colors_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
           },
           {
             foreignKeyName: "price_group_colors_supplier_id_fkey"
@@ -1651,6 +1679,13 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
         ]
       }
       product_prices: {
@@ -1699,10 +1734,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "product_prices_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
+          },
+          {
             foreignKeyName: "product_prices_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
           {
@@ -2134,6 +2183,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "quote_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "quote_lines_quote_id_fkey"
             columns: ["quote_id"]
             isOneToOne: false
@@ -2261,6 +2317,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_sections_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
           },
           {
             foreignKeyName: "quote_sections_quote_id_fkey"
@@ -2430,6 +2493,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_default_price_group_id_fkey"
+            columns: ["default_price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
           },
           {
             foreignKeyName: "quotes_default_range_id_fkey"
@@ -3163,6 +3233,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "supplier_order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "supplier_order_lines_supplier_order_id_fkey"
             columns: ["supplier_order_id"]
             isOneToOne: false
@@ -3800,6 +3877,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "order_lines_quote_line_id_fkey"
             columns: ["quote_line_id"]
             isOneToOne: false
@@ -3916,6 +4000,30 @@ export type Database = {
           },
         ]
       }
+      products_with_price_groups: {
+        Row: {
+          article_code: string | null
+          id: string | null
+          is_glass: boolean | null
+          name: string | null
+          price: number | null
+          price_group_code: string | null
+          price_group_id: string | null
+          price_group_name: string | null
+          supplier_id: string | null
+          supplier_name: string | null
+          valid_from: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_price_group_colors: {
         Row: {
           collection: string | null
@@ -3939,6 +4047,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "price_groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_group_colors_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
           },
           {
             foreignKeyName: "price_groups_supplier_id_fkey"
@@ -3985,10 +4100,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "product_prices_price_group_id_fkey"
+            columns: ["price_group_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
+            referencedColumns: ["price_group_id"]
+          },
+          {
             foreignKeyName: "product_prices_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
           {
@@ -4012,6 +4141,14 @@ export type Database = {
       }
       get_product_price: {
         Args: { p_price_group_id: string; p_product_id: string }
+        Returns: number
+      }
+      get_product_price_by_code: {
+        Args: {
+          p_article_code: string
+          p_price_group_code: string
+          p_supplier_id: string
+        }
         Returns: number
       }
       get_user_division_id: { Args: { _user_id: string }; Returns: string }
