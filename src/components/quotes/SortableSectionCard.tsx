@@ -55,10 +55,10 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
   const deleteSection = useDeleteQuoteSection();
   const updateLine = useUpdateQuoteLine();
 
-  // Derive supplier ID from section's range or price group
+  // Derive supplier ID: direct supplier_id takes priority, then range, then price_group
   const { data: sectionRange } = useProductRange(section.range_id);
   const { data: priceGroup } = usePriceGroup(section.price_group_id);
-  const sectionSupplierId = sectionRange?.supplier_id || priceGroup?.supplier_id || null;
+  const sectionSupplierId = (section as any).supplier_id || sectionRange?.supplier_id || priceGroup?.supplier_id || null;
 
   const {
     attributes,

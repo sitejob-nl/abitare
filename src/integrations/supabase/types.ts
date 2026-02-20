@@ -2335,6 +2335,8 @@ export type Database = {
           handle_number: string | null
           hinge_color: string | null
           id: string
+          model_code: string | null
+          model_name: string | null
           plinth_color: string | null
           price_group_id: string | null
           quote_id: string | null
@@ -2342,6 +2344,7 @@ export type Database = {
           section_type: string
           sort_order: number | null
           subtotal: number | null
+          supplier_id: string | null
           title: string | null
           workbench_color: string | null
           workbench_edge: string | null
@@ -2365,6 +2368,8 @@ export type Database = {
           handle_number?: string | null
           hinge_color?: string | null
           id?: string
+          model_code?: string | null
+          model_name?: string | null
           plinth_color?: string | null
           price_group_id?: string | null
           quote_id?: string | null
@@ -2372,6 +2377,7 @@ export type Database = {
           section_type: string
           sort_order?: number | null
           subtotal?: number | null
+          supplier_id?: string | null
           title?: string | null
           workbench_color?: string | null
           workbench_edge?: string | null
@@ -2395,6 +2401,8 @@ export type Database = {
           handle_number?: string | null
           hinge_color?: string | null
           id?: string
+          model_code?: string | null
+          model_name?: string | null
           plinth_color?: string | null
           price_group_id?: string | null
           quote_id?: string | null
@@ -2402,6 +2410,7 @@ export type Database = {
           section_type?: string
           sort_order?: number | null
           subtotal?: number | null
+          supplier_id?: string | null
           title?: string | null
           workbench_color?: string | null
           workbench_edge?: string | null
@@ -2441,6 +2450,13 @@ export type Database = {
             columns: ["range_id"]
             isOneToOne: false
             referencedRelation: "product_ranges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_sections_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -3110,6 +3126,101 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      stosa_colors: {
+        Row: {
+          code: string
+          color_type: string
+          hex_color: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          code: string
+          color_type: string
+          hex_color?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          code?: string
+          color_type?: string
+          hex_color?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      stosa_front_types: {
+        Row: {
+          code: string
+          id: string
+          is_active: boolean | null
+          model_code: string
+          name: string
+          price_groups: string[] | null
+        }
+        Insert: {
+          code: string
+          id?: string
+          is_active?: boolean | null
+          model_code: string
+          name: string
+          price_groups?: string[] | null
+        }
+        Update: {
+          code?: string
+          id?: string
+          is_active?: boolean | null
+          model_code?: string
+          name?: string
+          price_groups?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stosa_front_types_model_code_fkey"
+            columns: ["model_code"]
+            isOneToOne: false
+            referencedRelation: "stosa_models"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      stosa_models: {
+        Row: {
+          code: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
       }
       subcontractor_orders: {
         Row: {

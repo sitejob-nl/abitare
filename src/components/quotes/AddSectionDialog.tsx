@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Loader2, ArrowLeft, ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,20 +10,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { useCreateQuoteSection, SECTION_TYPES, SectionType } from "@/hooks/useQuoteSections";
-import { useSuppliers } from "@/hooks/useSuppliers";
-import { useProductRanges } from "@/hooks/useProductRanges";
-import { usePriceGroups } from "@/hooks/usePriceGroups";
-import { usePriceGroupColors, useSupplierColors } from "@/hooks/usePriceGroupColors";
+import { Progress } from "@/components/ui/progress";
+import { useCreateQuoteSection, SECTION_TYPES } from "@/hooks/useQuoteSections";
+import { useSupplier } from "@/hooks/useSuppliers";
+import { isStosaSupplier } from "@/hooks/useStosaData";
 import { toast } from "@/hooks/use-toast";
+import type { SectionType, SectionWizardStep, StosaConfig } from "@/types/quote-sections";
+
+import { SectionTypeSelector } from "./section-wizard/SectionTypeSelector";
+import { SupplierSelector } from "./section-wizard/SupplierSelector";
+import { StosaModelSelector } from "./section-wizard/StosaModelSelector";
+import { WizardPriceGroupSelector } from "./section-wizard/PriceGroupSelector";
+import { StosaConfigPanel } from "./section-wizard/StosaConfigPanel";
 
 interface AddSectionDialogProps {
   open: boolean;
@@ -46,150 +44,180 @@ export function AddSectionDialog({
 }: AddSectionDialogProps) {
   const createSection = useCreateQuoteSection();
 
-  // Form state
-  const [sectionType, setSectionType] = useState<SectionType>("meubelen");
+  // Wizard state
+  const [step, setStep] = useState<SectionWizardStep>("type");
+  const [sectionType, setSectionType] = useState<SectionType | null>(null);
+  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [supplierCode, setSupplierCode] = useState<string>("");
+  const [modelCode, setModelCode] = useState<string | null>(null);
+  const [modelName, setModelName] = useState<string | null>(null);
+  const [priceGroupId, setPriceGroupId] = useState<string | null>(null);
+  const [priceGroupCode, setPriceGroupCode] = useState<string>("");
+  const [config, setConfig] = useState<StosaConfig>({});
   const [title, setTitle] = useState("");
-  const [supplierId, setSupplierId] = useState<string>("");
-  const [rangeId, setRangeId] = useState<string>("");
-  const [priceGroupId, setPriceGroupId] = useState<string>("");
 
-  // Kitchen configuration state (Stosa-specific fields)
-  const [frontColor, setFrontColor] = useState<string>("");
-  const [corpusColor, setCorpusColor] = useState<string>("");
-  const [plinthColor, setPlinthColor] = useState<string>("");
-  const [hingeColor, setHingeColor] = useState<string>("");
-  const [handleNumber, setHandleNumber] = useState<string>("");
-  const [columnHeightMm, setColumnHeightMm] = useState<string>("");
-
-  // Data hooks
-  const { data: suppliers } = useSuppliers();
-  const { data: ranges } = useProductRanges(supplierId || undefined);
-
-  const selectedSupplier = suppliers?.find(s => s.id === supplierId);
+  // Lookup supplier for has_price_groups check
+  const { data: selectedSupplier } = useSupplier(supplierId);
+  const isStosa = isStosaSupplier(supplierCode);
   const hasPriceGroups = selectedSupplier?.has_price_groups === true;
 
-  const { data: priceGroups } = usePriceGroups(
-    hasPriceGroups ? supplierId : undefined
-  );
+  // Determine wizard steps based on selections
+  const wizardSteps = useMemo<SectionWizardStep[]>(() => {
+    const steps: SectionWizardStep[] = ["type", "supplier"];
 
-  // Color hooks from price_group_colors
-  const { data: frontColors = [] } = usePriceGroupColors(
-    hasPriceGroups && priceGroupId ? priceGroupId : undefined,
-    'front'
-  );
-  const { data: corpusColors = [] } = useSupplierColors(
-    hasPriceGroups ? supplierId : undefined,
-    'corpus'
-  );
+    if (isStosa) {
+      steps.push("model");
+    }
+    if (hasPriceGroups) {
+      steps.push("pricegroup");
+    }
+    if (isStosa) {
+      steps.push("config");
+    }
 
-  // Get distinct collections from price_groups
-  const collections = (() => {
-    const cols = new Set<string>();
-    priceGroups?.forEach(pg => { if (pg.collection) cols.add(pg.collection); });
-    return Array.from(cols).sort();
-  })();
+    return steps;
+  }, [isStosa, hasPriceGroups]);
 
-  const [selectedCollection, setSelectedCollection] = useState<string>("");
+  const currentStepIndex = wizardSteps.indexOf(step);
+  const isLastStep = currentStepIndex === wizardSteps.length - 1;
+  const progressPercent = ((currentStepIndex + 1) / wizardSteps.length) * 100;
 
-  // Filter price groups by selected collection
-  const filteredPriceGroups = (() => {
-    if (!selectedCollection) return priceGroups || [];
-    return (priceGroups || []).filter(pg => pg.collection === selectedCollection);
-  })();
-
-  // Sync defaults when dialog opens
+  // Reset on open
   useEffect(() => {
     if (open) {
-      setSupplierId(quoteDefaultSupplierId || "");
-      setRangeId(quoteDefaultRangeId || "");
-      setPriceGroupId(quoteDefaultPriceGroupId || "");
-      setSelectedCollection("");
-      setFrontColor("");
-      setCorpusColor("");
-      setPlinthColor("");
-      setHingeColor("");
-      setHandleNumber("");
-      setColumnHeightMm("");
+      setStep("type");
+      setSectionType(null);
+      setSupplierId(null);
+      setSupplierCode("");
+      setModelCode(null);
+      setModelName(null);
+      setPriceGroupId(null);
+      setPriceGroupCode("");
+      setConfig({});
+      setTitle("");
     }
-  }, [open, quoteDefaultSupplierId, quoteDefaultRangeId, quoteDefaultPriceGroupId]);
+  }, [open]);
 
-  // Cascade resets
-  const handleSupplierChange = (value: string) => {
-    setSupplierId(value);
-    setRangeId("");
-    setPriceGroupId("");
-    setSelectedCollection("");
-    setFrontColor("");
-    setCorpusColor("");
-  };
-
-  const handleCollectionChange = (value: string) => {
-    setSelectedCollection(value === "all" ? "" : value);
-    setPriceGroupId("");
-    setFrontColor("");
-  };
-
-  const handlePriceGroupChange = (value: string) => {
-    setPriceGroupId(value);
-    setFrontColor("");
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const selectedRange = ranges?.find(r => r.id === rangeId);
-    const selectedPriceGroup = priceGroups?.find(pg => pg.id === priceGroupId);
-
-    // Build default title
-    let defaultTitle = title.trim() || null;
-    if (!defaultTitle) {
-      const parts: string[] = [];
-      if (selectedPriceGroup) {
-        parts.push(`${selectedPriceGroup.code} - ${selectedPriceGroup.name}`);
-      } else if (selectedRange?.name) {
-        parts.push(selectedRange.name);
-      }
-      if (frontColor) {
-        const fc = frontColors.find(c => c.color_code === frontColor);
-        if (fc) parts.push(fc.color_name);
-      }
-      defaultTitle = parts.length > 0 ? parts.join(" | ") : null;
+  // Can move to next step?
+  const canProceed = useMemo(() => {
+    switch (step) {
+      case "type":
+        return !!sectionType;
+      case "supplier":
+        return !!supplierId;
+      case "model":
+        return !!modelCode;
+      case "pricegroup":
+        return !!priceGroupId;
+      case "config":
+        return true; // Config is optional
+      default:
+        return false;
     }
+  }, [step, sectionType, supplierId, modelCode, priceGroupId]);
+
+  const handleNext = () => {
+    if (isLastStep) {
+      handleSubmit();
+      return;
+    }
+    const nextIndex = currentStepIndex + 1;
+    if (nextIndex < wizardSteps.length) {
+      setStep(wizardSteps[nextIndex]);
+    }
+  };
+
+  const handleBack = () => {
+    const prevIndex = currentStepIndex - 1;
+    if (prevIndex >= 0) {
+      setStep(wizardSteps[prevIndex]);
+    }
+  };
+
+  const handleSupplierChange = (id: string, code: string) => {
+    setSupplierId(id);
+    setSupplierCode(code);
+    // Reset downstream selections
+    setModelCode(null);
+    setModelName(null);
+    setPriceGroupId(null);
+    setPriceGroupCode("");
+    setConfig({});
+  };
+
+  const handleModelChange = (code: string, name: string) => {
+    setModelCode(code);
+    setModelName(name);
+  };
+
+  const handlePriceGroupChange = (id: string, code: string) => {
+    setPriceGroupId(id);
+    setPriceGroupCode(code);
+  };
+
+  // Build default title from config
+  const generateTitle = (): string => {
+    if (title.trim()) return title.trim();
+
+    const parts: string[] = [];
+    
+    // Section type label
+    const typeLabel = SECTION_TYPES.find((t) => t.value === sectionType)?.label;
+
+    if (modelName) {
+      parts.push(modelName);
+    }
+    if (priceGroupCode) {
+      parts.push(priceGroupCode);
+    }
+    if (config.front_color) {
+      parts.push(config.front_color);
+    }
+
+    if (parts.length > 0) return parts.join(" | ");
+    return typeLabel || "Nieuwe sectie";
+  };
+
+  const handleSubmit = async () => {
+    if (!sectionType) return;
+
+    const sectionTitle = generateTitle();
+
+    // Map the new section_type values to existing DB values for backward compat
+    // Current DB uses: meubelen, apparatuur, werkbladen, montage, transport, overig
+    const sectionTypeMap: Record<SectionType, string> = {
+      keukenmeubelen: "meubelen",
+      apparatuur: "apparatuur",
+      werkbladen: "werkbladen",
+      sanitair: "overig",
+      diversen: "overig",
+    };
 
     try {
       await createSection.mutateAsync({
         quote_id: quoteId,
-        section_type: sectionType,
-        title: defaultTitle,
+        section_type: sectionTypeMap[sectionType] || sectionType,
+        title: sectionTitle,
         sort_order: existingSectionsCount,
         subtotal: 0,
-        range_id: rangeId || null,
+        supplier_id: supplierId || null,
+        model_code: modelCode || null,
+        model_name: modelName || null,
         price_group_id: priceGroupId || null,
-        front_color: frontColor || null,
-        corpus_color: corpusColor || null,
-        plinth_color: plinthColor || null,
-        hinge_color: hingeColor || null,
-        handle_number: handleNumber || null,
-        column_height_mm: columnHeightMm ? parseInt(columnHeightMm) : null,
+        front_color: config.front_color || null,
+        corpus_color: config.corpus_color || null,
+        plinth_color: config.plinth_color || null,
+        hinge_color: config.handle_color || null,
+        handle_number: config.handle_code || null,
+        column_height_mm: config.worktop_height || null,
+        configuration: Object.keys(config).length > 0 ? JSON.parse(JSON.stringify(config)) : null,
       });
 
       toast({
         title: "Sectie toegevoegd",
-        description: `De sectie "${defaultTitle || SECTION_TYPES.find(t => t.value === sectionType)?.label}" is aangemaakt.`,
+        description: `De sectie "${sectionTitle}" is aangemaakt.`,
       });
 
-      // Reset and close
-      setSectionType("meubelen");
-      setTitle("");
-      setSupplierId("");
-      setRangeId("");
-      setPriceGroupId("");
-      setFrontColor("");
-      setCorpusColor("");
-      setPlinthColor("");
-      setHingeColor("");
-      setHandleNumber("");
-      setColumnHeightMm("");
       onOpenChange(false);
     } catch (error) {
       console.error("Error creating section:", error);
@@ -201,235 +229,131 @@ export function AddSectionDialog({
     }
   };
 
-  const showKitchenConfig = hasPriceGroups && priceGroupId;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nieuwe sectie</DialogTitle>
+          <Progress value={progressPercent} className="h-1.5 mt-2" />
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Section Type */}
-          <div className="space-y-2">
-            <Label htmlFor="section-type">Type sectie *</Label>
-            <Select
+        <div className="py-2 min-h-[200px]">
+          {step === "type" && (
+            <SectionTypeSelector
               value={sectionType}
-              onValueChange={(value) => setSectionType(value as SectionType)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecteer type" />
-              </SelectTrigger>
-              <SelectContent>
-                {SECTION_TYPES.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Supplier */}
-          <div className="space-y-2">
-            <Label>Leverancier</Label>
-            <Select value={supplierId} onValueChange={handleSupplierChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecteer leverancier" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers?.map((supplier) => (
-                  <SelectItem key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Collection filter (only for price-group suppliers) */}
-          {hasPriceGroups && collections.length > 0 && (
-            <div className="space-y-2">
-              <Label>Collectie</Label>
-              <Select value={selectedCollection || "all"} onValueChange={handleCollectionChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Alle collecties" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle collecties</SelectItem>
-                  {collections.map(c => {
-                    const labels: Record<string, string> = {
-                      evolution: 'Evolution',
-                      look: 'Look',
-                      art: 'ART',
-                      classic_glamour: 'Classic Glamour',
-                      frame: 'Frame',
-                    };
-                    return (
-                      <SelectItem key={c} value={c}>{labels[c] || c}</SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Range/Model (for non-price-group suppliers) */}
-          {supplierId && !hasPriceGroups && (ranges?.length ?? 0) > 0 && (
-            <div className="space-y-2">
-              <Label>Prijsgroep / Model</Label>
-              <Select value={rangeId} onValueChange={setRangeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecteer model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ranges?.map((range) => (
-                    <SelectItem key={range.id} value={range.id}>
-                      {range.name || range.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Price Group (for Stosa-like suppliers) */}
-          {hasPriceGroups && (
-            <div className="space-y-2">
-              <Label>Prijsgroep *</Label>
-              <Select value={priceGroupId} onValueChange={handlePriceGroupChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecteer prijsgroep (bijv. E1, E4...)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredPriceGroups.map((pg) => (
-                    <SelectItem key={pg.id} value={pg.id}>
-                      {pg.code} - {pg.name}
-                      {(pg as any).material_type && (
-                        <span className="text-muted-foreground ml-1">
-                          ({(pg as any).material_type})
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Kitchen Configuration (shown after price group is selected) */}
-          {showKitchenConfig && (
-            <>
-              <Separator />
-              <p className="text-sm text-muted-foreground font-medium">Keukenconfiguratie</p>
-
-              {/* Front Color */}
-              {frontColors.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Frontkleur</Label>
-                  <Select value={frontColor} onValueChange={setFrontColor}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecteer frontkleur" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {frontColors.map((color) => (
-                        <SelectItem key={color.id} value={color.color_code}>
-                          {color.color_code} - {color.color_name}
-                          {color.finish && (
-                            <span className="text-muted-foreground ml-1">
-                              ({color.finish})
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Corpus Color */}
-              {corpusColors.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Korpuskleur</Label>
-                  <Select value={corpusColor} onValueChange={setCorpusColor}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecteer korpuskleur" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {corpusColors.map((color) => (
-                        <SelectItem key={color.id} value={color.color_code}>
-                          {color.color_code} - {color.color_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Plinth Color */}
-              <div className="space-y-2">
-                <Label>Plintkleur</Label>
-                <Input
-                  placeholder="Bijv. dezelfde als front"
-                  value={plinthColor}
-                  onChange={(e) => setPlinthColor(e.target.value)}
-                />
-              </div>
-
-              {/* Handle */}
-              <div className="space-y-2">
-                <Label>Greepnummer</Label>
-                <Input
-                  placeholder="Bijv. M, MI, GS, Linear..."
-                  value={handleNumber}
-                  onChange={(e) => setHandleNumber(e.target.value)}
-                />
-              </div>
-
-              {/* Column Height */}
-              <div className="space-y-2">
-                <Label>Kolomhoogte (mm)</Label>
-                <Input
-                  type="number"
-                  placeholder="Bijv. 2400"
-                  value={columnHeightMm}
-                  onChange={(e) => setColumnHeightMm(e.target.value)}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title">Titel (optioneel)</Label>
-            <Input
-              id="title"
-              placeholder="Bijv. 'Eiland', 'Kastenwand'..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(type) => {
+                setSectionType(type);
+                // Auto-advance after selection
+                setTimeout(() => {
+                  const nextIdx = wizardSteps.indexOf("type") + 1;
+                  if (nextIdx < wizardSteps.length) {
+                    setStep(wizardSteps[nextIdx]);
+                  }
+                }, 200);
+              }}
             />
-            <p className="text-xs text-muted-foreground">
-              Laat leeg om automatisch een naam te genereren
-            </p>
-          </div>
+          )}
 
-          <DialogFooter className="pt-4">
+          {step === "supplier" && sectionType && (
+            <SupplierSelector
+              sectionType={sectionType}
+              value={supplierId}
+              onChange={handleSupplierChange}
+            />
+          )}
+
+          {step === "model" && (
+            <StosaModelSelector
+              value={modelCode}
+              onChange={handleModelChange}
+            />
+          )}
+
+          {step === "pricegroup" && supplierId && (
+            <WizardPriceGroupSelector
+              supplierId={supplierId}
+              value={priceGroupId}
+              onChange={handlePriceGroupChange}
+            />
+          )}
+
+          {step === "config" && supplierId && (
+            <div className="space-y-4">
+              <StosaConfigPanel
+                modelCode={modelCode}
+                supplierId={supplierId}
+                priceGroupId={priceGroupId}
+                config={config}
+                onChange={setConfig}
+              />
+
+              {/* Title override */}
+              <div className="space-y-2 pt-4 border-t">
+                <Label>Titel (optioneel)</Label>
+                <Input
+                  placeholder={generateTitle()}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Laat leeg om automatisch een naam te genereren
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* For non-STOSA, show title on last step */}
+          {isLastStep && !isStosa && step !== "config" && (
+            <div className="space-y-2 mt-6 pt-4 border-t">
+              <Label>Titel (optioneel)</Label>
+              <Input
+                placeholder="Bijv. 'Eiland', 'Kastenwand'..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Laat leeg om automatisch een naam te genereren
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="flex justify-between gap-2 pt-4">
+          <div>
+            {currentStepIndex > 0 && (
+              <Button type="button" variant="outline" onClick={handleBack}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Vorige
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               onClick={() => onOpenChange(false)}
             >
               Annuleren
             </Button>
-            <Button type="submit" disabled={createSection.isPending}>
+            <Button
+              type="button"
+              onClick={handleNext}
+              disabled={!canProceed || createSection.isPending}
+            >
               {createSection.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Toevoegen
+              {isLastStep ? (
+                "Toevoegen"
+              ) : (
+                <>
+                  Volgende
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
-          </DialogFooter>
-        </form>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
