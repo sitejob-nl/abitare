@@ -64,10 +64,8 @@ serve(async (req) => {
     const calculatedHash = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
     if (calculatedHash !== receivedHash) {
-      console.warn("Webhook signature mismatch - logging for review");
-      console.log("Received:", receivedHash);
-      console.log("Calculated:", calculatedHash);
-      // Log but don't reject - Exact Online signature format may vary
+      console.error("Invalid webhook signature - rejecting request");
+      return new Response("Unauthorized", { status: 401 });
     }
 
     // Get the connection for this division
