@@ -14,6 +14,7 @@ import { QuoteLine, useUpdateQuoteLine } from "@/hooks/useQuoteLines";
 import { EditableLineRow } from "./EditableLineRow";
 import { AddProductDialog } from "./AddProductDialog";
 import { useProductRange } from "@/hooks/useProductRanges";
+import { usePriceGroup } from "@/hooks/usePriceGroups";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -54,9 +55,10 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
   const deleteSection = useDeleteQuoteSection();
   const updateLine = useUpdateQuoteLine();
 
-  // Derive supplier ID from section's range
+  // Derive supplier ID from section's range or price group
   const { data: sectionRange } = useProductRange(section.range_id);
-  const sectionSupplierId = sectionRange?.supplier_id || null;
+  const { data: priceGroup } = usePriceGroup(section.price_group_id);
+  const sectionSupplierId = sectionRange?.supplier_id || priceGroup?.supplier_id || null;
 
   const {
     attributes,
@@ -229,6 +231,7 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
                             subLines={subLines}
                             sectionRangeId={section.range_id}
                             quoteDefaultRangeId={quoteDefaultRangeId}
+                            sectionPriceGroupId={section.price_group_id}
                           />
                         );
                       })}
@@ -269,6 +272,7 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
         sectionRangeId={section.range_id}
         quoteDefaultRangeId={quoteDefaultRangeId}
         sectionSupplierId={sectionSupplierId}
+        sectionPriceGroupId={section.price_group_id}
       />
 
       <QuoteSectionConfig

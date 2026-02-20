@@ -50,6 +50,7 @@ interface AddProductDialogProps {
   sectionRangeId?: string | null;
   quoteDefaultRangeId?: string | null;
   sectionSupplierId?: string | null;
+  sectionPriceGroupId?: string | null;
 }
 
 export function AddProductDialog({
@@ -60,6 +61,7 @@ export function AddProductDialog({
   sectionRangeId,
   quoteDefaultRangeId,
   sectionSupplierId,
+  sectionPriceGroupId,
 }: AddProductDialogProps) {
   const createLine = useCreateQuoteLine();
   
@@ -75,7 +77,7 @@ export function AddProductDialog({
   const [heightMm, setHeightMm] = useState("");
   const [widthMm, setWidthMm] = useState("");
   const [extraDescription, setExtraDescription] = useState("");
-  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | "quote_default_price" | null>(null);
+  const [priceSource, setPriceSource] = useState<"range_price" | "base_price" | "override_price" | "quote_default_price" | "price_group_price" | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [priceType, setPriceType] = useState<"abitare" | "boekprijs">("abitare");
   const [overrideRangeId, setOverrideRangeId] = useState<string | null>(null);
@@ -140,7 +142,7 @@ export function AddProductDialog({
 
     setIsLoadingPrice(true);
     try {
-      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId, quoteDefaultRangeId);
+      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId, quoteDefaultRangeId, undefined, sectionPriceGroupId);
       if (priceResult.price != null) {
         setUnitPrice(priceResult.price.toString());
         setPriceSource(priceResult.source);
