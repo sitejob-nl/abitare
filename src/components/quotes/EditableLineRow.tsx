@@ -30,6 +30,7 @@ interface EditableLineRowProps {
   subLines?: QuoteLine[];
   sectionRangeId?: string | null;
   quoteDefaultRangeId?: string | null;
+  sectionPriceGroupId?: string | null;
 }
 
 function formatCurrency(value: number | null): string {
@@ -51,7 +52,7 @@ function parseDimension(value: string): number | null {
   return num * 10; // Convert cm to mm
 }
 
-export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId }: EditableLineRowProps) {
+export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId, sectionPriceGroupId }: EditableLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
   
@@ -181,7 +182,7 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
     if (line.product_id) {
       try {
         const currentPriceType = ((line as any).price_type || "abitare") as "abitare" | "boekprijs";
-        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId, quoteDefaultRangeId, currentPriceType);
+        const priceResult = await fetchProductPrice(line.product_id, sectionRangeId || null, newOverrideId, quoteDefaultRangeId, currentPriceType, sectionPriceGroupId);
         if (priceResult.price != null) {
           updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, range_override_id: newOverrideId } as any);
         }
@@ -203,7 +204,8 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
           sectionRangeId || null, 
           overrideRangeId, 
           quoteDefaultRangeId,
-          newType as "abitare" | "boekprijs"
+          newType as "abitare" | "boekprijs",
+          sectionPriceGroupId
         );
         if (priceResult.price != null) {
           updateLine.mutate({ id: line.id, quoteId, unit_price: priceResult.price, price_type: newType } as any);
