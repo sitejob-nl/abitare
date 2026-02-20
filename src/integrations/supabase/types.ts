@@ -4502,6 +4502,10 @@ export type Database = {
       }
     }
     Functions: {
+      bulk_adjust_price: {
+        Args: { p_factor: number; p_ids: string[] }
+        Returns: undefined
+      }
       calc_selling_price: {
         Args: { p_catalog_price: number; p_supplier_id: string }
         Returns: number
