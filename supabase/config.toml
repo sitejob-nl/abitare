@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.whatsapp-config]
 verify_jwt = false
+
+[functions.stosa-import]
+verify_jwt = false
