@@ -1,33 +1,35 @@
 
-# Fix STOSA Import - Twee problemen oplossen
 
-## Probleem 1: Prijzen worden als tekst verstuurd
-De `Prezzo Listino` kolom in het Excel bestand bevat waarden als `"819.00 €"` (tekst met euroteken). De edge function verwacht een getal maar ontvangt een string. Er is geen prijsparsing in de edge function -- de waarde wordt direct vergeleken met `<= 0` en daarna opgeslagen.
+# Update STOSA Import Dialog - Flexibele kolomherkenning
 
-**Oplossing**: Prijsparsing toevoegen in de edge function (`stosa-import/index.ts`). Een `parsePrice()` functie die het euroteken verwijdert en de string naar een getal converteert (vergelijkbaar met de bestaande `parsePrice` in `useProductImport.ts`).
+## Probleem
+Het huidige `StosaImportDialog` zoekt naar exacte kolomnamen zoals `"Codice gestionale"` en `"Prezzo Listino"`. Het STOSA Excel bestand bevat echter kolomnamen met extra spaties (bijv. `" Prezzo Listino "`) waardoor de kolommen niet herkend worden en het bestand als "onbekend formaat" wordt afgewezen.
 
-## Probleem 2: Payload te groot
-Het Excel bestand bevat 8.300+ rijen. Als JSON is dit ca. 2-3MB, wat de Supabase edge function body limit (standaard ~1MB) overschrijdt. Hierdoor faalt het request voordat de function überhaupt draait.
+## Oplossing
+Het `StosaImportDialog.tsx` vervangen door de v5-2 versie met:
 
-**Oplossing**: De rijen opsplitsen in chunks van maximaal 2.000 rijen per request in de frontend (`StosaImportDialog.tsx`). De edge function verwerkt elke chunk apart. De frontend stuurt meerdere requests achter elkaar en combineert de resultaten.
+1. **Flexibele kolomherkenning** via `COLUMN_ALIASES` mapping - meerdere namen per kolom worden herkend
+2. **Automatisch trimmen** van kolomnamen (spaties verwijderen)
+3. **Fuzzy matching** als fallback (bijv. kolom bevat "prezzo" EN "listino" -> match)
+4. **`normalizeRow()`** functie die alle rijen omzet naar standaard kolomnamen
+5. **Verbeterde UI** met sheet-naam weergave, herkende kolommen, batch-indicatie en eenheid-statistieken na import
 
-## Technische wijzigingen
+## Wat verandert er
+De edge function (`index.ts`) en `PriceGroupSelector.tsx` zijn al up-to-date en hoeven niet te wijzigen.
 
-### 1. Edge function: `supabase/functions/stosa-import/index.ts`
-- `parsePrice()` helper functie toevoegen die strings als `"819.00 €"`, `"1.275,00"`, `"1,200.00 €"` correct naar getallen converteert
-- Prijsparsing toepassen op regel 452: `const price = parsePrice(row['Prezzo Listino'])`
-- Prijsparsing ook toepassen op dimensie-velden (`Dimensione 1/2/3`) voor het geval die ook als tekst binnenkomen
+## Technische details
 
-### 2. Frontend: `src/components/products/StosaImportDialog.tsx`
-- Chunking logica toevoegen aan `handleImport()`: splits `parseResult.rows` in batches van 2.000
-- Per batch een apart request naar de edge function sturen
-- Progress bar per batch bijwerken
-- Stats van alle batches combineren tot een totaaloverzicht
-- Foutafhandeling per batch (bij fout in 1 batch, ga door met de rest)
+### Bestand: `src/components/products/StosaImportDialog.tsx`
+Volledig vervangen door de v5-2 versie met:
+- Import path behouden als `@/integrations/supabase/client` (niet `@/lib/supabase`)
+- `COLUMN_ALIASES` object met alternatieve namen per kolom
+- `findStandardColumnName()` met exact match + alias match + fuzzy fallback
+- `normalizeRow()` voor row-level kolomnaam-normalisatie
+- Uitgebreide `ParseResult` interface (met `warnings`, `detectedColumns`, `missingColumns`, `sheetName`)
+- Uitgebreide `ImportStats` interface (met `categories_created`, `discount_groups_created`, `by_category`, `by_unit`, `by_kitchen_group`)
+- Verbeterde UI: sheet-naam tonen, batch-info, eenheid-badges na import, waarschuwingen-sectie
 
-### Bestanden die wijzigen
+| Bestand | Actie |
+|---------|-------|
+| `src/components/products/StosaImportDialog.tsx` | Vervangen door v5-2 versie (met aangepaste import path) |
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/stosa-import/index.ts` | `parsePrice()` toevoegen + toepassen op prijzen en dimensies |
-| `src/components/products/StosaImportDialog.tsx` | Chunking van rows in batches van 2.000 per request |
