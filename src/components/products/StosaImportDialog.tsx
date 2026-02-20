@@ -215,7 +215,7 @@ export function StosaImportDialog({
     if (!parseResult?.isStosa || !parseResult.rows.length) return
 
     setImporting(true)
-    setProgress(10)
+    setProgress(0)
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -223,32 +223,64 @@ export function StosaImportDialog({
         throw new Error('Niet ingelogd')
       }
 
-      setProgress(30)
-
       const modelName = parseResult.series.size === 1
         ? Array.from(parseResult.series)[0]
         : Array.from(parseResult.series).join(', ')
 
-      const response = await supabase.functions.invoke('stosa-import', {
-        body: {
-          supplier_id: supplierId,
-          rows: parseResult.rows,
-          file_name: parseResult.fileName,
-          model_name: modelName,
-        },
-      })
-
-      setProgress(90)
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Import mislukt')
+      const CHUNK_SIZE = 2000
+      const allRows = parseResult.rows
+      const totalChunks = Math.ceil(allRows.length / CHUNK_SIZE)
+      
+      const combinedStats: ImportStats = {
+        total_rows: allRows.length,
+        products_created: 0,
+        products_updated: 0,
+        prices_created: 0,
+        prices_updated: 0,
+        price_groups_created: 0,
+        skipped_rows: 0,
+        errors: [],
       }
 
-      const { stats } = response.data
-      setImportStats(stats)
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = allRows.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        const progressPct = Math.round(((i) / totalChunks) * 90) + 5
+        setProgress(progressPct)
+
+        try {
+          const response = await supabase.functions.invoke('stosa-import', {
+            body: {
+              supplier_id: supplierId,
+              rows: chunk,
+              file_name: parseResult.fileName,
+              model_name: modelName,
+            },
+          })
+
+          if (response.error) {
+            combinedStats.errors.push(`Batch ${i + 1}: ${response.error.message}`)
+            continue
+          }
+
+          const { stats } = response.data
+          combinedStats.products_created += stats.products_created || 0
+          combinedStats.products_updated += stats.products_updated || 0
+          combinedStats.prices_created += stats.prices_created || 0
+          combinedStats.prices_updated += stats.prices_updated || 0
+          combinedStats.price_groups_created += stats.price_groups_created || 0
+          combinedStats.skipped_rows += stats.skipped_rows || 0
+          if (stats.errors?.length) {
+            combinedStats.errors.push(...stats.errors)
+          }
+        } catch (chunkErr) {
+          combinedStats.errors.push(`Batch ${i + 1}: ${chunkErr instanceof Error ? chunkErr.message : 'Onbekende fout'}`)
+        }
+      }
+
+      setImportStats(combinedStats)
       setProgress(100)
 
-      toast.success(`Import voltooid: ${stats.products_created + stats.products_updated} producten`)
+      toast.success(`Import voltooid: ${combinedStats.products_created + combinedStats.products_updated} producten in ${totalChunks} batch(es)`)
 
       if (onSuccess) {
         onSuccess()
