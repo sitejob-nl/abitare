@@ -1,95 +1,87 @@
 
 
-# Productpagina -- Algehele layout en structuur verbeteren
+# Planningvenster monteurs (7 dagen) en prognose weeknummer
 
-## Huidige situatie
+## Deel 1: Planningvenster monteurs beperken tot 7 dagen
 
-De productpagina voelt "plat" aan vergeleken met andere pagina's zoals het Dashboard en Orders. Het is nu een filterbalk + een kale tabel + paginering, zonder overzichtscijfers, visuele hiërarchie of snelle navigatie.
+### Probleem
+De monteurs-app toont momenteel **alle** toegewezen orders, ongeacht hoe ver in de toekomst ze gepland staan. Dit is overweldigend en niet wenselijk.
 
-## Verbeteringen
+### Oplossing
+De `installer_orders` database view aanpassen met een datumfilter dat alleen orders toont waarvan de verwachte installatiedatum binnen de komende 7 dagen valt (of in het verleden ligt en nog niet afgerond is). Orders zonder datum worden ook getoond zodat ze niet verloren gaan.
 
-### 1. Samenvattingskaarten bovenaan
+### Wijzigingen
 
-Vier `StatCard`-achtige kaarten toevoegen boven de filterbalk, consistent met het Dashboard-design:
+**Database migratie** -- `installer_orders` view aanpassen:
+- Filter toevoegen: `expected_installation_date <= CURRENT_DATE + INTERVAL '7 days'`
+- Orders zonder datum (`NULL`) blijven zichtbaar
+- Orders met een datum in het verleden blijven zichtbaar (tenzij status = gemonteerd/afgerond)
 
-- **Totaal producten** (icoon: Package) -- totaal actieve producten
-- **Leveranciers** (icoon: Building2) -- aantal unieke leveranciers
-- **Gem. verkoopprijs** (icoon: Euro) -- gemiddelde base_price
-- **Inactief** (icoon: EyeOff) -- aantal inactieve producten (link naar filter)
+**Frontend** (`src/pages/installer/InstallerDashboard.tsx`):
+- De "Later" groep verwijderen (er zijn geen orders meer buiten de week)
+- Optioneel: een tekst "Je ziet alleen opdrachten voor de komende 7 dagen" toevoegen
 
-Data wordt opgehaald met een aparte lichte query (COUNT/AVG) zodat het de producttabel niet vertraagt.
+---
 
-### 2. Filterbalk opschonen
+## Deel 2: Prognose weeknummer op orders
 
-De filterbalk wordt compacter gemaakt met een "Filters" knop die een Popover opent voor leverancier, categorie en prijsbereik. Zoekbalk blijft direct zichtbaar. Actieve filters worden als verwijderbare chips (badges) onder de zoekbalk getoond.
+### Probleem
+Planners willen intern een **indicatief weeknummer** kunnen toewijzen aan een order, zonder direct een Outlook-afspraak te maken. Dit voorkomt "zondagevents" en geeft een globaal planningsoverzicht.
 
-Resultaat: de standaard weergave toont alleen de zoekbalk + "Filters" knop + eventuele actieve filter-chips.
+### Oplossing
+Een nieuw veld `forecast_week` (text, formaat "YYYY-Wnn", bijv. "2026-W12") toevoegen aan de `orders` tabel. Dit veld is puur intern en heeft geen relatie met Outlook.
 
-### 3. Actief/Inactief status badge
+### Wijzigingen
 
-Een kleine gekleurde dot of badge toevoegen aan elke rij die aangeeft of het product actief of inactief is. Een toggle in de filterbalk om inactieve producten te tonen.
+**Database migratie**:
+- Kolom `forecast_week` (text, nullable) toevoegen aan `orders`
 
-### 4. Verbeterde paginering
+**Frontend** -- Orderdetailpagina (`src/pages/OrderDetail.tsx`):
+- Een compact weeknummer-selector toevoegen in het planningsgedeelte
+- Toont jaar + weeknummer met een dropdown of inline input
+- Bewerkbaar door verkopers/managers
 
-De paginering wordt visueel verbeterd:
-- "Vorige/Volgende" knoppen worden icoon-only (compacter)
-- Paginanummers tonen (1, 2, 3... met ellipsis) zodat je direct naar een pagina kunt springen
-- Items-per-pagina selector (25, 50, 100)
+**Frontend** -- Installatieplanning overzicht (`src/pages/Installation.tsx`):
+- Kolom/filter toevoegen voor prognose-week
+- Orders groepeerbaar op weeknummer voor planningsoverzicht
 
-### 5. Tabel header sticky maken
+**Frontend** -- Kanban/orderslijst:
+- Badge met weeknummer tonen op orderkaarten die een prognose maar nog geen definitieve datum hebben
 
-Bij het scrollen door lange lijsten blijft de tabelheader zichtbaar (sticky top).
+---
 
 ## Technische details
 
-### Nieuwe hook: `useProductStats`
+### Database migratie
 
 ```text
-Bestand: src/hooks/useProductStats.ts
+1. ALTER TABLE orders ADD COLUMN forecast_week text;
+   -- Formaat: "YYYY-Wnn" (bijv. "2026-W12")
 
-Haalt met een enkele query op:
-- COUNT(*) WHERE is_active = true
-- COUNT(DISTINCT supplier_id)
-- AVG(base_price) WHERE base_price IS NOT NULL
-- COUNT(*) WHERE is_active = false
-
-Gebruikt supabase.rpc() met een database functie, of
-drie parallelle count-queries (eenvoudiger, geen migratie nodig).
+2. CREATE OR REPLACE VIEW installer_orders AS
+   SELECT [bestaande kolommen]
+   FROM orders
+   WHERE installer_id = auth.uid()
+     AND status NOT IN ('afgerond', 'geannuleerd')
+     AND (
+       expected_installation_date IS NULL
+       OR expected_installation_date <= CURRENT_DATE + INTERVAL '7 days'
+     );
 ```
 
-### Filter Popover
-
-```text
-De huidige inline filters (leverancier, categorie, prijs min/max) verhuizen
-naar een Popover component achter een "Filters" knop met een Badge
-die het aantal actieve filters toont.
-
-Actieve filters worden als chips gerenderd met een X-knop
-om ze individueel te wissen.
-```
-
-### Sticky header
-
-```text
-De <thead> krijgt: className="sticky top-0 z-10 bg-card"
-De tabel wrapper krijgt een max-height en overflow-y-auto
-zodat de header blijft staan bij scrollen.
-```
-
-### Items per pagina
-
-```text
-Nieuw state: pageSize (standaard 50)
-Select met opties: 25, 50, 100
-Wordt doorgegeven aan useProducts hook (ondersteunt dit al).
-```
-
-## Samenvatting wijzigingen
+### Bestanden die wijzigen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/hooks/useProductStats.ts` | Nieuw -- samenvattingsdata ophalen |
-| `src/pages/Products.tsx` | StatCards toevoegen, filterbalk omzetten naar Popover + chips, sticky header, verbeterde paginering, actief/inactief badge, items-per-pagina |
+| Database migratie | `forecast_week` kolom + view update |
+| `src/pages/installer/InstallerDashboard.tsx` | "Later" groep verwijderen, info-tekst toevoegen |
+| `src/pages/OrderDetail.tsx` | Weeknummer-selector in planningssectie |
+| `src/pages/Installation.tsx` | Filter/groepering op prognose-week |
+| `src/hooks/useInstallerOrders.ts` | Geen wijziging nodig (view handelt filtering) |
+| `src/hooks/useOrderMutations.ts` | `forecast_week` opnemen in update-mutatie |
+| `src/components/orders/OrderKanbanCard.tsx` | Weeknummer badge tonen |
 
-Geen database migratie nodig -- alle data is beschikbaar via bestaande tabellen.
-
+### Geen impact op bestaande functionaliteit
+- Outlook-integratie blijft ongewijzigd
+- De definitieve planningsdatum (`expected_installation_date`) blijft leidend
+- `forecast_week` is puur informatief en blokkeert geen statusovergangen
