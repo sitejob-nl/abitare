@@ -380,8 +380,18 @@ const OrderDetail = () => {
             orderDate={order.order_date}
             expectedDeliveryDate={order.expected_delivery_date}
             expectedInstallationDate={order.expected_installation_date}
+            forecastWeek={(order as any).forecast_week}
             onUpdateDeliveryDate={handleUpdateDeliveryDate}
             onUpdateInstallationDate={handleUpdateInstallationDate}
+            onUpdateForecastWeek={async (week) => {
+              if (!id) return;
+              try {
+                await updateDates.mutateAsync({ orderId: id, forecastWeek: week });
+                toast({ title: "Prognose bijgewerkt", description: week ? `Prognose ingesteld op ${week}.` : "Prognose verwijderd." });
+              } catch {
+                toast({ title: "Fout bij bijwerken", description: "De prognose kon niet worden bijgewerkt.", variant: "destructive" });
+              }
+            }}
             isUpdating={updateDates.isPending}
           />
 

@@ -18,6 +18,8 @@ interface OrderKanbanCardProps {
     order_number: number;
     total_incl_vat: number | null;
     expected_delivery_date: string | null;
+    expected_installation_date?: string | null;
+    forecast_week?: string | null;
     payment_status: string | null;
     deposit_required?: boolean | null;
     deposit_invoice_sent?: boolean | null;
@@ -155,6 +157,14 @@ export function OrderKanbanCard({ order }: OrderKanbanCardProps) {
           </div>
         )}
       </div>
+
+      {/* Show forecast week badge when no fixed installation date */}
+      {!order.expected_installation_date && order.forecast_week && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
+          <Calendar className="h-3 w-3 shrink-0" />
+          <span className="font-medium text-foreground/70">{order.forecast_week}</span>
+        </div>
+      )}
 
       {gates.length > 0 && (
         <TooltipProvider delayDuration={200}>

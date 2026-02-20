@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, isToday, isTomorrow, isThisWeek, parseISO } from "date-fns";
+import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { ClipboardList, Calendar } from "lucide-react";
 import { InstallerLayout } from "@/components/installer/InstallerLayout";
@@ -13,15 +13,14 @@ export default function InstallerDashboard() {
   const { data: orders, isLoading } = useInstallerOrders();
   const [activeTab, setActiveTab] = useState("all");
 
-  // Group orders by date
+  // Group orders by date (7-day window is enforced by the database view)
   const groupOrders = () => {
-    if (!orders) return { today: [], tomorrow: [], thisWeek: [], later: [] };
+    if (!orders) return { today: [], tomorrow: [], thisWeek: [] };
 
     const grouped = {
       today: [] as typeof orders,
       tomorrow: [] as typeof orders,
       thisWeek: [] as typeof orders,
-      later: [] as typeof orders,
     };
 
     orders.forEach((order) => {
@@ -30,15 +29,13 @@ export default function InstallerDashboard() {
         : null;
 
       if (!date) {
-        grouped.later.push(order);
+        grouped.thisWeek.push(order);
       } else if (isToday(date)) {
         grouped.today.push(order);
       } else if (isTomorrow(date)) {
         grouped.tomorrow.push(order);
-      } else if (isThisWeek(date)) {
-        grouped.thisWeek.push(order);
       } else {
-        grouped.later.push(order);
+        grouped.thisWeek.push(order);
       }
     });
 
@@ -75,19 +72,24 @@ export default function InstallerDashboard() {
             </div>
             <div className="text-xs text-muted-foreground">Vandaag</div>
           </Card>
-          <Card className="p-4 text-center">
+          <Card className="p-3 sm:p-4 text-center">
             <div className="text-2xl font-bold text-amber-600">
               {grouped.tomorrow.length}
             </div>
             <div className="text-xs text-muted-foreground">Morgen</div>
           </Card>
-          <Card className="p-4 text-center">
+          <Card className="p-3 sm:p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">
               {grouped.thisWeek.length}
             </div>
             <div className="text-xs text-muted-foreground">Deze week</div>
           </Card>
         </div>
+
+        {/* Info text */}
+        <p className="mb-4 text-xs text-muted-foreground">
+          Je ziet alleen opdrachten voor de komende 7 dagen.
+        </p>
 
         {/* Filter Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
