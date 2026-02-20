@@ -114,7 +114,7 @@ export function SignaturePad({ onSave, disabled, existingSignature }: SignatureP
       <div className="relative rounded-lg border-2 border-dashed border-muted-foreground/25 bg-background">
         <canvas
           ref={canvasRef}
-          className="w-full h-40 touch-none cursor-crosshair"
+          className="w-full h-48 sm:h-40 touch-none cursor-crosshair"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -134,21 +134,21 @@ export function SignaturePad({ onSave, disabled, existingSignature }: SignatureP
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={clearSignature}
             disabled={!hasSignature}
+            className="flex-1 sm:flex-none min-h-[44px]"
           >
             <Eraser className="mr-2 h-4 w-4" />
             Wissen
           </Button>
           <Button
             type="button"
-            size="sm"
             onClick={saveSignature}
             disabled={!hasSignature}
+            className="flex-1 sm:flex-none min-h-[44px]"
           >
             <Check className="mr-2 h-4 w-4" />
-            Handtekening opslaan
+            Opslaan
           </Button>
         </div>
       )}

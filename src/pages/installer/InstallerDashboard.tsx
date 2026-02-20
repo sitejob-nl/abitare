@@ -58,18 +58,18 @@ export default function InstallerDashboard() {
 
   return (
     <InstallerLayout>
-      <div className="container max-w-2xl py-6">
+      <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Mijn Opdrachten</h1>
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold">Mijn Opdrachten</h1>
           <p className="text-muted-foreground">
             {format(new Date(), "EEEE d MMMM yyyy", { locale: nl })}
           </p>
         </div>
 
         {/* Quick Stats */}
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          <Card className="p-4 text-center">
+        <div className="mb-4 sm:mb-6 grid grid-cols-3 gap-2 sm:gap-3">
+          <Card className="p-3 sm:p-4 text-center">
             <div className="text-2xl font-bold text-primary">
               {grouped.today.length}
             </div>
