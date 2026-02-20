@@ -80,8 +80,8 @@ export default function InstallerOrderDetail() {
   if (isLoading) {
     return (
       <InstallerLayout>
-        <div className="container max-w-2xl py-6">
-          <Skeleton className="mb-6 h-8 w-48" />
+        <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
+          <Skeleton className="mb-4 h-8 w-48" />
           <Card>
             <CardContent className="p-6">
               <Skeleton className="mb-4 h-6 w-32" />
@@ -97,8 +97,8 @@ export default function InstallerOrderDetail() {
   if (!order) {
     return (
       <InstallerLayout>
-        <div className="container max-w-2xl py-6">
-          <Card className="p-12 text-center">
+        <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
+          <Card className="p-8 sm:p-12 text-center">
             <h3 className="font-semibold">Order niet gevonden</h3>
             <p className="text-sm text-muted-foreground">
               Deze order is niet toegewezen aan jou
@@ -137,9 +137,9 @@ export default function InstallerOrderDetail() {
 
   return (
     <InstallerLayout>
-      <div className="container max-w-2xl py-6">
+      <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
         {/* Header */}
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-4 sm:mb-6 flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
@@ -184,16 +184,16 @@ export default function InstallerOrderDetail() {
         </Card>
 
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="info">Info</TabsTrigger>
-            <TabsTrigger value="docs">
+          <TabsList className="grid w-full grid-cols-4 h-auto">
+            <TabsTrigger value="info" className="text-xs sm:text-sm py-2.5">Info</TabsTrigger>
+            <TabsTrigger value="docs" className="text-xs sm:text-sm py-2.5">
               Docs ({visibleDocuments?.length || 0})
             </TabsTrigger>
-            <TabsTrigger value="checklist">
-              <ListChecks className="mr-1 h-3.5 w-3.5" />
+            <TabsTrigger value="checklist" className="text-xs sm:text-sm py-2.5">
+              <ListChecks className="mr-1 h-3.5 w-3.5 hidden sm:inline" />
               Checklist
             </TabsTrigger>
-            <TabsTrigger value="notes">
+            <TabsTrigger value="notes" className="text-xs sm:text-sm py-2.5">
               Notities ({installerNotes?.length || 0})
             </TabsTrigger>
           </TabsList>

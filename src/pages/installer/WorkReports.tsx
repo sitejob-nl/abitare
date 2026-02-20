@@ -10,10 +10,10 @@ export default function WorkReports() {
 
   return (
     <InstallerLayout>
-      <div className="container max-w-2xl py-6">
+      <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Mijn Werkbonnen</h1>
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold">Mijn Werkbonnen</h1>
           <p className="text-muted-foreground">
             Overzicht van al je werkbonnen
           </p>

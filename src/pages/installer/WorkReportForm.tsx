@@ -262,8 +262,8 @@ export default function WorkReportForm() {
   if (isLoading) {
     return (
       <InstallerLayout>
-        <div className="container max-w-2xl py-6">
-          <Skeleton className="mb-6 h-8 w-48" />
+        <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
+          <Skeleton className="mb-4 h-8 w-48" />
           <Card>
             <CardContent className="p-6">
               <Skeleton className="mb-4 h-6 w-32" />
@@ -279,8 +279,8 @@ export default function WorkReportForm() {
   if (!report) {
     return (
       <InstallerLayout>
-        <div className="container max-w-2xl py-6">
-          <Card className="p-12 text-center">
+        <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6 sm:py-6">
+          <Card className="p-8 sm:p-12 text-center">
             <h3 className="font-semibold">Werkbon niet gevonden</h3>
             <Button className="mt-4" onClick={() => navigate("/monteur/werkbonnen")}>
               Terug naar overzicht
@@ -298,9 +298,9 @@ export default function WorkReportForm() {
 
   return (
     <InstallerLayout>
-      <div className="container max-w-2xl py-6 pb-24">
+      <div className="mx-auto max-w-2xl px-4 py-4 pb-28 sm:px-6 sm:py-6">
         {/* Header */}
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-4 sm:mb-6 flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
@@ -324,15 +324,15 @@ export default function WorkReportForm() {
         </div>
 
         <Tabs defaultValue="details" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="photos">
+          <TabsList className="grid w-full grid-cols-4 h-auto">
+            <TabsTrigger value="details" className="text-xs sm:text-sm py-2.5">Details</TabsTrigger>
+            <TabsTrigger value="photos" className="text-xs sm:text-sm py-2.5">
               Foto's ({report.work_report_photos?.length || 0})
             </TabsTrigger>
-            <TabsTrigger value="tasks">
+            <TabsTrigger value="tasks" className="text-xs sm:text-sm py-2.5">
               Taken ({report.work_report_tasks?.length || 0})
             </TabsTrigger>
-            <TabsTrigger value="signature">Handtekening</TabsTrigger>
+            <TabsTrigger value="signature" className="text-xs sm:text-sm py-2.5">Handtekening</TabsTrigger>
           </TabsList>
 
           {/* Details Tab */}
@@ -546,8 +546,8 @@ export default function WorkReportForm() {
 
         {/* Fixed Bottom Actions */}
         {!isReadOnly && (
-          <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-4 lg:left-64">
-            <div className="container flex max-w-2xl gap-3">
+          <div className="fixed bottom-0 left-0 right-0 border-t bg-background p-3 sm:p-4 lg:left-64" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+            <div className="mx-auto flex max-w-2xl gap-2 sm:gap-3">
               <Button
                 variant="outline"
                 className="flex-1 min-h-[48px]"

@@ -167,7 +167,7 @@ export function PhotoUploader({
                   {!disabled && (
                     <button
                       onClick={() => onDelete(photo.id, photo.file_path)}
-                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+                      className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-2 sm:p-1.5 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100"
                     >
                       <X className="h-4 w-4 text-white" />
                     </button>

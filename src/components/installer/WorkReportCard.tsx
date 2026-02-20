@@ -44,7 +44,7 @@ export function WorkReportCard({ report }: WorkReportCardProps) {
 
   return (
     <Link to={`/monteur/werkbon/${report.id}`}>
-      <Card className="p-4 transition-all hover:bg-muted/50 hover:shadow-md active:scale-[0.99]">
+      <Card className="p-4 transition-all hover:bg-muted/50 hover:shadow-md active:scale-[0.98]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             {/* Header */}

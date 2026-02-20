@@ -31,7 +31,7 @@ export function InstallerLayout({ children }: InstallerLayoutProps) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Mobile Header */}
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-sidebar px-4 lg:hidden">
+      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b bg-sidebar px-4 lg:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <img src={logo} alt="Abitare" className="h-5" />
         <Button
           variant="ghost"
@@ -134,7 +134,7 @@ export function InstallerLayout({ children }: InstallerLayoutProps) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>{children}</main>
       </div>
     </div>
   );
