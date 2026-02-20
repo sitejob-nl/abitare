@@ -30,7 +30,7 @@ function useInstallationOrders(statusFilter: string | null) {
         .from("orders")
         .select(`
           id, order_number, expected_installation_date, actual_installation_date,
-          status, requires_elevator, installer_id,
+          status, requires_elevator, installer_id, forecast_week,
           customer:customers(id, first_name, last_name, company_name, city, delivery_floor)
         `)
         .in("status", ["montage_gepland", "gemonteerd", "geleverd"])
@@ -91,11 +91,21 @@ const Installation = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [weekFilter, setWeekFilter] = useState<string>("all");
 
   const { data: orders, isLoading } = useInstallationOrders(statusFilter);
 
-  // Filter by search client-side
+  // Get unique forecast weeks for filter
+  const forecastWeeks = [...new Set(
+    orders?.map(o => (o as any).forecast_week).filter(Boolean) || []
+  )].sort();
+
+  // Filter by search and week client-side
   const filteredOrders = orders?.filter((order) => {
+    // Week filter
+    if (weekFilter !== "all") {
+      if ((order as any).forecast_week !== weekFilter) return false;
+    }
     if (!searchQuery) return true;
     const searchLower = searchQuery.toLowerCase();
     const customer = order.customer as { first_name?: string | null; last_name?: string | null; company_name?: string | null; city?: string | null } | null;
@@ -129,6 +139,23 @@ const Installation = () => {
             </SelectContent>
           </Select>
         </div>
+
+        {forecastWeeks.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-muted-foreground hidden sm:inline">Week:</span>
+            <Select value={weekFilter} onValueChange={setWeekFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-[140px] text-[13px]">
+                <SelectValue placeholder="Alle weken" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle weken</SelectItem>
+                {forecastWeeks.map((w) => (
+                  <SelectItem key={w} value={w}>{w}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="relative sm:ml-auto w-full sm:max-w-[300px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -202,6 +229,11 @@ const Installation = () => {
                     {installer?.full_name && (
                       <div className="mt-1 text-xs text-muted-foreground">
                         Monteur: {installer.full_name}
+                      </div>
+                    )}
+                    {(order as any).forecast_week && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Prognose: {(order as any).forecast_week}
                       </div>
                     )}
                   </div>

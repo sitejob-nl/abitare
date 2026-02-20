@@ -1197,6 +1197,7 @@ export type Database = {
           exact_sales_order_number: string | null
           expected_delivery_date: string | null
           expected_installation_date: string | null
+          forecast_week: string | null
           id: string
           installation_city: string | null
           installation_postal_code: string | null
@@ -1253,6 +1254,7 @@ export type Database = {
           exact_sales_order_number?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
+          forecast_week?: string | null
           id?: string
           installation_city?: string | null
           installation_postal_code?: string | null
@@ -1309,6 +1311,7 @@ export type Database = {
           exact_sales_order_number?: string | null
           expected_delivery_date?: string | null
           expected_installation_date?: string | null
+          forecast_week?: string | null
           id?: string
           installation_city?: string | null
           installation_postal_code?: string | null

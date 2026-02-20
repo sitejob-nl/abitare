@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { User, MapPin, Calendar, Phone, Mail, Building2, Pencil } from "lucide-react";
-import { format } from "date-fns";
+import { format, getISOWeek, getISOWeekYear } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Popover,
@@ -38,8 +39,10 @@ interface OrderInfoCardProps {
   orderDate: string | null;
   expectedDeliveryDate: string | null;
   expectedInstallationDate: string | null;
+  forecastWeek?: string | null;
   onUpdateDeliveryDate?: (date: Date | null) => void;
   onUpdateInstallationDate?: (date: Date | null) => void;
+  onUpdateForecastWeek?: (week: string | null) => void;
   isUpdating?: boolean;
 }
 
@@ -135,14 +138,74 @@ function EditableDate({ label, value, onUpdate, isUpdating }: EditableDateProps)
   );
 }
 
+function EditableForecastWeek({ value, onUpdate, isUpdating }: { value?: string | null; onUpdate: (week: string | null) => void; isUpdating?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState(value || "");
+
+  const now = new Date();
+  const currentWeek = `${getISOWeekYear(now)}-W${String(getISOWeek(now)).padStart(2, "0")}`;
+
+  const handleSave = () => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      onUpdate(null);
+    } else if (/^\d{4}-W\d{2}$/.test(trimmed)) {
+      onUpdate(trimmed);
+    }
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground group">
+      <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+      <div className="flex-1">
+        <span className="text-xs text-muted-foreground/70">Prognose: </span>
+        <span>{value || "-"}</span>
+      </div>
+      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setInput(value || currentWeek); }}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+            disabled={isUpdating}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-3" align="end">
+          <p className="text-xs text-muted-foreground mb-2">Weeknummer (bijv. {currentWeek})</p>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={currentWeek}
+            className="h-8 text-sm mb-2"
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave}>Opslaan</Button>
+            {value && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => { onUpdate(null); setOpen(false); }}>
+                Wis
+              </Button>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export function OrderInfoCard({
   customer,
   division,
   orderDate,
   expectedDeliveryDate,
   expectedInstallationDate,
+  forecastWeek,
   onUpdateDeliveryDate,
   onUpdateInstallationDate,
+  onUpdateForecastWeek,
   isUpdating,
 }: OrderInfoCardProps) {
   return (
@@ -244,6 +307,14 @@ export function OrderInfoCard({
                 <span>{formatDate(expectedInstallationDate)}</span>
               </div>
             </div>
+          )}
+
+          {onUpdateForecastWeek && (
+            <EditableForecastWeek
+              value={forecastWeek}
+              onUpdate={onUpdateForecastWeek}
+              isUpdating={isUpdating}
+            />
           )}
         </div>
       </div>

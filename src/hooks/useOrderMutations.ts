@@ -33,6 +33,7 @@ interface UpdateOrderDatesParams {
   orderId: string;
   expectedDeliveryDate?: string | null;
   expectedInstallationDate?: string | null;
+  forecastWeek?: string | null;
 }
 
 interface UpdateOrderAddressesParams {
@@ -257,7 +258,7 @@ export function useUpdateOrderDates() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ orderId, expectedDeliveryDate, expectedInstallationDate }: UpdateOrderDatesParams) => {
+    mutationFn: async ({ orderId, expectedDeliveryDate, expectedInstallationDate, forecastWeek }: UpdateOrderDatesParams) => {
       const updates: Record<string, string | null> = {
         updated_at: new Date().toISOString(),
       };
@@ -268,6 +269,10 @@ export function useUpdateOrderDates() {
 
       if (expectedInstallationDate !== undefined) {
         updates.expected_installation_date = expectedInstallationDate;
+      }
+
+      if (forecastWeek !== undefined) {
+        updates.forecast_week = forecastWeek;
       }
 
       const { error } = await supabase
