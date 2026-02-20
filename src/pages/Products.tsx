@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,75 @@ type SortDirection = "asc" | "desc";
 
 const PAGE_SIZE = 50;
 
+// SortIcon defined outside the component to avoid ref warnings
+function SortIcon({ field, sortField, sortDirection }: { field: SortField; sortField: SortField; sortDirection: SortDirection }) {
+  if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+  return sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+}
+
+// Memoized table row to prevent unnecessary re-renders
+interface ProductRowProps {
+  product: any;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+  onNavigate: (id: string) => void;
+}
+
+const ProductRow = memo(function ProductRow({ product, isSelected, onToggle, onNavigate }: ProductRowProps) {
+  const supplier = product.supplier as { name?: string } | null;
+  const category = product.category as { name?: string } | null;
+
+  const handleRowClick = useCallback((e: React.MouseEvent<HTMLTableRowElement>) => {
+    // Don't navigate if clicking checkbox area
+    if ((e.target as HTMLElement).closest('[role="checkbox"]') || (e.target as HTMLElement).closest('td:first-child')) return;
+    onNavigate(product.id);
+  }, [product.id, onNavigate]);
+
+  return (
+    <tr
+      className={`cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30 ${
+        isSelected ? "bg-primary/5" : ""
+      }`}
+      onClick={handleRowClick}
+    >
+      <td className="px-3 py-4" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggle(product.id)}
+        />
+      </td>
+      <td className="px-5 py-4">
+        <span className="font-mono text-sm text-foreground">
+          {product.article_code}
+        </span>
+      </td>
+      <td className="px-5 py-4">
+        <span className="text-sm font-medium text-foreground">
+          {product.name}
+        </span>
+      </td>
+      <td className="px-5 py-4 text-sm text-muted-foreground">
+        {supplier?.name || "-"}
+      </td>
+      <td className="px-5 py-4 text-sm text-muted-foreground">
+        {category?.name || "-"}
+      </td>
+      <td className="px-5 py-4 text-sm font-medium text-foreground">
+        {product.base_price != null ? formatCurrency(product.base_price) : (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
+          </span>
+        )}
+      </td>
+      <td className="px-5 py-4 text-sm text-muted-foreground">
+        {product.cost_price != null ? formatCurrency(product.cost_price) : (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
+        )}
+      </td>
+    </tr>
+  );
+}, (prev, next) => prev.product.id === next.product.id && prev.isSelected === next.isSelected);
+
 const Products = () => {
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -45,7 +114,7 @@ const Products = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-      setPage(1); // reset to page 1 on search
+      setPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -64,14 +133,9 @@ const Products = () => {
     }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
-    return sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
-  };
-
   const { data: suppliers, isLoading: suppliersLoading } = useSuppliers();
   const { data: categories, isLoading: categoriesLoading } = useProductCategories();
-  const { data: result, isLoading: productsLoading } = useProducts({
+  const { data: result, isLoading: productsLoading, isFetching } = useProducts({
     supplierId: supplierFilter === "all" ? null : supplierFilter,
     categoryId: categoryFilter === "all" ? null : categoryFilter,
     search: debouncedSearch || undefined,
@@ -88,6 +152,8 @@ const Products = () => {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const isLoading = productsLoading || suppliersLoading || categoriesLoading;
+  // Show subtle indicator when fetching new data but we already have previous data
+  const isRefetching = isFetching && !productsLoading;
 
   const allIds = useMemo(() => products?.map((p) => p.id) || [], [products]);
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
@@ -100,14 +166,18 @@ const Products = () => {
     }
   };
 
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
+
+  const handleNavigate = useCallback((id: string) => {
+    navigate(`/products/${id}`);
+  }, [navigate]);
 
   return (
     <AppLayout title="Producten" breadcrumb="Producten">
@@ -209,7 +279,13 @@ const Products = () => {
       ) : products && products.length > 0 ? (
         <>
           {/* Desktop Table */}
-          <div className="hidden md:block animate-fade-in overflow-hidden rounded-xl border border-border bg-card">
+          <div className={`hidden md:block animate-fade-in overflow-hidden rounded-xl border border-border bg-card transition-opacity duration-200 ${isRefetching ? "opacity-60" : ""}`}>
+            {isRefetching && (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/50 border-b border-border text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Vernieuwen...
+              </div>
+            )}
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -225,7 +301,7 @@ const Products = () => {
                     onClick={() => toggleSort("article_code")}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Artikelcode <SortIcon field="article_code" />
+                      Artikelcode <SortIcon field="article_code" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </th>
                   <th
@@ -233,7 +309,7 @@ const Products = () => {
                     onClick={() => toggleSort("name")}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Naam <SortIcon field="name" />
+                      Naam <SortIcon field="name" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </th>
                   <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -247,7 +323,7 @@ const Products = () => {
                     onClick={() => toggleSort("base_price")}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Verkoopprijs <SortIcon field="base_price" />
+                      Verkoopprijs <SortIcon field="base_price" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </th>
                   <th
@@ -255,67 +331,27 @@ const Products = () => {
                     onClick={() => toggleSort("cost_price")}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Inkoopprijs <SortIcon field="cost_price" />
+                      Inkoopprijs <SortIcon field="cost_price" sortField={sortField} sortDirection={sortDirection} />
                     </span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {products.map((product) => {
-                  const supplier = product.supplier as { name?: string } | null;
-                  const category = product.category as { name?: string } | null;
-                  const isSelected = selectedIds.has(product.id);
-
-                  return (
-                    <tr
-                      key={product.id}
-                      className={`cursor-pointer border-b border-border-light last:border-b-0 transition-colors hover:bg-muted/30 ${
-                        isSelected ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <td className="px-3 py-4" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleOne(product.id)}
-                        />
-                      </td>
-                      <td className="px-5 py-4" onClick={() => navigate(`/products/${product.id}`)}>
-                        <span className="font-mono text-sm text-foreground">
-                          {product.article_code}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4" onClick={() => navigate(`/products/${product.id}`)}>
-                        <span className="text-sm font-medium text-foreground">
-                          {product.name}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-sm text-muted-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {supplier?.name || "-"}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-muted-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {category?.name || "-"}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-medium text-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {product.base_price != null ? formatCurrency(product.base_price) : (
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-muted-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {product.cost_price != null ? formatCurrency(product.cost_price) : (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {products.map((product) => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    isSelected={selectedIds.has(product.id)}
+                    onToggle={toggleOne}
+                    onNavigate={handleNavigate}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Cards */}
-          <div className="md:hidden space-y-3">
+          <div className={`md:hidden space-y-3 transition-opacity duration-200 ${isRefetching ? "opacity-60" : ""}`}>
             {products.map((product) => {
               const supplier = product.supplier as { name?: string } | null;
               const category = product.category as { name?: string } | null;

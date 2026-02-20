@@ -81,36 +81,23 @@ export function BulkActionsBar({
   const handlePriceChange = async () => {
     const val = parseFloat(priceValue);
     if (isNaN(val)) return;
-    // For percentage, we need to update each product individually via RPC or do it client-side
-    // For simplicity, we'll handle fixed price directly
     if (priceMode === "fixed") {
       await bulkUpdate.mutateAsync({
         ids: selectedIds,
         updates: { base_price: val },
       });
     } else {
-      const { data: prods } = await supabase
-        .from("products")
-        .select("id, base_price")
-        .in("id", selectedIds);
-
-      if (prods) {
-        const factor = 1 + val / 100;
-        for (const p of prods) {
-          if (p.base_price) {
-            await supabase
-              .from("products")
-              .update({ base_price: Math.round(p.base_price * factor * 100) / 100 })
-              .eq("id", p.id);
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ["products"] });
-      }
+      // Single RPC call instead of N individual updates
+      const factor = 1 + val / 100;
+      const { error } = await supabase.rpc("bulk_adjust_price", {
+        p_ids: selectedIds,
+        p_factor: factor,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     }
     toast({ title: `${count} producten bijgewerkt`, description: "Prijs aangepast." });
     closeDialog();
-    // Force refresh
-    bulkUpdate.reset();
   };
 
   const closeDialog = () => {
