@@ -21,6 +21,7 @@ interface UseProductsOptions {
   showInactive?: boolean;
   page?: number;
   pageSize?: number;
+  priceGroupId?: string | null;
 }
 
 function applyFilters(
@@ -56,13 +57,26 @@ export function useProducts(options: UseProductsOptions = {}) {
     sortField = "name", sortDirection = "asc",
     priceMin, priceMax, showInactive = false,
     page = 1, pageSize = 50,
+    priceGroupId,
   } = options;
 
   const filterOpts = { supplierId, categoryId, search, priceMin, priceMax, showInactive };
 
   return useQuery({
-    queryKey: ["products", { ...filterOpts, limit, sortField, sortDirection, page, pageSize }],
+    queryKey: ["products", { ...filterOpts, limit, sortField, sortDirection, page, pageSize, priceGroupId }],
     queryFn: async () => {
+      // Step 1: If priceGroupId is set, fetch valid product IDs first
+      let priceGroupProductIds: string[] | null = null;
+      if (priceGroupId) {
+        const { data: ids, error: rpcError } = await supabase
+          .rpc("get_products_by_price_group", { p_price_group_id: priceGroupId });
+        if (rpcError) throw rpcError;
+        priceGroupProductIds = (ids as string[]) ?? [];
+        if (priceGroupProductIds.length === 0) {
+          return { data: [], count: 0, page, pageSize };
+        }
+      }
+
       let query = supabase
         .from("products")
         .select(`
@@ -73,6 +87,11 @@ export function useProducts(options: UseProductsOptions = {}) {
         .order(sortField, { ascending: sortDirection === "asc" });
 
       query = applyFilters(query, filterOpts);
+
+      // Step 2: Filter to only products with a price in this price group
+      if (priceGroupProductIds) {
+        query = query.in("id", priceGroupProductIds);
+      }
 
       if (limit) {
         query = query.limit(limit);

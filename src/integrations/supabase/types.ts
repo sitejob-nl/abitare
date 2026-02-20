@@ -4550,6 +4550,10 @@ export type Database = {
         }
         Returns: number
       }
+      get_products_by_price_group: {
+        Args: { p_price_group_id: string }
+        Returns: string[]
+      }
       get_related_products: {
         Args: { _product_id: string }
         Returns: {
