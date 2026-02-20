@@ -801,16 +801,20 @@ const ProductDetail = () => {
                 <CardTitle className="text-base">Prijsgroep-prijzen</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {prices.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground truncate mr-2">
-                      {p.range?.code || p.range?.name || "–"}
-                    </span>
-                    <span className="font-medium text-foreground whitespace-nowrap">
-                      {formatCurrency(p.price)}
-                    </span>
-                  </div>
-                ))}
+                {prices.map((p: any) => {
+                  const label = p.range?.code || p.range?.name || p.price_group?.code || p.price_group?.name || "–";
+                  const variant2 = p.variant_2_name || p.variant_2_code;
+                  return (
+                    <div key={p.id} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground truncate mr-2">
+                        {label}{variant2 ? ` · ${variant2}` : ""}
+                      </span>
+                      <span className="font-medium text-foreground whitespace-nowrap">
+                        {formatCurrency(p.price)}
+                      </span>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}

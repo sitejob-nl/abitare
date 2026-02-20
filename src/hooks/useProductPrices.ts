@@ -19,18 +19,24 @@ export interface ProductPriceWithRelations extends ProductPrice {
     name: string | null;
     price_group: number | null;
   } | null;
+  price_group?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
 }
 
-export function useProductPrices(productId?: string, rangeId?: string) {
+export function useProductPrices(productId?: string, rangeId?: string, priceGroupId?: string) {
   return useQuery({
-    queryKey: ["product-prices", productId, rangeId],
+    queryKey: ["product-prices", productId, rangeId, priceGroupId],
     queryFn: async () => {
       let query = supabase
         .from("product_prices")
         .select(`
           *,
           product:products(id, article_code, name, base_price),
-          range:product_ranges(id, code, name, price_group)
+          range:product_ranges(id, code, name, price_group),
+          price_group:price_groups(id, code, name)
         `)
         .order("created_at", { ascending: false });
 
@@ -39,6 +45,9 @@ export function useProductPrices(productId?: string, rangeId?: string) {
       }
       if (rangeId) {
         query = query.eq("range_id", rangeId);
+      }
+      if (priceGroupId) {
+        query = query.eq("price_group_id", priceGroupId);
       }
 
       const { data, error } = await query;

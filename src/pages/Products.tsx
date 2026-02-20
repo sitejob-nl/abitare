@@ -296,10 +296,16 @@ const Products = () => {
                         {category?.name || "-"}
                       </td>
                       <td className="px-5 py-4 text-sm font-medium text-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {formatCurrency(product.base_price)}
+                        {product.base_price != null ? formatCurrency(product.base_price) : (
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-sm text-muted-foreground" onClick={() => navigate(`/products/${product.id}`)}>
-                        {formatCurrency(product.cost_price)}
+                        {product.cost_price != null ? formatCurrency(product.cost_price) : (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">per PG</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -342,7 +348,7 @@ const Products = () => {
                           </div>
                         </div>
                         <span className="text-sm font-semibold text-foreground">
-                          {formatCurrency(product.base_price)}
+                          {product.base_price != null ? formatCurrency(product.base_price) : <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">per PG</span>}
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-light">
@@ -350,7 +356,7 @@ const Products = () => {
                           {[supplier?.name, category?.name].filter(Boolean).join(" • ") || "-"}
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          Inkoop: {formatCurrency(product.cost_price)}
+                          Inkoop: {product.cost_price != null ? formatCurrency(product.cost_price) : "per PG"}
                         </span>
                       </div>
                     </div>
