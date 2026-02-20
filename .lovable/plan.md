@@ -1,64 +1,33 @@
 
-# Upgrade STOSA Import naar v5
+# Fix STOSA Import - Twee problemen oplossen
 
-## Overzicht
-Het bestaande STOSA import systeem (v3) wordt geupgraded naar v5 met extra intelligentie: automatische categorie-detectie uit SKU, prijseenheid-detectie, kortingsgroepen en keukenconfiguratie-helpers.
+## Probleem 1: Prijzen worden als tekst verstuurd
+De `Prezzo Listino` kolom in het Excel bestand bevat waarden als `"819.00 €"` (tekst met euroteken). De edge function verwacht een getal maar ontvangt een string. Er is geen prijsparsing in de edge function -- de waarde wordt direct vergeleken met `<= 0` en daarna opgeslagen.
 
-## Wat verandert er
+**Oplossing**: Prijsparsing toevoegen in de edge function (`stosa-import/index.ts`). Een `parsePrice()` functie die het euroteken verwijdert en de string naar een getal converteert (vergelijkbaar met de bestaande `parsePrice` in `useProductImport.ts`).
 
-### 1. Database Migratie
-Nieuwe tabellen en kolommen toevoegen:
+## Probleem 2: Payload te groot
+Het Excel bestand bevat 8.300+ rijen. Als JSON is dit ca. 2-3MB, wat de Supabase edge function body limit (standaard ~1MB) overschrijdt. Hierdoor faalt het request voordat de function überhaupt draait.
 
-**Nieuwe tabel: `discount_groups`**
-- supplier_id, code (GR1/GR2/GR3), name, default_discount_percent
+**Oplossing**: De rijen opsplitsen in chunks van maximaal 2.000 rijen per request in de frontend (`StosaImportDialog.tsx`). De edge function verwerkt elke chunk apart. De frontend stuurt meerdere requests achter elkaar en combineert de resultaten.
 
-**Nieuwe kolommen op `products`**
-- `pricing_unit` (enum: STUK, ML, M2, SET) - prijseenheid
-- `discount_group_id` (FK naar discount_groups)
-- `type_code` (VARCHAR) - kasttype uit SKU positie 3-4 (bijv. BB, PR, CD)
-- `type_name_nl` (VARCHAR) - Nederlandse naam (bijv. "Onderkast met deur")
-- `subcategory` (VARCHAR)
-- `kitchen_group` (VARCHAR) - groepering voor keukenconfiguratie
+## Technische wijzigingen
 
-**Nieuwe kolom op `product_categories`**
-- `kitchen_group` (VARCHAR) - keukenconfiguratie groep
+### 1. Edge function: `supabase/functions/stosa-import/index.ts`
+- `parsePrice()` helper functie toevoegen die strings als `"819.00 €"`, `"1.275,00"`, `"1,200.00 €"` correct naar getallen converteert
+- Prijsparsing toepassen op regel 452: `const price = parsePrice(row['Prezzo Listino'])`
+- Prijsparsing ook toepassen op dimensie-velden (`Dimensione 1/2/3`) voor het geval die ook als tekst binnenkomen
 
-**Nieuwe kolom op `import_logs`**
-- `metadata` (JSONB) - extra statistieken per import
+### 2. Frontend: `src/components/products/StosaImportDialog.tsx`
+- Chunking logica toevoegen aan `handleImport()`: splits `parseResult.rows` in batches van 2.000
+- Per batch een apart request naar de edge function sturen
+- Progress bar per batch bijwerken
+- Stats van alle batches combineren tot een totaaloverzicht
+- Foutafhandeling per batch (bij fout in 1 batch, ga door met de rest)
 
-**Nieuwe views**
-- `products_full` - producten met categorie, kortingsgroep, leverancier
-- `products_by_width` - producten per breedte (voor keukenconfiguratie)
-- `kitchen_config_options` - overzicht alle keukenkast opties
+### Bestanden die wijzigen
 
-**Nieuwe functies**
-- `get_matching_products_by_width()` - zoek producten op breedte en keukengroep
-- `calculate_product_price()` - berekent prijs o.b.v. eenheid (stuk/ML/M2/set)
-- `get_related_products()` - vind gerelateerde producten (zelfde breedte/groep)
-
-### 2. Edge Function Update
-`supabase/functions/stosa-import/index.ts` vervangen door v5 versie met:
-- SKU type code mapping (BB=onderkast, PR=bovenkast, CD=hoge kast, etc.)
-- SKU prefix mapping (7VJ=spoelbak, 5FM=gola, etc.)
-- Automatische prijseenheid detectie uit beschrijving (ML, M2, SET)
-- Kortingsgroep tracking (GR1/GR2/GR3 uit "Cat. molt." kolom)
-- Breedte extractie uit SKU
-- Automatische categorie-aanmaak met parent/child relaties
-- Uitgebreide import statistieken (per categorie, eenheid, keukengroep)
-
-### 3. Frontend
-De `StosaImportDialog.tsx` en `PriceGroupSelector.tsx` componenten zijn al up-to-date en hoeven niet te wijzigen.
-
-### 4. RLS Policies
-RLS-policies toevoegen voor de nieuwe `discount_groups` tabel (lezen voor iedereen, beheer voor admin/manager).
-
-## Bestanden
-
-| Bestand | Actie |
-|---------|-------|
-| `supabase/migrations/[timestamp]_stosa_v5.sql` | Nieuw |
-| `supabase/functions/stosa-import/index.ts` | Vervangen door v5 |
-
-## Volgorde
-1. Database migratie uitvoeren (nieuwe tabel, kolommen, views, functies)
-2. Edge function vervangen en deployen
+| Bestand | Wijziging |
+|---------|-----------|
+| `supabase/functions/stosa-import/index.ts` | `parsePrice()` toevoegen + toepassen op prijzen en dimensies |
+| `src/components/products/StosaImportDialog.tsx` | Chunking van rows in batches van 2.000 per request |
