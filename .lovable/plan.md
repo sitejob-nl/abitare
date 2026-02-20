@@ -1,63 +1,75 @@
 
-# Productfiltering op sectie-samenstelling
 
-## Probleem
-Bij het toevoegen van producten aan een STOSA-sectie worden nu alle ~13.200 STOSA-producten getoond, terwijl slechts ~600 producten daadwerkelijk een prijs hebben in de geselecteerde prijsgroep. Producten zonder prijs in die prijsgroep zijn niet relevant en maken de lijst onoverzichtelijk.
+# Productpagina optimaliseren
 
-## Oplossing
+## Gevonden problemen
 
-### 1. `useProducts` hook uitbreiden met `priceGroupId` filter
+1. **React warning**: `SortIcon` component kan geen ref ontvangen -- geeft console warnings
+2. **Laad-flicker bij paginatie**: Bij elke pagina-wissel verdwijnt de tabel en verschijnt een loader, doordat React Query geen `placeholderData` gebruikt
+3. **Onnodige re-renders**: Tabelrijen worden bij elke state-wijziging (checkbox, hover) volledig opnieuw gerenderd -- bij 50 rijen niet dramatisch, maar wel onnodig
+4. **Bulk prijs-aanpassing**: De percentage-modus doet N individuele database-calls in een for-loop (1 per product) -- bij 50 geselecteerde producten zijn dat 50 requests
 
-Een nieuwe optionele parameter `priceGroupId` toevoegen aan `UseProductsOptions`. Wanneer deze is gezet, wordt een inner join gedaan via een subquery: alleen producten tonen die een rij hebben in `product_prices` voor die `price_group_id`.
+## Wijzigingen
 
-Technisch wordt dit opgelost met een RPC-functie (database functie) omdat Supabase's JS client geen subquery-filtering ondersteunt op een gerelateerde tabel. De functie retourneert de `product_id`'s voor een gegeven `price_group_id`, en de hook gebruikt `.in("id", ids)` om te filteren.
+### 1. `src/pages/Products.tsx` -- Performance & UX
 
-**Alternatief (eenvoudiger):** Een twee-staps aanpak in de hook zelf:
-1. Eerst de `product_id`'s ophalen uit `product_prices` voor de `price_group_id`
-2. Dan de producten query filteren met `.in("id", productIds)`
+**SortIcon ref-warning fixen**: De `SortIcon` component wordt buiten de hoofdcomponent gedefinieerd als een standalone functie (niet genest in `Products`), zodat React geen ref-warning meer geeft.
 
-### 2. Database functie aanmaken
+**placeholderData toevoegen**: In de `useProducts` aanroep `keepPreviousData` inschakelen, zodat bij paginatie de vorige data zichtbaar blijft terwijl de nieuwe wordt geladen. Dit voorkomt de laad-flicker. Een subtiele opacity-indicator toont dat er nieuwe data wordt opgehaald.
 
-```sql
-CREATE FUNCTION get_products_by_price_group(p_price_group_id UUID)
-RETURNS SETOF UUID AS $$
-  SELECT DISTINCT product_id 
-  FROM product_prices 
-  WHERE price_group_id = p_price_group_id
-$$ LANGUAGE sql STABLE;
-```
+**Tabelrijen memoizen**: De tabelrij-rendering extraheren naar een `React.memo`-component `ProductRow`, zodat alleen de gewijzigde rij opnieuw rendert bij checkbox-toggle.
 
-Dit is performanter dan een client-side twee-staps query en werkt goed met de bestaande paginering.
+**Navigatie met onClick optimaliseren**: In plaats van per-cel `onClick` handlers, wordt er een enkele `onClick` op de `<tr>` gezet met een check of de click niet op de checkbox was.
 
-### 3. `useProducts` hook aanpassen
+### 2. `src/hooks/useProducts.ts` -- placeholderData ondersteuning
 
-De `applyFilters` functie wordt uitgebreid: als `priceGroupId` is meegegeven, wordt eerst de database functie aangeroepen om de relevante product-IDs op te halen, waarna de query met `.in("id", ids)` wordt gefilterd.
+`placeholderData: keepPreviousData` toevoegen aan de query opties, zodat bij filter/pagina-wisselingen de vorige resultaten zichtbaar blijven.
 
-Nieuwe parameter in `UseProductsOptions`:
+### 3. `src/components/products/BulkActionsBar.tsx` -- Batch prijs-update
+
+De percentage prijs-aanpassing omschrijven van N individuele updates naar 1 enkele database-call via een `.upsert()` of door de berekening server-side te doen met een `UPDATE ... SET base_price = base_price * factor WHERE id IN (...)` via een RPC-functie.
+
+Eenvoudigste aanpak: een batch-update query aanmaken als database functie `bulk_adjust_price(product_ids UUID[], factor NUMERIC)`.
+
+## Technische details
+
+### ProductRow component (nieuw, in Products.tsx)
+
 ```text
-priceGroupId?: string | null
+React.memo(ProductRow) met props:
+- product, isSelected, onToggle, onNavigate
+- Vergelijkt alleen product.id en isSelected voor re-render
 ```
 
-### 4. `AddProductDialog` aanpassen
+### useProducts aanpassing
 
-De `sectionPriceGroupId` prop (die al bestaat) wordt doorgegeven als `priceGroupId` aan de `useProducts` hook. Dit zorgt ervoor dat de productlijst automatisch wordt gefilterd op producten die een prijs hebben in de prijsgroep van de sectie.
+```text
+placeholderData: keepPreviousData
+-- importeren uit @tanstack/react-query
+```
 
-De filtering wordt alleen toegepast als `showAllSuppliers` uit staat (standaard). Bij "Toon alle leveranciers" wordt de prijsgroep-filter uitgeschakeld.
+### Laad-indicator bij paginatie
 
-### 5. Visuele feedback
+In plaats van de volledige loader tonen, wordt bij `isFetching && !isLoading` (data is al beschikbaar maar wordt ververst) een subtiele opacity-verlaging op de tabel toegepast.
 
-In de productkiezer wordt naast elke product de prijs uit de prijsgroep getoond (in plaats van de base_price), zodat de gebruiker direct ziet welke prijs wordt gehanteerd.
+### Database functie voor bulk prijs-update
 
-## Impact op bestaande flow
+```text
+CREATE FUNCTION bulk_adjust_price(p_ids UUID[], p_factor NUMERIC)
+RETURNS void AS $$
+  UPDATE products SET base_price = ROUND(base_price * p_factor, 2)
+  WHERE id = ANY(p_ids) AND base_price IS NOT NULL
+$$ LANGUAGE sql;
+```
 
-- Secties zonder `price_group_id` (bijv. Miele, Siemens) werken ongewijzigd -- de nieuwe filter wordt simpelweg overgeslagen
-- De "Toon alle leveranciers" checkbox schakelt ook de prijsgroep-filter uit
-- Zoekfunctionaliteit blijft werken binnen de gefilterde set
+Dit vervangt de N individuele calls door 1 enkele database-aanroep.
 
-## Samenvatting wijzigingen
+## Samenvatting
 
 | Bestand | Wijziging |
 |---------|-----------|
-| Database migratie | Nieuwe functie `get_products_by_price_group` |
-| `src/hooks/useProducts.ts` | Nieuwe parameter `priceGroupId` met twee-staps filtering |
-| `src/components/quotes/AddProductDialog.tsx` | `sectionPriceGroupId` doorgeven aan `useProducts` |
+| `src/pages/Products.tsx` | SortIcon fix, ProductRow memo, placeholderData, betere laad-indicator |
+| `src/hooks/useProducts.ts` | `placeholderData: keepPreviousData` toevoegen |
+| `src/components/products/BulkActionsBar.tsx` | Batch prijs-update via RPC i.p.v. N losse calls |
+| Database migratie | `bulk_adjust_price` functie |
+
