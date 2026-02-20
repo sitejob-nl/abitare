@@ -101,6 +101,7 @@ export function AddProductDialog({
   const { data: productsResult, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
     supplierId: showAllSuppliers ? undefined : (sectionSupplierId || undefined),
+    priceGroupId: showAllSuppliers ? undefined : (sectionPriceGroupId || undefined),
     enabled: open,
     pageSize: 100,
   });
