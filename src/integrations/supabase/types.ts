@@ -356,6 +356,44 @@ export type Database = {
           },
         ]
       }
+      discount_groups: {
+        Row: {
+          code: string
+          created_at: string | null
+          default_discount_percent: number | null
+          id: string
+          name: string
+          supplier_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          default_discount_percent?: number | null
+          id?: string
+          name: string
+          supplier_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          default_discount_percent?: number | null
+          id?: string
+          name?: string
+          supplier_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_groups_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       divisions: {
         Row: {
           address: string | null
@@ -508,6 +546,7 @@ export type Database = {
           id: string
           imported_by: string | null
           inserted: number | null
+          metadata: Json | null
           skipped: number | null
           source: string
           supplier_id: string | null
@@ -523,6 +562,7 @@ export type Database = {
           id?: string
           imported_by?: string | null
           inserted?: number | null
+          metadata?: Json | null
           skipped?: number | null
           source?: string
           supplier_id?: string | null
@@ -538,6 +578,7 @@ export type Database = {
           id?: string
           imported_by?: string | null
           inserted?: number | null
+          metadata?: Json | null
           skipped?: number | null
           source?: string
           supplier_id?: string | null
@@ -852,6 +893,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
             referencedColumns: ["id"]
           },
           {
@@ -1378,6 +1426,13 @@ export type Database = {
             foreignKeyName: "pims_image_queue_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pims_image_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
@@ -1559,6 +1614,7 @@ export type Database = {
           code: string
           id: string
           is_active: boolean | null
+          kitchen_group: string | null
           name: string
           parent_id: string | null
           sort_order: number | null
@@ -1568,6 +1624,7 @@ export type Database = {
           code: string
           id?: string
           is_active?: boolean | null
+          kitchen_group?: string | null
           name: string
           parent_id?: string | null
           sort_order?: number | null
@@ -1577,6 +1634,7 @@ export type Database = {
           code?: string
           id?: string
           is_active?: boolean | null
+          kitchen_group?: string | null
           name?: string
           parent_id?: string | null
           sort_order?: number | null
@@ -1683,6 +1741,13 @@ export type Database = {
             foreignKeyName: "product_images_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
@@ -1745,6 +1810,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
             referencedColumns: ["id"]
           },
           {
@@ -1835,6 +1907,7 @@ export type Database = {
           depth_open_door_mm: number | null
           description: string | null
           discount_group: string | null
+          discount_group_id: string | null
           ean_code: string | null
           energy_class: string | null
           energy_consumption_kwh: number | null
@@ -1843,6 +1916,7 @@ export type Database = {
           image_url: string | null
           installation_type: string | null
           is_active: boolean | null
+          kitchen_group: string | null
           manufacturer_product_id: string | null
           name: string
           niche_depth_mm: number | null
@@ -1854,13 +1928,17 @@ export type Database = {
           noise_db: number | null
           norm_hours: number | null
           pims_last_synced: string | null
+          pricing_unit: Database["public"]["Enums"]["pricing_unit"] | null
           product_family: string | null
           product_series: string | null
           product_status: string | null
           retail_price: number | null
           sku: string | null
           specifications: Json | null
+          subcategory: string | null
           supplier_id: string | null
+          type_code: string | null
+          type_name_nl: string | null
           unit: string | null
           updated_at: string | null
           user_override: Json | null
@@ -1889,6 +1967,7 @@ export type Database = {
           depth_open_door_mm?: number | null
           description?: string | null
           discount_group?: string | null
+          discount_group_id?: string | null
           ean_code?: string | null
           energy_class?: string | null
           energy_consumption_kwh?: number | null
@@ -1897,6 +1976,7 @@ export type Database = {
           image_url?: string | null
           installation_type?: string | null
           is_active?: boolean | null
+          kitchen_group?: string | null
           manufacturer_product_id?: string | null
           name: string
           niche_depth_mm?: number | null
@@ -1908,13 +1988,17 @@ export type Database = {
           noise_db?: number | null
           norm_hours?: number | null
           pims_last_synced?: string | null
+          pricing_unit?: Database["public"]["Enums"]["pricing_unit"] | null
           product_family?: string | null
           product_series?: string | null
           product_status?: string | null
           retail_price?: number | null
           sku?: string | null
           specifications?: Json | null
+          subcategory?: string | null
           supplier_id?: string | null
+          type_code?: string | null
+          type_name_nl?: string | null
           unit?: string | null
           updated_at?: string | null
           user_override?: Json | null
@@ -1943,6 +2027,7 @@ export type Database = {
           depth_open_door_mm?: number | null
           description?: string | null
           discount_group?: string | null
+          discount_group_id?: string | null
           ean_code?: string | null
           energy_class?: string | null
           energy_consumption_kwh?: number | null
@@ -1951,6 +2036,7 @@ export type Database = {
           image_url?: string | null
           installation_type?: string | null
           is_active?: boolean | null
+          kitchen_group?: string | null
           manufacturer_product_id?: string | null
           name?: string
           niche_depth_mm?: number | null
@@ -1962,13 +2048,17 @@ export type Database = {
           noise_db?: number | null
           norm_hours?: number | null
           pims_last_synced?: string | null
+          pricing_unit?: Database["public"]["Enums"]["pricing_unit"] | null
           product_family?: string | null
           product_series?: string | null
           product_status?: string | null
           retail_price?: number | null
           sku?: string | null
           specifications?: Json | null
+          subcategory?: string | null
           supplier_id?: string | null
+          type_code?: string | null
+          type_name_nl?: string | null
           unit?: string | null
           updated_at?: string | null
           user_override?: Json | null
@@ -1985,6 +2075,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_discount_group_id_fkey"
+            columns: ["discount_group_id"]
+            isOneToOne: false
+            referencedRelation: "discount_groups"
             referencedColumns: ["id"]
           },
           {
@@ -2180,6 +2277,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
             referencedColumns: ["id"]
           },
           {
@@ -3236,6 +3340,13 @@ export type Database = {
             foreignKeyName: "supplier_order_lines_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
@@ -3880,6 +3991,13 @@ export type Database = {
             foreignKeyName: "order_lines_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
@@ -3996,6 +4114,141 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitchen_config_options: {
+        Row: {
+          kitchen_group: string | null
+          max_price: number | null
+          min_price: number | null
+          pricing_unit: Database["public"]["Enums"]["pricing_unit"] | null
+          supplier_id: string | null
+          type_code: string | null
+          type_name_nl: string | null
+          variants: number | null
+          width_mm: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products_by_width: {
+        Row: {
+          kitchen_group: string | null
+          max_price: number | null
+          min_price: number | null
+          product_count: number | null
+          supplier_id: string | null
+          type_code: string | null
+          type_name_nl: string | null
+          width_mm: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products_full: {
+        Row: {
+          article_code: string | null
+          base_price: number | null
+          book_price: number | null
+          catalog_code: string | null
+          category_code: string | null
+          category_id: string | null
+          category_kitchen_group: string | null
+          category_name: string | null
+          color_basic: string | null
+          color_main: string | null
+          connection_power_w: number | null
+          construction_type: string | null
+          cost_price: number | null
+          created_at: string | null
+          current_a: number | null
+          datasheet_url: string | null
+          default_discount_percent: number | null
+          depth_mm: number | null
+          depth_open_door_mm: number | null
+          description: string | null
+          discount_group: string | null
+          discount_group_code: string | null
+          discount_group_id: string | null
+          discount_group_name: string | null
+          ean_code: string | null
+          energy_class: string | null
+          energy_consumption_kwh: number | null
+          height_mm: number | null
+          id: string | null
+          image_url: string | null
+          installation_type: string | null
+          is_active: boolean | null
+          kitchen_group: string | null
+          manufacturer_product_id: string | null
+          name: string | null
+          niche_depth_mm: number | null
+          niche_height_max_mm: number | null
+          niche_height_min_mm: number | null
+          niche_width_max_mm: number | null
+          niche_width_min_mm: number | null
+          noise_class: string | null
+          noise_db: number | null
+          norm_hours: number | null
+          pims_last_synced: string | null
+          pricing_unit: Database["public"]["Enums"]["pricing_unit"] | null
+          product_family: string | null
+          product_series: string | null
+          product_status: string | null
+          retail_price: number | null
+          sku: string | null
+          specifications: Json | null
+          subcategory: string | null
+          supplier_id: string | null
+          supplier_name: string | null
+          type_code: string | null
+          type_name_nl: string | null
+          unit: string | null
+          updated_at: string | null
+          user_override: Json | null
+          vat_rate: number | null
+          voltage_v: number | null
+          water_consumption_l: number | null
+          weight_gross_kg: number | null
+          weight_net_kg: number | null
+          width_mm: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_discount_group_id_fkey"
+            columns: ["discount_group_id"]
+            isOneToOne: false
+            referencedRelation: "discount_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -4117,6 +4370,13 @@ export type Database = {
             foreignKeyName: "product_prices_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_prices_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
@@ -4135,9 +4395,37 @@ export type Database = {
         Args: { p_catalog_price: number; p_supplier_id: string }
         Returns: number
       }
+      calculate_product_price: {
+        Args: {
+          _area_m2?: number
+          _length_mm?: number
+          _price_group_id: string
+          _product_id: string
+          _quantity: number
+        }
+        Returns: number
+      }
       generate_quote_reference: {
         Args: { p_category?: string; p_customer_name: string }
         Returns: string
+      }
+      get_matching_products_by_width: {
+        Args: {
+          _kitchen_groups?: string[]
+          _supplier_id: string
+          _width_mm: number
+        }
+        Returns: {
+          article_code: string
+          kitchen_group: string
+          max_price: number
+          min_price: number
+          name: string
+          pricing_unit: Database["public"]["Enums"]["pricing_unit"]
+          product_id: string
+          type_code: string
+          type_name_nl: string
+        }[]
       }
       get_product_price: {
         Args: { p_price_group_id: string; p_product_id: string }
@@ -4150,6 +4438,18 @@ export type Database = {
           p_supplier_id: string
         }
         Returns: number
+      }
+      get_related_products: {
+        Args: { _product_id: string }
+        Returns: {
+          article_code: string
+          kitchen_group: string
+          name: string
+          product_id: string
+          relation_type: string
+          type_code: string
+          type_name_nl: string
+        }[]
       }
       get_user_division_id: { Args: { _user_id: string }; Returns: string }
       has_role:
@@ -4195,6 +4495,7 @@ export type Database = {
         | "nazorg"
         | "afgerond"
       payment_status: "open" | "deels_betaald" | "betaald"
+      pricing_unit: "STUK" | "ML" | "M2" | "SET"
       quote_status:
         | "concept"
         | "verstuurd"
@@ -4367,6 +4668,7 @@ export const Constants = {
         "afgerond",
       ],
       payment_status: ["open", "deels_betaald", "betaald"],
+      pricing_unit: ["STUK", "ML", "M2", "SET"],
       quote_status: [
         "concept",
         "verstuurd",
