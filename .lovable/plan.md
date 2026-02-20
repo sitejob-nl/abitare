@@ -1,38 +1,64 @@
 
 
-# Fix: Prijsgroep-prijzen en inkoopprijs zichtbaar maken na STOSA import
+# Offerte flow aanpassen voor STOSA prijsgroep-prijzen
 
-## Wat is het probleem?
+## Overzicht
 
-De STOSA import heeft succesvol **7.541 prijzen** opgeslagen in de `product_prices` tabel, gekoppeld aan `price_group_id`. Maar de frontend zoekt alleen op `range_id` -- een ander veld. Daardoor worden de prijzen nooit getoond.
+De offerte flow werkt al deels met `price_group_id` (bij sectie-aanmaak en configuratie), maar op drie plekken ontbreekt de koppeling waardoor STOSA-prijzen niet gevonden worden bij het toevoegen/bewerken van producten.
 
-Daarnaast worden `base_price` en `cost_price` niet ingevuld op de `products` tabel zelf, waardoor de productlijst en productdetail pagina overal "EUR -" laten zien.
+## Wijzigingen (3 bestanden)
 
-## Drie aanpassingen nodig
+### 1. `src/hooks/useProductPrices.ts` -- fetchProductPrice uitbreiden
 
-### 1. Hook `useProductPrices` uitbreiden
-Het bestand `src/hooks/useProductPrices.ts` filtert nu alleen op `range_id`. De query moet ook `price_group_id` ondersteunen, zodat prijzen die via de STOSA import zijn opgeslagen (met `price_group_id`) ook worden opgehaald.
+De `fetchProductPrice()` functie krijgt een extra parameter `sectionPriceGroupId`. Na stap 3 (quote default range) wordt een nieuwe stap ingevoegd die zoekt in `product_prices` op `price_group_id`.
 
-- Extra parameter `priceGroupId` toevoegen
-- Query aanpassen: als `priceGroupId` meegegeven wordt, filter op `price_group_id`
-- Join ook `price_groups` tabel zodat we de naam/code kunnen tonen
+**Lookup volgorde wordt:**
+1. Override range (bestaand)
+2. Sectie range (bestaand)
+3. Quote-default range (bestaand)
+4. **Sectie price_group_id** (nieuw) -- zoekt op `product_id` + `price_group_id`
+5. Fallback naar base_price / book_price (bestaand)
 
-### 2. ProductDetail pagina: prijsgroep-prijzen tonen
-Het bestand `src/pages/ProductDetail.tsx` toont op regel 797-815 de "Prijsgroep-prijzen" kaart. Deze leest nu `p.range?.code` maar de STOSA prijzen hebben geen `range_id`, alleen `price_group_id`.
+De functie-signatuur wijzigt van 5 naar 6 parameters:
+```text
+fetchProductPrice(productId, rangeId, overrideRangeId?, quoteDefaultRangeId?, priceType?, sectionPriceGroupId?)
+```
 
-- De query aanpassen zodat ook `price_group:price_groups(id, code, name)` wordt ge-joined
-- In de weergave: toon `p.price_group?.code` als fallback wanneer `p.range` leeg is
+Het return type krijgt een extra mogelijke `source` waarde: `"price_group_price"`.
 
-### 3. Productlijst: inkoopprijs kolom vullen
-De STOSA import slaat geen `base_price` of `cost_price` op in de `products` tabel. Dit is correct gedrag (prijzen hangen af van de gekozen prijsgroep), maar de lijstweergave toont daardoor overal "EUR -".
+### 2. `src/components/quotes/SortableSectionCard.tsx` -- leverancier afleiden uit price_group
 
-De productenlijst (`src/pages/Products.tsx`) uitbreiden met een aanduiding bij de "Verkoopprijs" kolom dat de prijs afhangt van de prijsgroep (bijv. een kleine badge "per PG" of het tonen van een prijsbereik min-max als dat beschikbaar is).
+Momenteel wordt de leverancier alleen afgeleid uit `section.range_id` via `useProductRange()`. Voor STOSA-secties die alleen een `price_group_id` hebben, wordt de leverancier niet gevonden.
 
-## Technische wijzigingen
+Wijzigingen:
+- Import `usePriceGroup` uit `@/hooks/usePriceGroups` en aanroepen met `section.price_group_id`
+- `sectionSupplierId` wordt: `sectionRange?.supplier_id || priceGroup?.supplier_id || null`
+- `section.price_group_id` doorgeven als `sectionPriceGroupId` prop aan `AddProductDialog` en `EditableLineRow`
+
+### 3. `src/components/quotes/AddProductDialog.tsx` -- price_group_id doorgeven aan fetchProductPrice
+
+- Nieuwe prop: `sectionPriceGroupId?: string | null`
+- In `refetchPrice()`: de `sectionPriceGroupId` als 6e argument meegeven aan `fetchProductPrice()`
+- Hierdoor wordt bij productselectie automatisch de STOSA-prijs gevonden via `price_group_id`
+
+### 4. `src/components/quotes/EditableLineRow.tsx` -- price_group_id doorgeven bij override/price-type wijziging
+
+- Nieuwe prop: `sectionPriceGroupId?: string | null`
+- In `handleOverrideChange()` en `handlePriceTypeChange()`: de `sectionPriceGroupId` als 6e argument meegeven aan `fetchProductPrice()`
+
+## Wat er NIET verandert
+
+- De `AddSectionDialog` werkt al correct (slaat `price_group_id` op)
+- De `QuoteSectionConfig` werkt al correct
+- De database schema hoeft niet te wijzigen (`price_group_id` kolom bestaat al op `quote_sections`)
+- De bestaande range-gebaseerde flow (Miele, Siemens) blijft ongewijzigd werken
+
+## Samenvatting
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/hooks/useProductPrices.ts` | Query uitbreiden met `price_group_id` filter en `price_groups` join |
-| `src/pages/ProductDetail.tsx` | Prijsgroep-prijzen kaart: fallback naar `price_group` info als `range` leeg is |
-| `src/pages/Products.tsx` | "Verkoopprijs" kolom: toon indicatie als product prijsgroep-gebaseerde prijzen heeft |
+| `src/hooks/useProductPrices.ts` | Extra parameter `sectionPriceGroupId` in `fetchProductPrice()` met lookup stap |
+| `src/components/quotes/SortableSectionCard.tsx` | Leverancier ook afleiden uit `price_group`; `sectionPriceGroupId` doorgeven |
+| `src/components/quotes/AddProductDialog.tsx` | Nieuwe prop `sectionPriceGroupId`; doorgeven aan `fetchProductPrice()` |
+| `src/components/quotes/EditableLineRow.tsx` | Nieuwe prop `sectionPriceGroupId`; doorgeven aan `fetchProductPrice()` |
 
