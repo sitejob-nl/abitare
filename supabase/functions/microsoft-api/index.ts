@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { encryptToken, decryptToken, isEncrypted } from "../_shared/crypto.ts";
 
 async function refreshAccessToken(
   refreshToken: string,
@@ -93,7 +94,21 @@ serve(async (req) => {
       throw new Error("Microsoft account not connected");
     }
 
+    // Decrypt tokens (with migration support for plaintext tokens)
     let accessToken = connection.access_token;
+    let refreshTokenValue = connection.refresh_token;
+    let needsReEncrypt = false;
+
+    if (isEncrypted(accessToken)) {
+      accessToken = await decryptToken(accessToken);
+    } else {
+      // Legacy plaintext token — will be encrypted on next store
+      needsReEncrypt = true;
+    }
+
+    if (isEncrypted(refreshTokenValue)) {
+      refreshTokenValue = await decryptToken(refreshTokenValue);
+    }
 
     // Check if token is expired or about to expire (5 min buffer)
     const expiresAt = new Date(connection.token_expires_at);
@@ -105,26 +120,28 @@ serve(async (req) => {
       
       try {
         const newTokens = await refreshAccessToken(
-          connection.refresh_token,
+          refreshTokenValue,
           MICROSOFT_CLIENT_ID,
           MICROSOFT_CLIENT_SECRET,
           MICROSOFT_TENANT_ID
         );
 
-        // Update tokens in database
+        // Encrypt new tokens before storing
+        const encryptedAccessToken = await encryptToken(newTokens.access_token);
+        const encryptedRefreshToken = await encryptToken(newTokens.refresh_token);
         const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
         
         await supabaseClient
           .from("microsoft_connections")
           .update({
-            access_token: newTokens.access_token,
-            refresh_token: newTokens.refresh_token,
+            access_token: encryptedAccessToken,
+            refresh_token: encryptedRefreshToken,
             token_expires_at: newExpiresAt.toISOString(),
           })
           .eq("id", connection.id);
 
         accessToken = newTokens.access_token;
-        console.log("Token refreshed successfully");
+        console.log("Token refreshed and encrypted successfully");
       } catch (refreshError) {
         console.error("Token refresh failed:", refreshError);
         
@@ -136,6 +153,19 @@ serve(async (req) => {
 
         throw new Error("Microsoft session expired. Please reconnect your account.");
       }
+    } else if (needsReEncrypt) {
+      // Migrate legacy plaintext tokens to encrypted
+      console.log("Migrating plaintext Microsoft tokens to encrypted...");
+      const encryptedAccessToken = await encryptToken(accessToken);
+      const encryptedRefreshToken = await encryptToken(refreshTokenValue);
+      await supabaseClient
+        .from("microsoft_connections")
+        .update({
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
+        })
+        .eq("id", connection.id);
+      console.log("Microsoft tokens migrated to encrypted storage");
     }
 
     // Make the Microsoft Graph API call

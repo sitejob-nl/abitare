@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/crypto.ts";
 
 serve(async (req) => {
   try {
@@ -105,14 +106,18 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + expires_in * 1000);
     const scopes = scope.split(" ");
 
-    // Upsert the connection
+    // Encrypt tokens before storing
+    const encryptedAccessToken = await encryptToken(access_token);
+    const encryptedRefreshToken = await encryptToken(refresh_token);
+
+    // Upsert the connection with encrypted tokens
     const { error: dbError } = await supabaseAdmin
       .from("microsoft_connections")
       .upsert(
         {
           user_id: stateData.userId,
-          access_token: access_token,
-          refresh_token: refresh_token,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: expiresAt.toISOString(),
           scopes: scopes,
           microsoft_user_id: userInfo.id,
@@ -131,7 +136,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Microsoft connection saved for user ${stateData.userId}`);
+    console.log(`Microsoft connection saved for user ${stateData.userId} (tokens encrypted)`);
 
     // Redirect back to settings with success
     return Response.redirect(`${returnUrl}/settings?microsoft_connected=true`, 302);
