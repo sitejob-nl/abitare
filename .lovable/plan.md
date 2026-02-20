@@ -1,75 +1,95 @@
 
 
-# Productpagina optimaliseren
+# Productpagina -- Algehele layout en structuur verbeteren
 
-## Gevonden problemen
+## Huidige situatie
 
-1. **React warning**: `SortIcon` component kan geen ref ontvangen -- geeft console warnings
-2. **Laad-flicker bij paginatie**: Bij elke pagina-wissel verdwijnt de tabel en verschijnt een loader, doordat React Query geen `placeholderData` gebruikt
-3. **Onnodige re-renders**: Tabelrijen worden bij elke state-wijziging (checkbox, hover) volledig opnieuw gerenderd -- bij 50 rijen niet dramatisch, maar wel onnodig
-4. **Bulk prijs-aanpassing**: De percentage-modus doet N individuele database-calls in een for-loop (1 per product) -- bij 50 geselecteerde producten zijn dat 50 requests
+De productpagina voelt "plat" aan vergeleken met andere pagina's zoals het Dashboard en Orders. Het is nu een filterbalk + een kale tabel + paginering, zonder overzichtscijfers, visuele hiërarchie of snelle navigatie.
 
-## Wijzigingen
+## Verbeteringen
 
-### 1. `src/pages/Products.tsx` -- Performance & UX
+### 1. Samenvattingskaarten bovenaan
 
-**SortIcon ref-warning fixen**: De `SortIcon` component wordt buiten de hoofdcomponent gedefinieerd als een standalone functie (niet genest in `Products`), zodat React geen ref-warning meer geeft.
+Vier `StatCard`-achtige kaarten toevoegen boven de filterbalk, consistent met het Dashboard-design:
 
-**placeholderData toevoegen**: In de `useProducts` aanroep `keepPreviousData` inschakelen, zodat bij paginatie de vorige data zichtbaar blijft terwijl de nieuwe wordt geladen. Dit voorkomt de laad-flicker. Een subtiele opacity-indicator toont dat er nieuwe data wordt opgehaald.
+- **Totaal producten** (icoon: Package) -- totaal actieve producten
+- **Leveranciers** (icoon: Building2) -- aantal unieke leveranciers
+- **Gem. verkoopprijs** (icoon: Euro) -- gemiddelde base_price
+- **Inactief** (icoon: EyeOff) -- aantal inactieve producten (link naar filter)
 
-**Tabelrijen memoizen**: De tabelrij-rendering extraheren naar een `React.memo`-component `ProductRow`, zodat alleen de gewijzigde rij opnieuw rendert bij checkbox-toggle.
+Data wordt opgehaald met een aparte lichte query (COUNT/AVG) zodat het de producttabel niet vertraagt.
 
-**Navigatie met onClick optimaliseren**: In plaats van per-cel `onClick` handlers, wordt er een enkele `onClick` op de `<tr>` gezet met een check of de click niet op de checkbox was.
+### 2. Filterbalk opschonen
 
-### 2. `src/hooks/useProducts.ts` -- placeholderData ondersteuning
+De filterbalk wordt compacter gemaakt met een "Filters" knop die een Popover opent voor leverancier, categorie en prijsbereik. Zoekbalk blijft direct zichtbaar. Actieve filters worden als verwijderbare chips (badges) onder de zoekbalk getoond.
 
-`placeholderData: keepPreviousData` toevoegen aan de query opties, zodat bij filter/pagina-wisselingen de vorige resultaten zichtbaar blijven.
+Resultaat: de standaard weergave toont alleen de zoekbalk + "Filters" knop + eventuele actieve filter-chips.
 
-### 3. `src/components/products/BulkActionsBar.tsx` -- Batch prijs-update
+### 3. Actief/Inactief status badge
 
-De percentage prijs-aanpassing omschrijven van N individuele updates naar 1 enkele database-call via een `.upsert()` of door de berekening server-side te doen met een `UPDATE ... SET base_price = base_price * factor WHERE id IN (...)` via een RPC-functie.
+Een kleine gekleurde dot of badge toevoegen aan elke rij die aangeeft of het product actief of inactief is. Een toggle in de filterbalk om inactieve producten te tonen.
 
-Eenvoudigste aanpak: een batch-update query aanmaken als database functie `bulk_adjust_price(product_ids UUID[], factor NUMERIC)`.
+### 4. Verbeterde paginering
+
+De paginering wordt visueel verbeterd:
+- "Vorige/Volgende" knoppen worden icoon-only (compacter)
+- Paginanummers tonen (1, 2, 3... met ellipsis) zodat je direct naar een pagina kunt springen
+- Items-per-pagina selector (25, 50, 100)
+
+### 5. Tabel header sticky maken
+
+Bij het scrollen door lange lijsten blijft de tabelheader zichtbaar (sticky top).
 
 ## Technische details
 
-### ProductRow component (nieuw, in Products.tsx)
+### Nieuwe hook: `useProductStats`
 
 ```text
-React.memo(ProductRow) met props:
-- product, isSelected, onToggle, onNavigate
-- Vergelijkt alleen product.id en isSelected voor re-render
+Bestand: src/hooks/useProductStats.ts
+
+Haalt met een enkele query op:
+- COUNT(*) WHERE is_active = true
+- COUNT(DISTINCT supplier_id)
+- AVG(base_price) WHERE base_price IS NOT NULL
+- COUNT(*) WHERE is_active = false
+
+Gebruikt supabase.rpc() met een database functie, of
+drie parallelle count-queries (eenvoudiger, geen migratie nodig).
 ```
 
-### useProducts aanpassing
+### Filter Popover
 
 ```text
-placeholderData: keepPreviousData
--- importeren uit @tanstack/react-query
+De huidige inline filters (leverancier, categorie, prijs min/max) verhuizen
+naar een Popover component achter een "Filters" knop met een Badge
+die het aantal actieve filters toont.
+
+Actieve filters worden als chips gerenderd met een X-knop
+om ze individueel te wissen.
 ```
 
-### Laad-indicator bij paginatie
-
-In plaats van de volledige loader tonen, wordt bij `isFetching && !isLoading` (data is al beschikbaar maar wordt ververst) een subtiele opacity-verlaging op de tabel toegepast.
-
-### Database functie voor bulk prijs-update
+### Sticky header
 
 ```text
-CREATE FUNCTION bulk_adjust_price(p_ids UUID[], p_factor NUMERIC)
-RETURNS void AS $$
-  UPDATE products SET base_price = ROUND(base_price * p_factor, 2)
-  WHERE id = ANY(p_ids) AND base_price IS NOT NULL
-$$ LANGUAGE sql;
+De <thead> krijgt: className="sticky top-0 z-10 bg-card"
+De tabel wrapper krijgt een max-height en overflow-y-auto
+zodat de header blijft staan bij scrollen.
 ```
 
-Dit vervangt de N individuele calls door 1 enkele database-aanroep.
+### Items per pagina
 
-## Samenvatting
+```text
+Nieuw state: pageSize (standaard 50)
+Select met opties: 25, 50, 100
+Wordt doorgegeven aan useProducts hook (ondersteunt dit al).
+```
+
+## Samenvatting wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `src/pages/Products.tsx` | SortIcon fix, ProductRow memo, placeholderData, betere laad-indicator |
-| `src/hooks/useProducts.ts` | `placeholderData: keepPreviousData` toevoegen |
-| `src/components/products/BulkActionsBar.tsx` | Batch prijs-update via RPC i.p.v. N losse calls |
-| Database migratie | `bulk_adjust_price` functie |
+| `src/hooks/useProductStats.ts` | Nieuw -- samenvattingsdata ophalen |
+| `src/pages/Products.tsx` | StatCards toevoegen, filterbalk omzetten naar Popover + chips, sticky header, verbeterde paginering, actief/inactief badge, items-per-pagina |
+
+Geen database migratie nodig -- alle data is beschikbaar via bestaande tabellen.
 
