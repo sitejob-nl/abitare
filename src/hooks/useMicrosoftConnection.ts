@@ -20,7 +20,7 @@ export function useMicrosoftConnection() {
       if (!user) return null;
 
       const { data, error } = await supabase
-        .from("microsoft_connections")
+        .from("microsoft_connection_status" as any)
         .select("id, user_id, microsoft_email, connected_at, is_active")
         .eq("user_id", user.id)
         .eq("is_active", true)
@@ -31,7 +31,7 @@ export function useMicrosoftConnection() {
         throw error;
       }
 
-      return data as MicrosoftConnection | null;
+      return (data as unknown) as MicrosoftConnection | null;
     },
     enabled: !!user,
   });

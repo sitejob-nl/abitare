@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -288,7 +289,7 @@ export function CustomerCommunicationTab({
           <div
             className="prose prose-sm max-w-none dark:prose-invert"
             dangerouslySetInnerHTML={{
-              __html: email.body?.content || email.bodyPreview || "",
+              __html: sanitizeHtml(email.body?.content || email.bodyPreview || ""),
             }}
           />
         </ScrollArea>

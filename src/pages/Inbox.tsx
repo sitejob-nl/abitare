@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -204,7 +205,7 @@ function EmailDetail({
           <div
             className="prose prose-sm max-w-none dark:prose-invert"
             dangerouslySetInnerHTML={{
-              __html: email.body?.content || email.bodyPreview || "",
+              __html: sanitizeHtml(email.body?.content || email.bodyPreview || ""),
             }}
           />
         </div>

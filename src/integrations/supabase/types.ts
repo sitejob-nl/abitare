@@ -4251,6 +4251,36 @@ export type Database = {
           },
         ]
       }
+      microsoft_connection_status: {
+        Row: {
+          connected_at: string | null
+          id: string | null
+          is_active: boolean | null
+          microsoft_email: string | null
+          scopes: string[] | null
+          token_expires_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          connected_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          microsoft_email?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          connected_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          microsoft_email?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       products_by_width: {
         Row: {
           kitchen_group: string | null
