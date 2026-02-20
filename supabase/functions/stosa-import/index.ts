@@ -148,6 +148,40 @@ const PREFIX_CATEGORY_MAP: Record<string, {
 
 type PricingUnit = 'STUK' | 'ML' | 'M2' | 'SET'
 
+// ══════════════════════════════════════════════════════════
+// PRIJS PARSING (tekst met valutasymbolen → getal)
+// ══════════════════════════════════════════════════════════
+
+function parsePrice(value: string | number | undefined | null): number | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value === 'number') return value
+
+  let str = String(value).trim()
+  // Remove currency symbols and spaces
+  str = str.replace(/[€$£¥\s]/g, '')
+  if (str === '-' || str === '' || str === '--') return null
+
+  // Auto-detect format based on last separator
+  const lastComma = str.lastIndexOf(',')
+  const lastDot = str.lastIndexOf('.')
+  const isCommaDecimal = lastComma > lastDot
+
+  if (isCommaDecimal) {
+    str = str.replace(/\./g, '')  // Remove thousand separators
+    str = str.replace(',', '.')   // Comma → decimal
+  } else {
+    str = str.replace(/,/g, '')   // Remove thousand separators
+  }
+
+  const parsed = parseFloat(str)
+  return isNaN(parsed) ? null : parsed
+}
+
+function parseDimension(value: string | number | undefined | null): number | null {
+  const parsed = parsePrice(value)
+  return parsed !== null ? Math.round(parsed) : null
+}
+
 function detectPricingUnit(description: string): PricingUnit {
   const desc = (description || '').toUpperCase()
   if (/\bM2\b|\bMQ\b|M²|SQ\.?\s*M|BY THE M2|PER\s*M2/.test(desc)) return 'M2'
@@ -434,9 +468,9 @@ Deno.serve(async (req) => {
           name: description.trim() || articleCode,
           catalog_code: row['Codice listino cartaceo']?.trim() || '',
           discount_group_code: discountGroupCode,
-          width_mm: row['Dimensione 1'] ? Math.round(row['Dimensione 1']) : extractWidthFromSku(articleCode),
-          height_mm: row['Dimensione 2'] ? Math.round(row['Dimensione 2']) : null,
-          depth_mm: row['Dimensione 3'] ? Math.round(row['Dimensione 3']) : null,
+          width_mm: parseDimension(row['Dimensione 1']) ?? extractWidthFromSku(articleCode),
+          height_mm: parseDimension(row['Dimensione 2']),
+          depth_mm: parseDimension(row['Dimensione 3']),
           category_code: catInfo.category,
           subcategory: catInfo.subcategory,
           type_code: catInfo.type_code,
@@ -449,7 +483,7 @@ Deno.serve(async (req) => {
       if (row['Variabile 1'] !== 'FPC') continue
 
       const variantCode = String(row['Variante 1'] || '')?.trim()
-      const price = row['Prezzo Listino']
+      const price = parsePrice(row['Prezzo Listino'])
       if (!variantCode || !price || price <= 0) { stats.skipped_rows++; continue }
 
       let pgCode: string | null = null
