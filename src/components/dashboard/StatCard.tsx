@@ -13,6 +13,7 @@ interface StatCardProps {
   };
   className?: string;
   animationDelay?: number;
+  onClick?: () => void;
 }
 
 export function StatCard({
@@ -23,6 +24,7 @@ export function StatCard({
   trend,
   className,
   animationDelay = 0,
+  onClick,
 }: StatCardProps) {
   const iconClasses = {
     primary: "stat-icon-primary",
@@ -40,9 +42,11 @@ export function StatCard({
 
   return (
     <div
+      onClick={onClick}
       className={cn(
         "rounded-xl border border-border bg-card p-4 sm:p-6 card-hover",
         delayClasses[animationDelay as keyof typeof delayClasses] || "animate-fade-in",
+        onClick && "cursor-pointer",
         className
       )}
     >
