@@ -33,6 +33,48 @@ interface AvailabilityResponse {
   message?: string;
 }
 
+interface PriceResult {
+  ean_code: string;
+  net_price: number | null;
+  gross_price: number | null;
+  recommended_price: number | null;
+  currency: string;
+  message?: string;
+}
+
+interface PriceResponse {
+  success: boolean;
+  supplier_name: string;
+  results: PriceResult[];
+  error?: string;
+  message?: string;
+}
+
+interface OrderStatusLine {
+  ean_code: string;
+  status: string;
+  confirmed_qty: number | null;
+  backorder_qty: number | null;
+  rejected_qty: number | null;
+  delivered_qty: number | null;
+}
+
+interface OrderStatusResponse {
+  success: boolean;
+  sales_document_number: string | null;
+  delivery_date: string | null;
+  lines: OrderStatusLine[];
+  message?: string;
+  error?: string;
+}
+
+interface CancelResponse {
+  success: boolean;
+  rejected?: boolean;
+  error_code?: string;
+  message?: string;
+}
+
 export function useTradeplaceConfig() {
   return useQuery({
     queryKey: ["tradeplace-config"],
@@ -40,7 +82,6 @@ export function useTradeplaceConfig() {
       const { data, error } = await supabase.functions.invoke("tradeplace-config", {
         body: { action: "check" }
       });
-
       if (error) throw error;
       return data as TradeplaceConfig;
     },
@@ -55,7 +96,6 @@ export function useTestTradeplaceConnection() {
       const { data, error } = await supabase.functions.invoke("tradeplace-config", {
         body: { action: "test" }
       });
-
       if (error) throw error;
       return data;
     }
@@ -68,7 +108,6 @@ export function useCheckAvailability() {
       const { data, error } = await supabase.functions.invoke("tradeplace-availability", {
         body: request
       });
-
       if (error) throw error;
       return data as AvailabilityResponse;
     }
@@ -77,18 +116,60 @@ export function useCheckAvailability() {
 
 export function usePlaceSupplierOrder() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (supplierOrderId: string) => {
       const { data, error } = await supabase.functions.invoke("tradeplace-order", {
         body: { supplier_order_id: supplierOrderId }
       });
-
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["supplier-orders"] });
+    }
+  });
+}
+
+export function useRequestOrderStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (supplierOrderId: string): Promise<OrderStatusResponse> => {
+      const { data, error } = await supabase.functions.invoke("tradeplace-order-status", {
+        body: { supplier_order_id: supplierOrderId }
+      });
+      if (error) throw error;
+      return data as OrderStatusResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["supplier-orders"] });
+    }
+  });
+}
+
+export function useCancelSupplierOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ supplierOrderId, reason }: { supplierOrderId: string; reason?: string }): Promise<CancelResponse> => {
+      const { data, error } = await supabase.functions.invoke("tradeplace-order-cancel", {
+        body: { supplier_order_id: supplierOrderId, reason }
+      });
+      if (error) throw error;
+      return data as CancelResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["supplier-orders"] });
+    }
+  });
+}
+
+export function useRequestProductPrices() {
+  return useMutation({
+    mutationFn: async (request: { supplier_id: string; products: { ean_code: string }[] }): Promise<PriceResponse> => {
+      const { data, error } = await supabase.functions.invoke("tradeplace-product-price", {
+        body: request
+      });
+      if (error) throw error;
+      return data as PriceResponse;
     }
   });
 }
@@ -102,7 +183,6 @@ export function useTradeplaceSuppliers() {
         .select("*")
         .eq("is_active", true)
         .order("name");
-
       if (error) throw error;
       return data;
     }
@@ -111,14 +191,9 @@ export function useTradeplaceSuppliers() {
 
 export function useUpdateSupplierTradeplace() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({
-      id,
-      tradeplace_enabled,
-      tradeplace_gln,
-      tradeplace_endpoint,
-      tradeplace_tp_id
+      id, tradeplace_enabled, tradeplace_gln, tradeplace_endpoint, tradeplace_tp_id
     }: {
       id: string;
       tradeplace_enabled: boolean;
@@ -128,16 +203,10 @@ export function useUpdateSupplierTradeplace() {
     }) => {
       const { data, error } = await supabase
         .from("suppliers")
-        .update({
-          tradeplace_enabled,
-          tradeplace_gln,
-          tradeplace_endpoint,
-          tradeplace_tp_id
-        })
+        .update({ tradeplace_enabled, tradeplace_gln, tradeplace_endpoint, tradeplace_tp_id })
         .eq("id", id)
         .select()
         .single();
-
       if (error) throw error;
       return data;
     },

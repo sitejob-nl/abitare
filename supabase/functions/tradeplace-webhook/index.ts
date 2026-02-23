@@ -12,7 +12,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization if configured
     const webhookSecret = Deno.env.get("TRADEPLACE_WEBHOOK_SECRET");
     const authHeader = req.headers.get("Authorization");
     const providedSecret = req.headers.get("X-Webhook-Secret");
@@ -43,6 +42,19 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Audit trail: log every inbound message
+    const supplierOrderId = extractPurchaseOrderNumber(body);
+    const supplierId = await findSupplierIdByGln(supabase, body);
+
+    await supabase.from("tradeplace_messages").insert({
+      message_type: messageType,
+      direction: 'inbound',
+      supplier_order_id: supplierOrderId || null,
+      supplier_id: supplierId || null,
+      raw_xml: body,
+      metadata: { headers: Object.fromEntries(req.headers.entries()) },
+    });
+
     switch (messageType) {
       case 'OrderPlacementReply':
         await handleOrderPlacementReply(supabase, body);
@@ -61,6 +73,10 @@ serve(async (req) => {
       case 'BillingDocument':
         await handleBillingDocument(supabase, body);
         break;
+      case 'StockPush':
+      case 'PushStockLevel':
+        await handleStockPush(supabase, body);
+        break;
       case 'PushProductList':
         await handlePushProductList(supabase, body);
         break;
@@ -74,10 +90,9 @@ serve(async (req) => {
         console.log("Received Acknowledgement - no action needed");
         break;
       default:
-        console.log("Unknown TradeXML message type, storing raw:", messageType);
+        console.log("Unknown TradeXML message type, stored raw:", messageType);
     }
 
-    // TMH2 expects 200 OK acknowledgment
     return new Response(JSON.stringify({
       success: true,
       message_type: messageType,
@@ -98,9 +113,6 @@ serve(async (req) => {
   }
 });
 
-/**
- * Detect TradeXML 2.1.19 message type from root element
- */
 function detectMessageType(xml: string): string {
   if (xml.includes('<OrderPlacementReply')) return 'OrderPlacementReply';
   if (xml.includes('<PushOrderConfirmation')) return 'PushOrderConfirmation';
@@ -109,6 +121,8 @@ function detectMessageType(xml: string): string {
   if (xml.includes('<PushOrderStatus')) return 'PushOrderStatus';
   if (xml.includes('<OrderStatusReply')) return 'OrderStatusReply';
   if (xml.includes('<BillingDocument')) return 'BillingDocument';
+  if (xml.includes('<StockPush')) return 'StockPush';
+  if (xml.includes('<PushStockLevel')) return 'PushStockLevel';
   if (xml.includes('<PushProductList')) return 'PushProductList';
   if (xml.includes('<ProductListReply')) return 'PushProductList';
   if (xml.includes('<PushOrderChangeConfirmation')) return 'PushOrderChangeConfirmation';
@@ -117,9 +131,24 @@ function detectMessageType(xml: string): string {
   return 'Unknown';
 }
 
-/**
- * Find supplier order by PurchaseOrderNumber (our order ID)
- */
+function extractPurchaseOrderNumber(xml: string): string | null {
+  const match = xml.match(/<PurchaseOrderNumber>([^<]+)<\/PurchaseOrderNumber>/);
+  return match?.[1] || null;
+}
+
+async function findSupplierIdByGln(supabase: any, xml: string): Promise<string | null> {
+  const glnMatch = xml.match(/<SellerCode[^>]*>([^<]+)<\/SellerCode>/);
+  if (!glnMatch) return null;
+
+  const { data } = await supabase
+    .from("suppliers")
+    .select("id")
+    .eq("tradeplace_gln", glnMatch[1])
+    .single();
+
+  return data?.id || null;
+}
+
 async function findSupplierOrder(supabase: any, xml: string) {
   const purchaseOrderMatch = xml.match(/<PurchaseOrderNumber>([^<]+)<\/PurchaseOrderNumber>/);
   if (!purchaseOrderMatch) {
@@ -127,35 +156,25 @@ async function findSupplierOrder(supabase: any, xml: string) {
     return null;
   }
 
-  const purchaseOrderNumber = purchaseOrderMatch[1];
-
-  // PurchaseOrderNumber is our supplier_order ID
   const { data, error } = await supabase
     .from("supplier_orders")
     .select("id, status")
-    .eq("id", purchaseOrderNumber)
+    .eq("id", purchaseOrderMatch[1])
     .single();
 
   if (error || !data) {
-    console.error(`Supplier order not found for PurchaseOrderNumber: ${purchaseOrderNumber}`);
+    console.error(`Supplier order not found for PurchaseOrderNumber: ${purchaseOrderMatch[1]}`);
     return null;
   }
 
   return data;
 }
 
-/**
- * Extract SalesDocumentNumber (supplier's own order reference)
- */
 function extractSalesDocumentNumber(xml: string): string | null {
   const match = xml.match(/<SalesDocumentNumber>([^<]+)<\/SalesDocumentNumber>/);
   return match?.[1] || null;
 }
 
-/**
- * Extract confirmed delivery date from ConfirmationSchedule
- * TradeXML uses <ConfirmedDeliveryDate><Year>YYYY</Year><Month>MM</Month><Day>DD</Day></ConfirmedDeliveryDate>
- */
 function extractConfirmedDeliveryDate(xml: string): string | null {
   const scheduleMatch = xml.match(/<ConfirmationSchedule>[\s\S]*?<\/ConfirmationSchedule>/);
   if (!scheduleMatch) return null;
@@ -171,10 +190,6 @@ function extractConfirmedDeliveryDate(xml: string): string | null {
   return null;
 }
 
-/**
- * Handle OrderPlacementReply - synchronous reply after placing an order
- * Contains SalesDocumentNumber and line-level confirmations
- */
 async function handleOrderPlacementReply(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
@@ -196,10 +211,6 @@ async function handleOrderPlacementReply(supabase: any, xml: string) {
   console.log(`OrderPlacementReply processed: ${supplierOrder.id}, sales doc: ${salesDocNumber}`);
 }
 
-/**
- * Handle PushOrderConfirmation - async order confirmation pushed by supplier
- * Similar structure to OrderPlacementReply but arrives asynchronously
- */
 async function handlePushOrderConfirmation(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
@@ -221,19 +232,12 @@ async function handlePushOrderConfirmation(supabase: any, xml: string) {
   console.log(`PushOrderConfirmation processed: ${supplierOrder.id}, sales doc: ${salesDocNumber}`);
 }
 
-/**
- * Handle ShippingNotification / ShipmentNotification
- * TradeXML 2.1.17+ uses ShipmentNotification within ShippingNotifications
- * Contains tracking details and estimated delivery
- */
 async function handleShippingNotification(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
 
-  // Extract tracking number from TradeXML structure
   const trackingMatch = xml.match(/<TrackingNumber>([^<]+)<\/TrackingNumber>/);
   
-  // Extract estimated delivery date
   let estimatedDelivery: string | null = null;
   const estYearMatch = xml.match(/<EstimatedDeliveryDate>[\s\S]*?<Year>(\d+)<\/Year>/);
   const estMonthMatch = xml.match(/<EstimatedDeliveryDate>[\s\S]*?<Month>(\d+)<\/Month>/);
@@ -243,7 +247,6 @@ async function handleShippingNotification(supabase: any, xml: string) {
     estimatedDelivery = `${estYearMatch[1]}-${estMonthMatch[1].padStart(2, '0')}-${estDayMatch[1].padStart(2, '0')}`;
   }
 
-  // Also try ConfirmedDeliveryDate as fallback
   if (!estimatedDelivery) {
     estimatedDelivery = extractConfirmedDeliveryDate(xml);
   }
@@ -268,42 +271,123 @@ async function handleShippingNotification(supabase: any, xml: string) {
   console.log(`ShippingNotification processed: ${supplierOrder.id}, tracking: ${trackingMatch?.[1] || 'none'}`);
 }
 
-/**
- * Handle PushOrderStatus / OrderStatusReply
- */
 async function handleOrderStatusUpdate(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
 
-  // Extract any status info from LineStatus elements
-  const errorTextMatch = xml.match(/<ErrorText>([^<]+)<\/ErrorText>/);
-  const errorCodeMatch = xml.match(/<ErrorCode>([^<]+)<\/ErrorCode>/);
+  // Extract line-level statuses
+  const lineBlocks = xml.match(/<OrderStatusReplyLineItem>[\s\S]*?<\/OrderStatusReplyLineItem>/g) || [];
+  
+  for (const block of lineBlocks) {
+    const eanMatch = block.match(/<Material[^>]*>([^<]+)<\/Material>/);
+    const confirmedQtyMatch = block.match(/<ConfirmedQuantity>([^<]+)<\/ConfirmedQuantity>/);
+    const backorderQtyMatch = block.match(/<BackorderLineQuantity>([^<]+)<\/BackorderLineQuantity>/);
+    const rejectedQtyMatch = block.match(/<RejectedLineQuantity>([^<]+)<\/RejectedLineQuantity>/);
+    const deliveredQtyMatch = block.match(/<DeliveredLineQuantity>([^<]+)<\/DeliveredLineQuantity>/);
 
-  if (errorTextMatch || errorCodeMatch) {
-    console.log(`Order status update: ${supplierOrder.id}, error: ${errorCodeMatch?.[1]} - ${errorTextMatch?.[1]}`);
-  } else {
-    console.log(`Order status update received: ${supplierOrder.id}`);
+    if (eanMatch) {
+      const metadata: Record<string, any> = {};
+      if (confirmedQtyMatch) metadata.confirmed_qty = parseFloat(confirmedQtyMatch[1]);
+      if (backorderQtyMatch) metadata.backorder_qty = parseFloat(backorderQtyMatch[1]);
+      if (rejectedQtyMatch) metadata.rejected_qty = parseFloat(rejectedQtyMatch[1]);
+      if (deliveredQtyMatch) metadata.delivered_qty = parseFloat(deliveredQtyMatch[1]);
+
+      // Determine line status
+      let lineStatus = 'confirmed';
+      if (deliveredQtyMatch && parseFloat(deliveredQtyMatch[1]) > 0) lineStatus = 'delivered';
+      else if (rejectedQtyMatch && parseFloat(rejectedQtyMatch[1]) > 0) lineStatus = 'rejected';
+      else if (backorderQtyMatch && parseFloat(backorderQtyMatch[1]) > 0) lineStatus = 'backorder';
+
+      await supabase
+        .from("supplier_order_lines")
+        .update({ status: lineStatus, metadata })
+        .eq("supplier_order_id", supplierOrder.id)
+        .eq("ean_code", eanMatch[1]);
+    }
   }
+
+  // Update delivery date if present
+  const deliveryDate = extractConfirmedDeliveryDate(xml);
+  if (deliveryDate) {
+    await supabase
+      .from("supplier_orders")
+      .update({ expected_delivery_date: deliveryDate, xml_response: xml })
+      .eq("id", supplierOrder.id);
+  }
+
+  console.log(`OrderStatus update processed: ${supplierOrder.id}`);
 }
 
-/**
- * Handle BillingDocument (invoices from supplier)
- */
-async function handleBillingDocument(_supabase: any, xml: string) {
-  const invoiceMatch = xml.match(/<InvoiceNumber>([^<]+)<\/InvoiceNumber>/);
-  console.log(`BillingDocument received - invoice: ${invoiceMatch?.[1] || 'unknown'}, storing for processing`);
+async function handleBillingDocument(supabase: any, xml: string) {
+  const supplierOrder = await findSupplierOrder(supabase, xml);
+  
+  const invoiceNumberMatch = xml.match(/<InvoiceNumber>([^<]+)<\/InvoiceNumber>/);
+  const invoiceNumber = invoiceNumberMatch?.[1] || null;
+
+  // Extract invoice amount from MonetaryAmount
+  let invoiceAmount: number | null = null;
+  const amountMatch = xml.match(/<TotalAmount>([^<]+)<\/TotalAmount>/) ||
+    xml.match(/<MonetaryAmount[^>]*>[\s\S]*?<Amount>([^<]+)<\/Amount>/);
+  if (amountMatch) {
+    invoiceAmount = parseFloat(amountMatch[1]);
+  }
+
+  // Extract invoice date
+  let invoiceDate: string | null = null;
+  const invDateMatch = xml.match(/<InvoiceDate>[\s\S]*?<Year>(\d+)<\/Year>[\s\S]*?<Month>(\d+)<\/Month>[\s\S]*?<Day>(\d+)<\/Day>/);
+  if (invDateMatch) {
+    invoiceDate = `${invDateMatch[1]}-${invDateMatch[2].padStart(2, '0')}-${invDateMatch[3].padStart(2, '0')}`;
+  }
+
+  if (supplierOrder && (invoiceNumber || invoiceAmount || invoiceDate)) {
+    await supabase
+      .from("supplier_orders")
+      .update({
+        invoice_number: invoiceNumber,
+        invoice_amount: invoiceAmount,
+        invoice_date: invoiceDate,
+        xml_response: xml,
+      })
+      .eq("id", supplierOrder.id);
+  }
+
+  console.log(`BillingDocument processed: invoice ${invoiceNumber}, amount ${invoiceAmount}, date ${invoiceDate}`);
 }
 
-/**
- * Handle PushProductList (price list updates from supplier)
- */
+async function handleStockPush(supabase: any, xml: string) {
+  // Parse stock level items
+  const itemBlocks = xml.match(/<StockLevelLineItem>[\s\S]*?<\/StockLevelLineItem>/g) ||
+    xml.match(/<PushStockLevelLineItem>[\s\S]*?<\/PushStockLevelLineItem>/g) || [];
+
+  let updated = 0;
+  for (const block of itemBlocks) {
+    const eanMatch = block.match(/<Material[^>]*>([^<]+)<\/Material>/);
+    const qtyMatch = block.match(/<AvailableQuantity>([^<]+)<\/AvailableQuantity>/) ||
+      block.match(/<StockQuantity>([^<]+)<\/StockQuantity>/);
+
+    if (eanMatch) {
+      const stockData = {
+        ean: eanMatch[1],
+        available_qty: qtyMatch ? parseFloat(qtyMatch[1]) : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("products")
+        .update({ tradeplace_stock: stockData })
+        .eq("ean_code", eanMatch[1]);
+
+      if (!error) updated++;
+    }
+  }
+
+  console.log(`StockPush processed: ${updated} products updated out of ${itemBlocks.length} items`);
+}
+
 async function handlePushProductList(_supabase: any, _xml: string) {
-  console.log("PushProductList received - processing not yet implemented");
+  console.log("PushProductList received - stored in audit trail");
 }
 
-/**
- * Handle PushOrderChangeConfirmation (supplier confirms order modification)
- */
 async function handleOrderChangeConfirmation(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
@@ -323,18 +407,13 @@ async function handleOrderChangeConfirmation(supabase: any, xml: string) {
   console.log(`OrderChangeConfirmation processed: ${supplierOrder.id}`);
 }
 
-/**
- * Handle OrderCancellationReply (supplier confirms or rejects cancellation)
- */
 async function handleOrderCancellationReply(supabase: any, xml: string) {
   const supplierOrder = await findSupplierOrder(supabase, xml);
   if (!supplierOrder) return;
 
-  // Check if cancellation was accepted or rejected
   const errorCodeMatch = xml.match(/<ErrorCode>([^<]+)<\/ErrorCode>/);
 
   if (!errorCodeMatch) {
-    // No error = cancellation accepted
     await supabase
       .from("supplier_orders")
       .update({

@@ -1940,6 +1940,7 @@ export type Database = {
           specifications: Json | null
           subcategory: string | null
           supplier_id: string | null
+          tradeplace_stock: Json | null
           type_code: string | null
           type_name_nl: string | null
           unit: string | null
@@ -2000,6 +2001,7 @@ export type Database = {
           specifications?: Json | null
           subcategory?: string | null
           supplier_id?: string | null
+          tradeplace_stock?: Json | null
           type_code?: string | null
           type_name_nl?: string | null
           unit?: string | null
@@ -2060,6 +2062,7 @@ export type Database = {
           specifications?: Json | null
           subcategory?: string | null
           supplier_id?: string | null
+          tradeplace_stock?: Json | null
           type_code?: string | null
           type_name_nl?: string | null
           unit?: string | null
@@ -3481,6 +3484,9 @@ export type Database = {
           expected_delivery_date: string | null
           external_order_id: string | null
           id: string
+          invoice_amount: number | null
+          invoice_date: string | null
+          invoice_number: string | null
           notes: string | null
           order_id: string | null
           sent_at: string | null
@@ -3498,6 +3504,9 @@ export type Database = {
           expected_delivery_date?: string | null
           external_order_id?: string | null
           id?: string
+          invoice_amount?: number | null
+          invoice_date?: string | null
+          invoice_number?: string | null
           notes?: string | null
           order_id?: string | null
           sent_at?: string | null
@@ -3515,6 +3524,9 @@ export type Database = {
           expected_delivery_date?: string | null
           external_order_id?: string | null
           id?: string
+          invoice_amount?: number | null
+          invoice_date?: string | null
+          invoice_number?: string | null
           notes?: string | null
           order_id?: string | null
           sent_at?: string | null
@@ -3614,6 +3626,57 @@ export type Database = {
           tradeplace_tp_id?: string | null
         }
         Relationships: []
+      }
+      tradeplace_messages: {
+        Row: {
+          created_at: string | null
+          direction: string
+          id: string
+          message_type: string
+          metadata: Json | null
+          processed_at: string | null
+          raw_xml: string | null
+          supplier_id: string | null
+          supplier_order_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          direction?: string
+          id?: string
+          message_type: string
+          metadata?: Json | null
+          processed_at?: string | null
+          raw_xml?: string | null
+          supplier_id?: string | null
+          supplier_order_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          direction?: string
+          id?: string
+          message_type?: string
+          metadata?: Json | null
+          processed_at?: string | null
+          raw_xml?: string | null
+          supplier_id?: string | null
+          supplier_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tradeplace_messages_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tradeplace_messages_supplier_order_id_fkey"
+            columns: ["supplier_order_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tradeplace_settings: {
         Row: {
