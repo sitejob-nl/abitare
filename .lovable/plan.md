@@ -1,144 +1,82 @@
 
-# TradeXML 2.1.19 - Volledige inkoopkoppeling via TMH2
+# Bulk inkoopprijzen ophalen via Tradeplace
 
-## Huidige situatie
+## Wat is er nodig
 
-De basis is gelegd met 4 edge functions:
-- **tradeplace-config**: connectietest
-- **tradeplace-availability**: ProductAvailabilityRequest/Reply
-- **tradeplace-order**: OrderPlacementRequest (bestelling verzenden)
-- **tradeplace-webhook**: ontvangen van push-berichten (OrderPlacementReply, PushOrderConfirmation, ShippingNotification, OrderStatus, BillingDocument, etc.)
+De edge function `tradeplace-product-price` bestaat al en kan prijzen ophalen per EAN-code. Maar om dit bruikbaar te maken voor het bijwerken van alle productprijzen per leverancier zijn er drie dingen nodig:
 
-## Wat ontbreekt voor een volledige inkoopworkflow
+### 1. Leveranciers koppelen (bestaande UI)
 
-### Deel 1: Orderstatus opvragen (OrderStatusRequest)
+De Tradeplace-instellingenpagina (`TradeplaceSettings.tsx` + `SupplierTradeplaceDialog.tsx`) bestaat al. Daar kun je per leverancier de GLN en TP-ID invullen en `tradeplace_enabled` aanzetten. Dit is een handmatige stap die je zelf moet doen voor bijv. Bosch, Miele, Siemens, Atag, Gaggenau.
 
-Nu kun je alleen wachten op push-berichten van de fabrikant. Met een OrderStatusRequest kun je actief de status opvragen.
+Geen code-aanpassing nodig -- alleen configuratie.
 
-**Nieuw edge function: `tradeplace-order-status`**
-- Bouwt een `OrderStatusRequest` XML op basis van het supplier_order_id
-- Verstuurt naar TMH2 en parsed de `OrderStatusReply`
-- Werkt de supplier_order bij met de laatste statusgegevens (bevestigde leverdata, regelstatussen, tracking)
+### 2. Server-side bulk price update edge function
 
-**Frontend**: "Status opvragen" knop toevoegen in `SupplierOrdersCard.tsx` bij elke bestelling met status `sent` of `confirmed`.
-
----
-
-### Deel 2: Bestelling annuleren (OrderCancellationRequest)
-
-Toestaan om een verzonden of bevestigde bestelling te annuleren.
-
-**Nieuw edge function: `tradeplace-order-cancel`**
-- Bouwt een `OrderCancellationRequest` XML
-- Verstuurt naar TMH2 en parsed de `OrderCancellationReply`
-- Als geaccepteerd: status naar `cancelled`
-- Als afgewezen: foutmelding tonen (fabrikant kan annulering weigeren)
-
-**Frontend**: "Annuleren" knop bij bestellingen met status `sent` of `confirmed`, met bevestigingsdialoog.
-
----
-
-### Deel 3: Prijsinformatie opvragen (ProductPriceRequest)
-
-Actuele inkoopprijzen ophalen bij de fabrikant voor geselecteerde producten.
-
-**Nieuw edge function: `tradeplace-product-price`**
-- Bouwt een `ProductPriceRequest` XML (vergelijkbare structuur als availability)
-- Parsed de `ProductPriceReply` met MonetaryAmounts (netto/bruto/advies)
-- Retourneert prijzen per EAN
-
-**Frontend**: "Prijzen ophalen" actie in het inkoopoverzicht naast de beschikbaarheidscheck.
-
----
-
-### Deel 4: Webhook-verwerking verbeteren
-
-De webhook handler verwerkt al de meeste berichttypen, maar mist:
-
-1. **StockPush verwerking**: voorraadniveaus per EAN opslaan
-2. **BillingDocument verwerking**: factuurgegevens extraheren en opslaan
-3. **Audit trail**: elke binnenkomende XML opslaan in een log-tabel
-
-**Database migratie**:
-- Nieuwe tabel `tradeplace_messages` voor audit trail (message_type, supplier_order_id, raw_xml, processed_at)
-- Kolom `tradeplace_stock` (jsonb) op products voor voorraaddata uit StockPush
-
-**Webhook updates**:
-- Alle binnenkomende berichten loggen in `tradeplace_messages`
-- StockPush: voorraadstatus per EAN bijwerken in products
-- BillingDocument: factuurnummer, bedrag en datum extraheren en opslaan op supplier_order
-
----
-
-### Deel 5: UI-verbeteringen inkoopoverzicht
-
-1. **Orderstatus-timeline**: per leveranciersbestelling een tijdlijn tonen (aangemaakt, verzonden, bevestigd, verzendnotificatie, geleverd)
-2. **Regelstatus detail**: per orderregel de fabrikant-status tonen (bevestigd/backorder/afgewezen met DeliveredLineQuantity, BackorderLineQuantity, RejectedLineQuantity uit 2.1.18+)
-3. **Leverdata tonen**: bevestigde en geschatte leverdatums prominent weergeven
-4. **Beschikbaarheid inline**: bij het samenstellen van een bestelling direct beschikbaarheid per product tonen
-
----
-
-## Technische details
-
-### Nieuwe edge functions
-
-| Function | TradeXML bericht | Richting |
-|----------|-----------------|----------|
-| `tradeplace-order-status` | OrderStatusRequest/Reply | Uitgaand (request) |
-| `tradeplace-order-cancel` | OrderCancellationRequest/Reply | Uitgaand (request) |
-| `tradeplace-product-price` | ProductPriceRequest/Reply | Uitgaand (request) |
-
-### Database migratie
+Een nieuwe edge function `tradeplace-bulk-price-update` die:
+- Alle actieve producten met EAN-code ophaalt voor een leverancier
+- Ze in batches van 50 stuks naar TMH2 stuurt (ProductPriceRequest)
+- De teruggekomen nettoprijzen wegschrijft als `cost_price` op het product
+- Een samenvatting retourneert (bijgewerkt / niet gevonden / fouten)
 
 ```text
--- Audit trail tabel voor alle TMH2 berichten
-CREATE TABLE public.tradeplace_messages (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  message_type TEXT NOT NULL,
-  direction TEXT NOT NULL DEFAULT 'inbound',  -- 'inbound' of 'outbound'
-  supplier_order_id UUID REFERENCES supplier_orders(id),
-  supplier_id UUID REFERENCES suppliers(id),
-  raw_xml TEXT,
-  processed_at TIMESTAMPTZ DEFAULT now(),
-  metadata JSONB DEFAULT '{}'
-);
+POST tradeplace-bulk-price-update
+Body: { supplier_id: "uuid" }
 
--- Voorraadinformatie uit StockPush
-ALTER TABLE products ADD COLUMN IF NOT EXISTS tradeplace_stock JSONB;
-
--- Factuurgegevens op supplier_order
-ALTER TABLE supplier_orders 
-  ADD COLUMN IF NOT EXISTS invoice_number TEXT,
-  ADD COLUMN IF NOT EXISTS invoice_amount NUMERIC,
-  ADD COLUMN IF NOT EXISTS invoice_date DATE;
+Response: {
+  success: true,
+  supplier_name: "Miele",
+  total_products: 1639,
+  batches_sent: 33,
+  updated: 1580,
+  not_found: 42,
+  errors: 17
+}
 ```
 
-### Bestanden die wijzigen of nieuw zijn
+### 3. UI: "Prijzen ophalen" knop per leverancier
+
+Op de Tradeplace-instellingenpagina (`TradeplaceSettings.tsx`) een actie-knop toevoegen per gekoppelde leverancier: **"Inkoopprijzen bijwerken"**. Deze knop:
+- Roept de nieuwe edge function aan
+- Toont een laad-indicator (kan even duren bij 1600+ producten)
+- Toont een samenvatting na afloop (x bijgewerkt, x niet gevonden)
+
+## Wijzigingen
 
 | Bestand | Wijziging |
 |---------|-----------|
-| `supabase/functions/tradeplace-order-status/index.ts` | **Nieuw** - OrderStatusRequest |
-| `supabase/functions/tradeplace-order-cancel/index.ts` | **Nieuw** - OrderCancellationRequest |
-| `supabase/functions/tradeplace-product-price/index.ts` | **Nieuw** - ProductPriceRequest |
-| `supabase/functions/tradeplace-webhook/index.ts` | Audit trail + StockPush + BillingDocument verwerking |
-| `src/hooks/useTradeplace.ts` | Nieuwe hooks voor status/cancel/price |
-| `src/components/orders/SupplierOrdersCard.tsx` | Status opvragen, annuleren, timeline |
-| `src/components/orders/SupplierLineGroups.tsx` | Beschikbaarheid/prijs inline |
-| Database migratie | `tradeplace_messages` tabel + kolommen |
+| `supabase/functions/tradeplace-bulk-price-update/index.ts` | **Nieuw** - Bulk prijsophaling met batching |
+| `supabase/config.toml` | Nieuwe function registreren |
+| `src/hooks/useTradeplace.ts` | Nieuwe `useBulkPriceUpdate` mutation hook |
+| `src/components/settings/TradeplaceSettings.tsx` | "Inkoopprijzen bijwerken" knop per leverancier |
 
-### XML-structuur conformiteit
+## Technische details
 
-De bestaande `tradeplace-order` en `tradeplace-availability` functions voldoen al grotendeels aan 2.1.19. Kleine verbeteringen:
-- `PurchaseOrderVersion` toevoegen aan OrderPlacement (optioneel veld uit 2.1.16+)
-- `CompleteDeliveryFlag` ondersteuning (optioneel)
-- Robuustere parsing van MonetaryAmounts in replies (meerdere prijstypen)
+### Edge function: `tradeplace-bulk-price-update`
 
-### Implementatievolgorde
+- Haalt producten op: `SELECT id, ean_code FROM products WHERE supplier_id = $1 AND ean_code IS NOT NULL AND is_active = true`
+- Batcht in groepen van 50 EAN-codes
+- Hergebruikt dezelfde TMH2 API-aanroep als `tradeplace-product-price` (XML ProductPriceRequest)
+- Per batch: matcht EAN-codes terug en doet `UPDATE products SET cost_price = net_price WHERE ean_code = $ean`
+- Logt elke batch in `tradeplace_messages` (audit trail)
+- Retourneert aggregaat-resultaat
 
-1. Database migratie (audit trail tabel + kolommen)
-2. Webhook verbeteren (audit trail + StockPush + BillingDocument)
-3. OrderStatusRequest edge function + hook + UI
-4. OrderCancellationRequest edge function + hook + UI
-5. ProductPriceRequest edge function + hook + UI
-6. UI timeline en regelstatus-detail
+### Batching logica
+
+```text
+Totaal: 1639 producten (Miele)
+Batch grootte: 50
+Aantal batches: 33
+Per batch: 1 ProductPriceRequest XML -> 1 ProductPriceReply XML
+Totale doorlooptijd: ~30-60 seconden (afhankelijk van TMH2 responstijd)
+```
+
+### Prijs-mapping
+
+De nettoprijzen uit de TMH2-reply worden opgeslagen als `cost_price` op het product. Dit is de daadwerkelijke inkoopprijs. De bestaande `base_price` (verkoopprijs) en `book_price` (catalogusprijs) blijven ongewijzigd.
+
+### Geen impact op bestaande functionaliteit
+
+- De individuele `tradeplace-product-price` function blijft beschikbaar voor ad-hoc prijscontroles
+- Bestaande prijshierarchie (price_groups, supplier_discounts) wordt niet aangetast
+- Alleen `cost_price` wordt bijgewerkt, geen verkoopprijzen
