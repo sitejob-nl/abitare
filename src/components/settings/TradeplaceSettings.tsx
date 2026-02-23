@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { 
+import { Link } from "react-router-dom";
+import {
   AlertCircle, 
   CheckCircle2, 
   Copy,
   DollarSign,
-  ExternalLink, 
+  ExternalLink,
+  FileCode2, 
   Loader2, 
   RefreshCw,
   Settings2,
@@ -284,6 +286,12 @@ export function TradeplaceSettings() {
                 <ExternalLink className="h-3.5 w-3.5" />
                 TMH2 Admin
               </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/settings/tradeplace-messages" className="gap-2">
+                <FileCode2 className="h-3.5 w-3.5" />
+                Berichtenlog
+              </Link>
             </Button>
           </div>
         </CardContent>
