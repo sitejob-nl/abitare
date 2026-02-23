@@ -13,6 +13,9 @@ export interface SupplierOrder {
   expected_delivery_date: string | null;
   notes: string | null;
   created_at: string | null;
+  invoice_number?: string | null;
+  invoice_amount?: number | null;
+  invoice_date?: string | null;
   supplier?: {
     id: string;
     name: string;
@@ -36,6 +39,7 @@ export interface SupplierOrderLine {
   availability_qty: number | null;
   availability_checked_at: string | null;
   lead_time_days: number | null;
+  metadata?: Record<string, any> | null;
   created_at: string | null;
   product?: {
     id: string;

@@ -74,3 +74,12 @@ verify_jwt = false
 
 [functions.stosa-import]
 verify_jwt = false
+
+[functions.tradeplace-order-status]
+verify_jwt = false
+
+[functions.tradeplace-order-cancel]
+verify_jwt = false
+
+[functions.tradeplace-product-price]
+verify_jwt = false
