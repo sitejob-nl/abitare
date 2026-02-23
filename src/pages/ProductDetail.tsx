@@ -794,6 +794,55 @@ const ProductDetail = () => {
             </CardContent>
           </Card>
 
+          {/* Tradeplace Stock */}
+          {(() => {
+            const stock = (product as any).tradeplace_stock as Record<string, any> | null;
+            if (!stock || typeof stock !== 'object') return null;
+            const statusMap: Record<string, { label: string; className: string }> = {
+              in_stock: { label: "Op voorraad", className: "bg-primary/10 text-primary" },
+              limited: { label: "Beperkt", className: "bg-warning/10 text-warning" },
+              out_of_stock: { label: "Niet op voorraad", className: "bg-destructive/10 text-destructive" },
+              backorder: { label: "Backorder", className: "bg-info/10 text-info" },
+              unknown: { label: "Onbekend", className: "bg-muted text-muted-foreground" },
+            };
+            const statusInfo = statusMap[stock.status] || statusMap.unknown;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Voorraadstatus
+                    <span className="text-[10px] text-muted-foreground font-normal">(Tradeplace)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusInfo.className}`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+                  {stock.quantity != null && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Aantal</span>
+                      <span className="font-medium text-foreground">{stock.quantity}</span>
+                    </div>
+                  )}
+                  {stock.lead_time_days != null && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Levertijd</span>
+                      <span className="text-foreground">{stock.lead_time_days} dagen</span>
+                    </div>
+                  )}
+                  {stock.updated_at && (
+                    <div className="text-xs text-muted-foreground pt-1 border-t border-border">
+                      Bijgewerkt: {new Date(stock.updated_at).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Range prices */}
           {prices && prices.length > 0 && (
             <Card>

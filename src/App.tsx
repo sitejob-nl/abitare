@@ -38,6 +38,7 @@ const ServiceTicketDetail = lazy(() => import("./pages/ServiceTicketDetail"));
 const ServiceTicketPublicForm = lazy(() => import("./pages/ServiceTicketPublicForm"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SetPassword = lazy(() => import("./pages/SetPassword"));
+const TradeplaceMessages = lazy(() => import("./pages/TradeplaceMessages"));
 const InstallerDashboard = lazy(() => import("./pages/installer/InstallerDashboard"));
 const InstallerOrderDetail = lazy(() => import("./pages/installer/InstallerOrderDetail"));
 const WorkReportForm = lazy(() => import("./pages/installer/WorkReportForm"));
@@ -118,6 +119,7 @@ const App = () => (
               <Route path="/settings/price-groups" element={<ProtectedRoute><PriceGroups /></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/settings/tradeplace-messages" element={<ProtectedRoute><TradeplaceMessages /></ProtectedRoute>} />
               <Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
               <Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
               
