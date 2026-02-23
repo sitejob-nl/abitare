@@ -189,6 +189,32 @@ export function useTradeplaceSuppliers() {
   });
 }
 
+export function useBulkPriceUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (supplierId: string) => {
+      const { data, error } = await supabase.functions.invoke("tradeplace-bulk-price-update", {
+        body: { supplier_id: supplierId }
+      });
+      if (error) throw error;
+      return data as {
+        success: boolean;
+        supplier_name: string;
+        total_products: number;
+        unique_eans: number;
+        batches_sent: number;
+        updated: number;
+        not_found: number;
+        errors: number;
+        message?: string;
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    }
+  });
+}
+
 export function useUpdateSupplierTradeplace() {
   const queryClient = useQueryClient();
   return useMutation({
