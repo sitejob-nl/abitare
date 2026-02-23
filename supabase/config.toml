@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.tradeplace-product-price]
 verify_jwt = false
+
+[functions.tradeplace-bulk-price-update]
+verify_jwt = false

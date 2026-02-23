@@ -3,6 +3,7 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Copy,
+  DollarSign,
   ExternalLink, 
   Loader2, 
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   useTradeplaceConfig, 
   useTestTradeplaceConnection,
   useTradeplaceSuppliers,
+  useBulkPriceUpdate,
 } from "@/hooks/useTradeplace";
 import { useToast } from "@/hooks/use-toast";
 import { SupplierTradeplaceDialog } from "@/components/suppliers/SupplierTradeplaceDialog";
@@ -31,8 +33,10 @@ export function TradeplaceSettings() {
   const { data: config, isLoading: configLoading, refetch: refetchConfig } = useTradeplaceConfig();
   const { mutate: testConnection, isPending: testingConnection } = useTestTradeplaceConnection();
   const { data: suppliers, isLoading: suppliersLoading } = useTradeplaceSuppliers();
+  const { mutate: bulkPriceUpdate, isPending: updatingPrices } = useBulkPriceUpdate();
   
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [updatingSupplierId, setUpdatingSupplierId] = useState<string | null>(null);
 
   const handleTestConnection = () => {
     testConnection(undefined, {
@@ -56,6 +60,27 @@ export function TradeplaceSettings() {
   const handleCopyWebhookUrl = () => {
     navigator.clipboard.writeText(WEBHOOK_URL);
     toast({ title: "Gekopieerd", description: "Webhook URL gekopieerd naar klembord" });
+  };
+
+  const handleBulkPriceUpdate = (supplierId: string) => {
+    setUpdatingSupplierId(supplierId);
+    bulkPriceUpdate(supplierId, {
+      onSuccess: (data) => {
+        toast({
+          title: "Inkoopprijzen bijgewerkt",
+          description: `${data.supplier_name}: ${data.updated} bijgewerkt, ${data.not_found} niet gevonden, ${data.errors} fouten`,
+        });
+        setUpdatingSupplierId(null);
+      },
+      onError: (error) => {
+        toast({
+          title: "Fout bij prijzen ophalen",
+          description: error instanceof Error ? error.message : "Onbekende fout",
+          variant: "destructive"
+        });
+        setUpdatingSupplierId(null);
+      }
+    });
   };
 
   const tradeplaceSuppliers = suppliers?.filter(s => 
@@ -216,13 +241,30 @@ export function TradeplaceSettings() {
                         </p>
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setSelectedSupplier(supplier as Supplier)}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {supplier.tradeplace_enabled && supplier.tradeplace_gln && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleBulkPriceUpdate(supplier.id)}
+                          disabled={updatingPrices && updatingSupplierId === supplier.id}
+                          title="Inkoopprijzen bijwerken"
+                        >
+                          {updatingPrices && updatingSupplierId === supplier.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <DollarSign className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setSelectedSupplier(supplier as Supplier)}
+                      >
+                        <Settings2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
