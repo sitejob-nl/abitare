@@ -1,87 +1,144 @@
 
+# TradeXML 2.1.19 - Volledige inkoopkoppeling via TMH2
 
-# Planningvenster monteurs (7 dagen) en prognose weeknummer
+## Huidige situatie
 
-## Deel 1: Planningvenster monteurs beperken tot 7 dagen
+De basis is gelegd met 4 edge functions:
+- **tradeplace-config**: connectietest
+- **tradeplace-availability**: ProductAvailabilityRequest/Reply
+- **tradeplace-order**: OrderPlacementRequest (bestelling verzenden)
+- **tradeplace-webhook**: ontvangen van push-berichten (OrderPlacementReply, PushOrderConfirmation, ShippingNotification, OrderStatus, BillingDocument, etc.)
 
-### Probleem
-De monteurs-app toont momenteel **alle** toegewezen orders, ongeacht hoe ver in de toekomst ze gepland staan. Dit is overweldigend en niet wenselijk.
+## Wat ontbreekt voor een volledige inkoopworkflow
 
-### Oplossing
-De `installer_orders` database view aanpassen met een datumfilter dat alleen orders toont waarvan de verwachte installatiedatum binnen de komende 7 dagen valt (of in het verleden ligt en nog niet afgerond is). Orders zonder datum worden ook getoond zodat ze niet verloren gaan.
+### Deel 1: Orderstatus opvragen (OrderStatusRequest)
 
-### Wijzigingen
+Nu kun je alleen wachten op push-berichten van de fabrikant. Met een OrderStatusRequest kun je actief de status opvragen.
 
-**Database migratie** -- `installer_orders` view aanpassen:
-- Filter toevoegen: `expected_installation_date <= CURRENT_DATE + INTERVAL '7 days'`
-- Orders zonder datum (`NULL`) blijven zichtbaar
-- Orders met een datum in het verleden blijven zichtbaar (tenzij status = gemonteerd/afgerond)
+**Nieuw edge function: `tradeplace-order-status`**
+- Bouwt een `OrderStatusRequest` XML op basis van het supplier_order_id
+- Verstuurt naar TMH2 en parsed de `OrderStatusReply`
+- Werkt de supplier_order bij met de laatste statusgegevens (bevestigde leverdata, regelstatussen, tracking)
 
-**Frontend** (`src/pages/installer/InstallerDashboard.tsx`):
-- De "Later" groep verwijderen (er zijn geen orders meer buiten de week)
-- Optioneel: een tekst "Je ziet alleen opdrachten voor de komende 7 dagen" toevoegen
+**Frontend**: "Status opvragen" knop toevoegen in `SupplierOrdersCard.tsx` bij elke bestelling met status `sent` of `confirmed`.
 
 ---
 
-## Deel 2: Prognose weeknummer op orders
+### Deel 2: Bestelling annuleren (OrderCancellationRequest)
 
-### Probleem
-Planners willen intern een **indicatief weeknummer** kunnen toewijzen aan een order, zonder direct een Outlook-afspraak te maken. Dit voorkomt "zondagevents" en geeft een globaal planningsoverzicht.
+Toestaan om een verzonden of bevestigde bestelling te annuleren.
 
-### Oplossing
-Een nieuw veld `forecast_week` (text, formaat "YYYY-Wnn", bijv. "2026-W12") toevoegen aan de `orders` tabel. Dit veld is puur intern en heeft geen relatie met Outlook.
+**Nieuw edge function: `tradeplace-order-cancel`**
+- Bouwt een `OrderCancellationRequest` XML
+- Verstuurt naar TMH2 en parsed de `OrderCancellationReply`
+- Als geaccepteerd: status naar `cancelled`
+- Als afgewezen: foutmelding tonen (fabrikant kan annulering weigeren)
 
-### Wijzigingen
+**Frontend**: "Annuleren" knop bij bestellingen met status `sent` of `confirmed`, met bevestigingsdialoog.
+
+---
+
+### Deel 3: Prijsinformatie opvragen (ProductPriceRequest)
+
+Actuele inkoopprijzen ophalen bij de fabrikant voor geselecteerde producten.
+
+**Nieuw edge function: `tradeplace-product-price`**
+- Bouwt een `ProductPriceRequest` XML (vergelijkbare structuur als availability)
+- Parsed de `ProductPriceReply` met MonetaryAmounts (netto/bruto/advies)
+- Retourneert prijzen per EAN
+
+**Frontend**: "Prijzen ophalen" actie in het inkoopoverzicht naast de beschikbaarheidscheck.
+
+---
+
+### Deel 4: Webhook-verwerking verbeteren
+
+De webhook handler verwerkt al de meeste berichttypen, maar mist:
+
+1. **StockPush verwerking**: voorraadniveaus per EAN opslaan
+2. **BillingDocument verwerking**: factuurgegevens extraheren en opslaan
+3. **Audit trail**: elke binnenkomende XML opslaan in een log-tabel
 
 **Database migratie**:
-- Kolom `forecast_week` (text, nullable) toevoegen aan `orders`
+- Nieuwe tabel `tradeplace_messages` voor audit trail (message_type, supplier_order_id, raw_xml, processed_at)
+- Kolom `tradeplace_stock` (jsonb) op products voor voorraaddata uit StockPush
 
-**Frontend** -- Orderdetailpagina (`src/pages/OrderDetail.tsx`):
-- Een compact weeknummer-selector toevoegen in het planningsgedeelte
-- Toont jaar + weeknummer met een dropdown of inline input
-- Bewerkbaar door verkopers/managers
+**Webhook updates**:
+- Alle binnenkomende berichten loggen in `tradeplace_messages`
+- StockPush: voorraadstatus per EAN bijwerken in products
+- BillingDocument: factuurnummer, bedrag en datum extraheren en opslaan op supplier_order
 
-**Frontend** -- Installatieplanning overzicht (`src/pages/Installation.tsx`):
-- Kolom/filter toevoegen voor prognose-week
-- Orders groepeerbaar op weeknummer voor planningsoverzicht
+---
 
-**Frontend** -- Kanban/orderslijst:
-- Badge met weeknummer tonen op orderkaarten die een prognose maar nog geen definitieve datum hebben
+### Deel 5: UI-verbeteringen inkoopoverzicht
+
+1. **Orderstatus-timeline**: per leveranciersbestelling een tijdlijn tonen (aangemaakt, verzonden, bevestigd, verzendnotificatie, geleverd)
+2. **Regelstatus detail**: per orderregel de fabrikant-status tonen (bevestigd/backorder/afgewezen met DeliveredLineQuantity, BackorderLineQuantity, RejectedLineQuantity uit 2.1.18+)
+3. **Leverdata tonen**: bevestigde en geschatte leverdatums prominent weergeven
+4. **Beschikbaarheid inline**: bij het samenstellen van een bestelling direct beschikbaarheid per product tonen
 
 ---
 
 ## Technische details
 
+### Nieuwe edge functions
+
+| Function | TradeXML bericht | Richting |
+|----------|-----------------|----------|
+| `tradeplace-order-status` | OrderStatusRequest/Reply | Uitgaand (request) |
+| `tradeplace-order-cancel` | OrderCancellationRequest/Reply | Uitgaand (request) |
+| `tradeplace-product-price` | ProductPriceRequest/Reply | Uitgaand (request) |
+
 ### Database migratie
 
 ```text
-1. ALTER TABLE orders ADD COLUMN forecast_week text;
-   -- Formaat: "YYYY-Wnn" (bijv. "2026-W12")
+-- Audit trail tabel voor alle TMH2 berichten
+CREATE TABLE public.tradeplace_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  message_type TEXT NOT NULL,
+  direction TEXT NOT NULL DEFAULT 'inbound',  -- 'inbound' of 'outbound'
+  supplier_order_id UUID REFERENCES supplier_orders(id),
+  supplier_id UUID REFERENCES suppliers(id),
+  raw_xml TEXT,
+  processed_at TIMESTAMPTZ DEFAULT now(),
+  metadata JSONB DEFAULT '{}'
+);
 
-2. CREATE OR REPLACE VIEW installer_orders AS
-   SELECT [bestaande kolommen]
-   FROM orders
-   WHERE installer_id = auth.uid()
-     AND status NOT IN ('afgerond', 'geannuleerd')
-     AND (
-       expected_installation_date IS NULL
-       OR expected_installation_date <= CURRENT_DATE + INTERVAL '7 days'
-     );
+-- Voorraadinformatie uit StockPush
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tradeplace_stock JSONB;
+
+-- Factuurgegevens op supplier_order
+ALTER TABLE supplier_orders 
+  ADD COLUMN IF NOT EXISTS invoice_number TEXT,
+  ADD COLUMN IF NOT EXISTS invoice_amount NUMERIC,
+  ADD COLUMN IF NOT EXISTS invoice_date DATE;
 ```
 
-### Bestanden die wijzigen
+### Bestanden die wijzigen of nieuw zijn
 
 | Bestand | Wijziging |
 |---------|-----------|
-| Database migratie | `forecast_week` kolom + view update |
-| `src/pages/installer/InstallerDashboard.tsx` | "Later" groep verwijderen, info-tekst toevoegen |
-| `src/pages/OrderDetail.tsx` | Weeknummer-selector in planningssectie |
-| `src/pages/Installation.tsx` | Filter/groepering op prognose-week |
-| `src/hooks/useInstallerOrders.ts` | Geen wijziging nodig (view handelt filtering) |
-| `src/hooks/useOrderMutations.ts` | `forecast_week` opnemen in update-mutatie |
-| `src/components/orders/OrderKanbanCard.tsx` | Weeknummer badge tonen |
+| `supabase/functions/tradeplace-order-status/index.ts` | **Nieuw** - OrderStatusRequest |
+| `supabase/functions/tradeplace-order-cancel/index.ts` | **Nieuw** - OrderCancellationRequest |
+| `supabase/functions/tradeplace-product-price/index.ts` | **Nieuw** - ProductPriceRequest |
+| `supabase/functions/tradeplace-webhook/index.ts` | Audit trail + StockPush + BillingDocument verwerking |
+| `src/hooks/useTradeplace.ts` | Nieuwe hooks voor status/cancel/price |
+| `src/components/orders/SupplierOrdersCard.tsx` | Status opvragen, annuleren, timeline |
+| `src/components/orders/SupplierLineGroups.tsx` | Beschikbaarheid/prijs inline |
+| Database migratie | `tradeplace_messages` tabel + kolommen |
 
-### Geen impact op bestaande functionaliteit
-- Outlook-integratie blijft ongewijzigd
-- De definitieve planningsdatum (`expected_installation_date`) blijft leidend
-- `forecast_week` is puur informatief en blokkeert geen statusovergangen
+### XML-structuur conformiteit
+
+De bestaande `tradeplace-order` en `tradeplace-availability` functions voldoen al grotendeels aan 2.1.19. Kleine verbeteringen:
+- `PurchaseOrderVersion` toevoegen aan OrderPlacement (optioneel veld uit 2.1.16+)
+- `CompleteDeliveryFlag` ondersteuning (optioneel)
+- Robuustere parsing van MonetaryAmounts in replies (meerdere prijstypen)
+
+### Implementatievolgorde
+
+1. Database migratie (audit trail tabel + kolommen)
+2. Webhook verbeteren (audit trail + StockPush + BillingDocument)
+3. OrderStatusRequest edge function + hook + UI
+4. OrderCancellationRequest edge function + hook + UI
+5. ProductPriceRequest edge function + hook + UI
+6. UI timeline en regelstatus-detail
