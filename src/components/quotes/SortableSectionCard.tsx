@@ -295,6 +295,7 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
                                 sectionRangeId={section.range_id}
                                 quoteDefaultRangeId={quoteDefaultRangeId}
                                 sectionPriceGroupId={section.price_group_id}
+                                sectionSupplierId={sectionSupplierId}
                               />
                             );
                           })}

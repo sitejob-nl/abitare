@@ -32,6 +32,7 @@ import { useProducts } from "@/hooks/useProducts";
 import { useCreateQuoteLine } from "@/hooks/useQuoteLines";
 import { fetchProductPrice } from "@/hooks/useProductPrices";
 import { useProductRanges } from "@/hooks/useProductRanges";
+import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { toast } from "@/hooks/use-toast";
 
 interface AddProductDialogProps {
@@ -117,8 +118,10 @@ export function AddProductDialog({
     });
   }, [products, categoryFilter, widthFilter]);
 
-  // Fetch ranges for override dropdown
+  // Fetch ranges and price groups for override dropdown
   const { data: ranges } = useProductRanges(sectionSupplierId || undefined);
+  const { data: priceGroups } = usePriceGroups(sectionSupplierId || undefined);
+  const hasPriceGroups = !!sectionPriceGroupId && (priceGroups?.length ?? 0) > 0;
 
   const selectedProduct = useMemo(() => {
     return products?.find((p) => p.id === selectedProductId);
@@ -561,8 +564,8 @@ export function AddProductDialog({
                           </RadioGroup>
                         </div>
 
-                        {/* Override range */}
-                        {(ranges?.length ?? 0) > 0 && (
+                        {/* Override range / price group */}
+                        {((ranges?.length ?? 0) > 0 || hasPriceGroups) && (
                           <div className="space-y-1.5">
                             <Label className="text-xs">Override prijsgroep</Label>
                             <Select value={overrideRangeId || "none"} onValueChange={handleOverrideChange}>
@@ -571,11 +574,18 @@ export function AddProductDialog({
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">Geen override</SelectItem>
-                                {ranges?.map((range) => (
-                                  <SelectItem key={range.id} value={range.id}>
-                                    {range.code} - {range.name || range.collection || ""}
-                                  </SelectItem>
-                                ))}
+                                {hasPriceGroups
+                                  ? priceGroups?.map((pg) => (
+                                      <SelectItem key={pg.id} value={pg.id}>
+                                        {pg.code} - {pg.name}
+                                      </SelectItem>
+                                    ))
+                                  : ranges?.map((range) => (
+                                      <SelectItem key={range.id} value={range.id}>
+                                        {range.code} - {range.name || range.collection || ""}
+                                      </SelectItem>
+                                    ))
+                                }
                               </SelectContent>
                             </Select>
                           </div>
