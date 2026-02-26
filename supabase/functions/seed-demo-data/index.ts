@@ -11,25 +11,24 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(supabaseUrl, serviceKey);
-
     const log: string[] = [];
+
+    // Dynamic date helpers
+    const now = new Date();
+    const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const daysAgo = (d: number) => new Date(now.getTime() - d * 86400000).toISOString();
+    const daysFromNow = (d: number) => new Date(now.getTime() + d * 86400000).toISOString().split("T")[0];
 
     // ── 1. Demo Division ──
     const divisionId = "33333333-3333-3333-3333-333333333333";
     await supabase.from("divisions").upsert({
-      id: divisionId,
-      name: "Demo Showroom",
-      code: "DEMO",
-      address: "Keizersgracht 100",
-      postal_code: "1015 AA",
-      city: "Amsterdam",
-      email: "demo@abitare.nl",
-      phone: "020-1234567",
-      is_active: true,
+      id: divisionId, name: "Demo Showroom", code: "DEMO",
+      address: "Keizersgracht 100", postal_code: "1015 AA", city: "Amsterdam",
+      email: "demo@abitare.nl", phone: "020-1234567", is_active: true,
     });
     log.push("✅ Demo division created");
 
-    // ── 2. Suppliers (use existing) ──
+    // ── 2. Supplier IDs (existing) ──
     const stosaId = "29a8e1aa-35da-4784-99ff-23129f36fe22";
     const mieleId = "93406e17-477d-4f16-af77-1bbb35dfd45e";
     const siemensId = "c5669d28-f277-4043-a3fb-c2c593b0be63";
@@ -37,7 +36,7 @@ Deno.serve(async (req) => {
     const quookerId = "91bded38-8213-4bf9-9493-5dd52997839b";
     const boschId = "e70c4a1a-b3e1-460b-86b6-be9644eaaf56";
 
-    // ── 3. Demo Products with prices ──
+    // ── 3. Demo Products ──
     const demoProducts = [
       { id: "d0000001-0000-0000-0000-000000000001", article_code: "DEMO-OND-60", name: "Onderkast 60cm", supplier_id: stosaId, category_id: "5706f89e-3c46-4567-9c1d-62aa447c2952", base_price: 485, cost_price: 290, width_mm: 600, height_mm: 720, depth_mm: 560 },
       { id: "d0000001-0000-0000-0000-000000000002", article_code: "DEMO-OND-90", name: "Onderkast 90cm", supplier_id: stosaId, category_id: "5706f89e-3c46-4567-9c1d-62aa447c2952", base_price: 625, cost_price: 375, width_mm: 900, height_mm: 720, depth_mm: 560 },
@@ -85,19 +84,16 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${customers.length} demo customers created`);
 
-    // ── 5. Demo Quotes ──
-    const now = new Date();
-    const daysAgo = (d: number) => new Date(now.getTime() - d * 86400000).toISOString();
-
+    // ── 5. Demo Quotes (FIX: subtotal → subtotal_products) ──
     const quotes = [
-      { id: "a0000001-0000-0000-0000-000000000001", customer_id: customers[0].id, division_id: divisionId, status: "concept", quote_number: 9001, reference: "de Vries - Keuken - 2026-001", subtotal: 12500, total_excl_vat: 12500, total_vat: 2625, total_incl_vat: 15125, created_at: daysAgo(2) },
-      { id: "a0000001-0000-0000-0000-000000000002", customer_id: customers[1].id, division_id: divisionId, status: "verstuurd", quote_number: 9002, reference: "Bakker - Keuken - 2026-001", subtotal: 18750, total_excl_vat: 18750, total_vat: 3937.50, total_incl_vat: 22687.50, created_at: daysAgo(5), sent_at: daysAgo(4) },
-      { id: "a0000001-0000-0000-0000-000000000003", customer_id: customers[2].id, division_id: divisionId, status: "geaccepteerd", quote_number: 9003, reference: "Jansen Bouw - Keuken - 2026-001", subtotal: 32500, total_excl_vat: 32500, total_vat: 6825, total_incl_vat: 39325, created_at: daysAgo(14), sent_at: daysAgo(13), accepted_at: daysAgo(7) },
-      { id: "a0000001-0000-0000-0000-000000000004", customer_id: customers[3].id, division_id: divisionId, status: "bekeken", quote_number: 9004, reference: "van den Berg - Keuken - 2026-001", subtotal: 15800, total_excl_vat: 15800, total_vat: 3318, total_incl_vat: 19118, created_at: daysAgo(3), sent_at: daysAgo(2) },
-      { id: "a0000001-0000-0000-0000-000000000005", customer_id: customers[4].id, division_id: divisionId, status: "vervallen", quote_number: 9005, reference: "Willems - Keuken - 2026-001", subtotal: 9200, total_excl_vat: 9200, total_vat: 1932, total_incl_vat: 11132, created_at: daysAgo(45), sent_at: daysAgo(44) },
-      { id: "a0000001-0000-0000-0000-000000000006", customer_id: customers[5].id, division_id: divisionId, status: "verstuurd", quote_number: 9006, reference: "Hendriks - Keuken - 2026-001", subtotal: 21300, total_excl_vat: 21300, total_vat: 4473, total_incl_vat: 25773, created_at: daysAgo(1), sent_at: daysAgo(0) },
-      { id: "a0000001-0000-0000-0000-000000000007", customer_id: customers[9].id, division_id: divisionId, status: "geaccepteerd", quote_number: 9007, reference: "de Groot - Keuken - 2026-001", subtotal: 28900, total_excl_vat: 28900, total_vat: 6069, total_incl_vat: 34969, created_at: daysAgo(20), sent_at: daysAgo(19), accepted_at: daysAgo(12) },
-      { id: "a0000001-0000-0000-0000-000000000008", customer_id: customers[11].id, division_id: divisionId, status: "concept", quote_number: 9008, reference: "Meijer - Keuken - 2026-001", subtotal: 16400, total_excl_vat: 16400, total_vat: 3444, total_incl_vat: 19844, created_at: daysAgo(0) },
+      { id: "a0000001-0000-0000-0000-000000000001", customer_id: customers[0].id, division_id: divisionId, status: "concept", quote_number: 9001, reference: "de Vries - Keuken - 2026-001", subtotal_products: 12500, total_excl_vat: 12500, total_vat: 2625, total_incl_vat: 15125, created_at: daysAgo(2) },
+      { id: "a0000001-0000-0000-0000-000000000002", customer_id: customers[1].id, division_id: divisionId, status: "verstuurd", quote_number: 9002, reference: "Bakker - Keuken - 2026-001", subtotal_products: 18750, total_excl_vat: 18750, total_vat: 3937.50, total_incl_vat: 22687.50, created_at: daysAgo(5), sent_at: daysAgo(4) },
+      { id: "a0000001-0000-0000-0000-000000000003", customer_id: customers[2].id, division_id: divisionId, status: "geaccepteerd", quote_number: 9003, reference: "Jansen Bouw - Keuken - 2026-001", subtotal_products: 32500, total_excl_vat: 32500, total_vat: 6825, total_incl_vat: 39325, created_at: daysAgo(14), sent_at: daysAgo(13), accepted_at: daysAgo(7) },
+      { id: "a0000001-0000-0000-0000-000000000004", customer_id: customers[3].id, division_id: divisionId, status: "bekeken", quote_number: 9004, reference: "van den Berg - Keuken - 2026-001", subtotal_products: 15800, total_excl_vat: 15800, total_vat: 3318, total_incl_vat: 19118, created_at: daysAgo(3), sent_at: daysAgo(2) },
+      { id: "a0000001-0000-0000-0000-000000000005", customer_id: customers[4].id, division_id: divisionId, status: "vervallen", quote_number: 9005, reference: "Willems - Keuken - 2026-001", subtotal_products: 9200, total_excl_vat: 9200, total_vat: 1932, total_incl_vat: 11132, created_at: daysAgo(45), sent_at: daysAgo(44) },
+      { id: "a0000001-0000-0000-0000-000000000006", customer_id: customers[5].id, division_id: divisionId, status: "verstuurd", quote_number: 9006, reference: "Hendriks - Keuken - 2026-001", subtotal_products: 21300, total_excl_vat: 21300, total_vat: 4473, total_incl_vat: 25773, created_at: daysAgo(1), sent_at: daysAgo(0) },
+      { id: "a0000001-0000-0000-0000-000000000007", customer_id: customers[9].id, division_id: divisionId, status: "geaccepteerd", quote_number: 9007, reference: "de Groot - Keuken - 2026-001", subtotal_products: 28900, total_excl_vat: 28900, total_vat: 6069, total_incl_vat: 34969, created_at: daysAgo(20), sent_at: daysAgo(19), accepted_at: daysAgo(12) },
+      { id: "a0000001-0000-0000-0000-000000000008", customer_id: customers[11].id, division_id: divisionId, status: "concept", quote_number: 9008, reference: "Meijer - Keuken - 2026-001", subtotal_products: 16400, total_excl_vat: 16400, total_vat: 3444, total_incl_vat: 19844, created_at: daysAgo(0) },
     ];
 
     for (const q of quotes) {
@@ -105,64 +101,133 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${quotes.length} demo quotes created`);
 
-    // ── 6. Quote Sections & Lines ──
+    // ── 6. Quote Sections with configuration fields (FIX 3) ──
     const quoteSections = [
-      { id: "b5000001-0000-0000-0000-000000000001", quote_id: quotes[0].id, title: "Keukenkasten Stosa", section_type: "keuken", sort_order: 1, range_id: null, supplier_id: stosaId },
-      { id: "b5000001-0000-0000-0000-000000000002", quote_id: quotes[0].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, range_id: null, supplier_id: siemensId },
-      { id: "b5000001-0000-0000-0000-000000000003", quote_id: quotes[1].id, title: "Keukenkasten Stosa", section_type: "keuken", sort_order: 1, range_id: null, supplier_id: stosaId },
-      { id: "b5000001-0000-0000-0000-000000000004", quote_id: quotes[1].id, title: "Apparatuur Miele", section_type: "apparatuur", sort_order: 2, range_id: null, supplier_id: mieleId },
-      { id: "b5000001-0000-0000-0000-000000000005", quote_id: quotes[2].id, title: "Keukenkasten Stosa", section_type: "keuken", sort_order: 1, range_id: null, supplier_id: stosaId },
-      { id: "b5000001-0000-0000-0000-000000000006", quote_id: quotes[2].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, range_id: null, supplier_id: mieleId },
-      { id: "b5000001-0000-0000-0000-000000000007", quote_id: quotes[2].id, title: "Werkblad & Spoelbak", section_type: "werkblad", sort_order: 3, range_id: null, supplier_id: blancoId },
+      // Quote 1
+      { id: "b5000001-0000-0000-0000-000000000001", quote_id: quotes[0].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Wit", handle_number: "G-220", model_code: "CITY", model_name: "City", subtotal: 6075 },
+      { id: "b5000001-0000-0000-0000-000000000002", quote_id: quotes[0].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, supplier_id: siemensId, subtotal: 4697 },
+      // Quote 2
+      { id: "b5000001-0000-0000-0000-000000000003", quote_id: quotes[1].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F205", front_color: "Lak Antraciet", corpus_color: "Antraciet", handle_number: "G-330", model_code: "ALEV", model_name: "Alev", subtotal: 5085 },
+      { id: "b5000001-0000-0000-0000-000000000004", quote_id: quotes[1].id, title: "Apparatuur Miele", section_type: "apparatuur", sort_order: 2, supplier_id: mieleId, subtotal: 9997 },
+      // Quote 3
+      { id: "b5000001-0000-0000-0000-000000000005", quote_id: quotes[2].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F310", front_color: "Lak Wit Mat", corpus_color: "Wit", handle_number: null, model_code: "YORK", model_name: "York", subtotal: 10965 },
+      { id: "b5000001-0000-0000-0000-000000000006", quote_id: quotes[2].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, supplier_id: mieleId, subtotal: 6698 },
+      { id: "b5000001-0000-0000-0000-000000000007", quote_id: quotes[2].id, title: "Werkblad & Spoelbak", section_type: "werkbladen", sort_order: 3, supplier_id: blancoId, subtotal: 1839 },
+      // Quote 4
+      { id: "b5000001-0000-0000-0000-000000000008", quote_id: quotes[3].id, title: "Keukenkasten", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Wit", model_code: "CITY", model_name: "City", subtotal: 5900 },
+      { id: "b5000001-0000-0000-0000-000000000009", quote_id: quotes[3].id, title: "Apparatuur Siemens", section_type: "apparatuur", sort_order: 2, supplier_id: siemensId, subtotal: 4697 },
+      // Quote 5
+      { id: "b5000001-0000-0000-0000-000000000010", quote_id: quotes[4].id, title: "Keukenkasten", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F205", front_color: "Lak Antraciet", corpus_color: "Antraciet", model_code: "ALEV", model_name: "Alev", subtotal: 4850 },
+      { id: "b5000001-0000-0000-0000-000000000011", quote_id: quotes[4].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, supplier_id: boschId, subtotal: 1099 },
+      // Quote 6
+      { id: "b5000001-0000-0000-0000-000000000012", quote_id: quotes[5].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F310", front_color: "Lak Wit Mat", corpus_color: "Wit", handle_number: "G-220", model_code: "YORK", model_name: "York", subtotal: 7850 },
+      { id: "b5000001-0000-0000-0000-000000000013", quote_id: quotes[5].id, title: "Apparatuur Miele", section_type: "apparatuur", sort_order: 2, supplier_id: mieleId, subtotal: 6498 },
+      { id: "b5000001-0000-0000-0000-000000000014", quote_id: quotes[5].id, title: "Sanitair", section_type: "sanitair", sort_order: 3, supplier_id: quookerId, subtotal: 2384 },
+      // Quote 7
+      { id: "b5000001-0000-0000-0000-000000000015", quote_id: quotes[6].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Eiken", handle_number: "G-440", model_code: "CITY", model_name: "City", subtotal: 11200 },
+      { id: "b5000001-0000-0000-0000-000000000016", quote_id: quotes[6].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, supplier_id: mieleId, subtotal: 9997 },
+      { id: "b5000001-0000-0000-0000-000000000017", quote_id: quotes[6].id, title: "Werkblad", section_type: "werkbladen", sort_order: 3, supplier_id: stosaId, subtotal: 1250 },
+      // Quote 8
+      { id: "b5000001-0000-0000-0000-000000000018", quote_id: quotes[7].id, title: "Keukenkasten", section_type: "keukenmeubelen", sort_order: 1, supplier_id: stosaId, front_number: "F205", front_color: "Lak Antraciet", corpus_color: "Antraciet", handle_number: "G-220", model_code: "ALEV", model_name: "Alev", subtotal: 6200 },
+      { id: "b5000001-0000-0000-0000-000000000019", quote_id: quotes[7].id, title: "Apparatuur Siemens", section_type: "apparatuur", sort_order: 2, supplier_id: siemensId, subtotal: 4697 },
     ];
 
     for (const qs of quoteSections) {
       await supabase.from("quote_sections").upsert(qs);
     }
+    log.push(`✅ ${quoteSections.length} demo quote sections created`);
+
+    // ── 7. Quote Lines with explicit IDs (FIX 2) ──
+    // Delete existing quote lines for these quotes first, then insert fresh
+    const quoteIds = quotes.map(q => q.id);
+    await supabase.from("quote_lines").delete().in("quote_id", quoteIds);
 
     const quoteLines = [
       // Quote 1 lines
-      { quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, line_total: 1940, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 2, unit_price: 625, line_total: 1250, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 3, unit_price: 365, line_total: 1095, sort_order: 3, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, line_total: 1790, sort_order: 4, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, line_total: 1849, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, line_total: 1299, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, line_total: 1549, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000001", quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, line_total: 1940, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000002", quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 2, unit_price: 625, line_total: 1250, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000003", quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 3, unit_price: 365, line_total: 1095, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000004", quote_id: quotes[0].id, section_id: quoteSections[0].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, line_total: 1790, sort_order: 4, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000005", quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, line_total: 1849, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000006", quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, line_total: 1299, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000007", quote_id: quotes[0].id, section_id: quoteSections[1].id, product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, line_total: 1549, sort_order: 3, vat_rate: 21 },
       // Quote 2 lines
-      { quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 5, unit_price: 485, line_total: 2425, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 3, unit_price: 625, line_total: 1875, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[5].id, description: demoProducts[5].name, article_code: demoProducts[5].article_code, quantity: 1, unit_price: 785, line_total: 785, sort_order: 3, vat_rate: 21 },
-      { quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[16].id, description: demoProducts[16].name, article_code: demoProducts[16].article_code, quantity: 1, unit_price: 3299, line_total: 3299, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000008", quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 5, unit_price: 485, line_total: 2425, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000009", quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 3, unit_price: 625, line_total: 1875, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000010", quote_id: quotes[1].id, section_id: quoteSections[2].id, product_id: demoProducts[5].id, description: demoProducts[5].name, article_code: demoProducts[5].article_code, quantity: 1, unit_price: 785, line_total: 785, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000011", quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000012", quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000013", quote_id: quotes[1].id, section_id: quoteSections[3].id, product_id: demoProducts[16].id, description: demoProducts[16].name, article_code: demoProducts[16].article_code, quantity: 1, unit_price: 3299, line_total: 3299, sort_order: 3, vat_rate: 21 },
       // Quote 3 lines (big project)
-      { quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 8, unit_price: 485, line_total: 3880, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, line_total: 2500, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 4, unit_price: 475, line_total: 1900, sort_order: 3, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 3, unit_price: 895, line_total: 2685, sort_order: 4, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[5].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[5].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[6].id, product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, line_total: 1250, sort_order: 1, vat_rate: 21 },
-      { quote_id: quotes[2].id, section_id: quoteSections[6].id, product_id: demoProducts[12].id, description: demoProducts[12].name, article_code: demoProducts[12].article_code, quantity: 1, unit_price: 589, line_total: 589, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000014", quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 8, unit_price: 485, line_total: 3880, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000015", quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, line_total: 2500, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000016", quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 4, unit_price: 475, line_total: 1900, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000017", quote_id: quotes[2].id, section_id: quoteSections[4].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 3, unit_price: 895, line_total: 2685, sort_order: 4, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000018", quote_id: quotes[2].id, section_id: quoteSections[5].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000019", quote_id: quotes[2].id, section_id: quoteSections[5].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000020", quote_id: quotes[2].id, section_id: quoteSections[6].id, product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, line_total: 1250, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000021", quote_id: quotes[2].id, section_id: quoteSections[6].id, product_id: demoProducts[12].id, description: demoProducts[12].name, article_code: demoProducts[12].article_code, quantity: 1, unit_price: 589, line_total: 589, sort_order: 2, vat_rate: 21 },
+      // Quote 4 lines
+      { id: "aa000001-0000-0000-0000-000000000022", quote_id: quotes[3].id, section_id: quoteSections[7].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, line_total: 1940, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000023", quote_id: quotes[3].id, section_id: quoteSections[7].id, product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 3, unit_price: 365, line_total: 1095, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000024", quote_id: quotes[3].id, section_id: quoteSections[7].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, line_total: 1790, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000025", quote_id: quotes[3].id, section_id: quoteSections[8].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, line_total: 1849, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000026", quote_id: quotes[3].id, section_id: quoteSections[8].id, product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, line_total: 1299, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000027", quote_id: quotes[3].id, section_id: quoteSections[8].id, product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, line_total: 1549, sort_order: 3, vat_rate: 21 },
+      // Quote 5 lines
+      { id: "aa000001-0000-0000-0000-000000000028", quote_id: quotes[4].id, section_id: quoteSections[9].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 3, unit_price: 485, line_total: 1455, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000029", quote_id: quotes[4].id, section_id: quoteSections[9].id, product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 3, unit_price: 365, line_total: 1095, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000030", quote_id: quotes[4].id, section_id: quoteSections[9].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 1, unit_price: 895, line_total: 895, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000031", quote_id: quotes[4].id, section_id: quoteSections[10].id, product_id: demoProducts[10].id, description: demoProducts[10].name, article_code: demoProducts[10].article_code, quantity: 1, unit_price: 1099, line_total: 1099, sort_order: 1, vat_rate: 21 },
+      // Quote 6 lines
+      { id: "aa000001-0000-0000-0000-000000000032", quote_id: quotes[5].id, section_id: quoteSections[11].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 5, unit_price: 485, line_total: 2425, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000033", quote_id: quotes[5].id, section_id: quoteSections[11].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 3, unit_price: 625, line_total: 1875, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000034", quote_id: quotes[5].id, section_id: quoteSections[11].id, product_id: demoProducts[5].id, description: demoProducts[5].name, article_code: demoProducts[5].article_code, quantity: 1, unit_price: 785, line_total: 785, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000035", quote_id: quotes[5].id, section_id: quoteSections[12].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000036", quote_id: quotes[5].id, section_id: quoteSections[12].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000037", quote_id: quotes[5].id, section_id: quoteSections[13].id, product_id: demoProducts[11].id, description: demoProducts[11].name, article_code: demoProducts[11].article_code, quantity: 1, unit_price: 1795, line_total: 1795, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000038", quote_id: quotes[5].id, section_id: quoteSections[13].id, product_id: demoProducts[12].id, description: demoProducts[12].name, article_code: demoProducts[12].article_code, quantity: 1, unit_price: 589, line_total: 589, sort_order: 2, vat_rate: 21 },
+      // Quote 7 lines
+      { id: "aa000001-0000-0000-0000-000000000039", quote_id: quotes[6].id, section_id: quoteSections[14].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 6, unit_price: 485, line_total: 2910, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000040", quote_id: quotes[6].id, section_id: quoteSections[14].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, line_total: 2500, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000041", quote_id: quotes[6].id, section_id: quoteSections[14].id, product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 3, unit_price: 475, line_total: 1425, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000042", quote_id: quotes[6].id, section_id: quoteSections[14].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 3, unit_price: 895, line_total: 2685, sort_order: 4, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000043", quote_id: quotes[6].id, section_id: quoteSections[15].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, line_total: 2499, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000044", quote_id: quotes[6].id, section_id: quoteSections[15].id, product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, line_total: 4199, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000045", quote_id: quotes[6].id, section_id: quoteSections[15].id, product_id: demoProducts[16].id, description: demoProducts[16].name, article_code: demoProducts[16].article_code, quantity: 1, unit_price: 3299, line_total: 3299, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000046", quote_id: quotes[6].id, section_id: quoteSections[16].id, product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, line_total: 1250, sort_order: 1, vat_rate: 21 },
+      // Quote 8 lines
+      { id: "aa000001-0000-0000-0000-000000000047", quote_id: quotes[7].id, section_id: quoteSections[17].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, line_total: 1940, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000048", quote_id: quotes[7].id, section_id: quoteSections[17].id, product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 4, unit_price: 365, line_total: 1460, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000049", quote_id: quotes[7].id, section_id: quoteSections[17].id, product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, line_total: 1790, sort_order: 3, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000050", quote_id: quotes[7].id, section_id: quoteSections[18].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, line_total: 1849, sort_order: 1, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000051", quote_id: quotes[7].id, section_id: quoteSections[18].id, product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, line_total: 1299, sort_order: 2, vat_rate: 21 },
+      { id: "aa000001-0000-0000-0000-000000000052", quote_id: quotes[7].id, section_id: quoteSections[18].id, product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, line_total: 1549, sort_order: 3, vat_rate: 21 },
     ];
 
     for (const ql of quoteLines) {
-      await supabase.from("quote_lines").upsert(ql, { ignoreDuplicates: true });
+      await supabase.from("quote_lines").upsert(ql);
     }
     log.push(`✅ ${quoteLines.length} demo quote lines created`);
 
-    // ── 7. Demo Orders (various statuses) ──
-    // Using valid hex UUIDs (no 'o' prefix)
+    // ── 8. Demo Orders (FIX 6 & 7: dynamic dates for agenda + calendar) ──
     const orders = [
-      { id: "f0000001-0000-0000-0000-000000000001", customer_id: customers[2].id, division_id: divisionId, quote_id: quotes[2].id, status: "besteld" as const, order_number: 8001, order_date: daysAgo(7), total_excl_vat: 32500, total_incl_vat: 39325, total_vat: 6825, total_cost_price: 19500, payment_status: "deels_betaald" as const, amount_paid: 15000, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Markt 12", installation_postal_code: "6211 CK", installation_city: "Maastricht", delivery_street_address: "Bonnefantenstraat 8", delivery_postal_code: "6211 KL", delivery_city: "Maastricht", expected_delivery_date: daysAgo(-14), expected_installation_date: daysAgo(-21), forecast_week: "2026-12" },
-      { id: "f0000001-0000-0000-0000-000000000002", customer_id: customers[9].id, division_id: divisionId, quote_id: quotes[6].id, status: "in_productie" as const, order_number: 8002, order_date: daysAgo(12), total_excl_vat: 28900, total_incl_vat: 34969, total_vat: 6069, total_cost_price: 17340, payment_status: "betaald" as const, amount_paid: 34969, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Herengracht 450", installation_postal_code: "1017 CA", installation_city: "Amsterdam", expected_delivery_date: daysAgo(-7), expected_installation_date: daysAgo(-10), forecast_week: "2026-11" },
+      // Order 8001 - besteld, delivery in 5 days
+      { id: "f0000001-0000-0000-0000-000000000001", customer_id: customers[2].id, division_id: divisionId, quote_id: quotes[2].id, status: "besteld" as const, order_number: 8001, order_date: daysAgo(7), total_excl_vat: 32500, total_incl_vat: 39325, total_vat: 6825, total_cost_price: 19500, payment_status: "deels_betaald" as const, amount_paid: 15000, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Markt 12", installation_postal_code: "6211 CK", installation_city: "Maastricht", delivery_street_address: "Bonnefantenstraat 8", delivery_postal_code: "6211 KL", delivery_city: "Maastricht", expected_delivery_date: daysFromNow(5), expected_installation_date: daysFromNow(10), forecast_week: "2026-12" },
+      // Order 8002 - in_productie, delivery in 3 days
+      { id: "f0000001-0000-0000-0000-000000000002", customer_id: customers[9].id, division_id: divisionId, quote_id: quotes[6].id, status: "in_productie" as const, order_number: 8002, order_date: daysAgo(12), total_excl_vat: 28900, total_incl_vat: 34969, total_vat: 6069, total_cost_price: 17340, payment_status: "betaald" as const, amount_paid: 34969, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Herengracht 450", installation_postal_code: "1017 CA", installation_city: "Amsterdam", expected_delivery_date: daysFromNow(3), expected_installation_date: daysFromNow(8), forecast_week: "2026-11" },
+      // Order 8003 - nieuw
       { id: "f0000001-0000-0000-0000-000000000003", customer_id: customers[7].id, division_id: divisionId, status: "nieuw" as const, order_number: 8003, order_date: daysAgo(1), total_excl_vat: 14200, total_incl_vat: 17182, total_vat: 2982, total_cost_price: 8520, payment_status: "open" as const, amount_paid: 0, deposit_required: true, deposit_invoice_sent: false, installation_street_address: "Vrijthof 18", installation_postal_code: "6211 LD", installation_city: "Maastricht", forecast_week: "2026-14" },
-      { id: "f0000001-0000-0000-0000-000000000004", customer_id: customers[5].id, division_id: divisionId, status: "levering_gepland" as const, order_number: 8004, order_date: daysAgo(30), total_excl_vat: 21300, total_incl_vat: 25773, total_vat: 4473, total_cost_price: 12780, payment_status: "betaald" as const, amount_paid: 25773, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Coolsingel 40", installation_postal_code: "3011 AD", installation_city: "Rotterdam", expected_delivery_date: daysAgo(-2), expected_installation_date: daysAgo(-5), forecast_week: "2026-10" },
-      { id: "f0000001-0000-0000-0000-000000000005", customer_id: customers[6].id, division_id: divisionId, status: "montage_gepland" as const, order_number: 8005, order_date: daysAgo(45), total_excl_vat: 26800, total_incl_vat: 32428, total_vat: 5628, total_cost_price: 16080, payment_status: "betaald" as const, amount_paid: 32428, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Maliebaan 22", installation_postal_code: "3581 CN", installation_city: "Utrecht", actual_delivery_date: daysAgo(3), expected_installation_date: daysAgo(-1), forecast_week: "2026-09" },
-      { id: "f0000001-0000-0000-0000-000000000006", customer_id: customers[8].id, division_id: divisionId, status: "gemonteerd" as const, order_number: 8006, order_date: daysAgo(60), total_excl_vat: 19500, total_incl_vat: 23595, total_vat: 4095, total_cost_price: 11700, payment_status: "betaald" as const, amount_paid: 23595, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Lange Voorhout 8", installation_postal_code: "2514 ED", installation_city: "Den Haag", actual_delivery_date: daysAgo(10), actual_installation_date: daysAgo(5), forecast_week: "2026-06" },
-      { id: "f0000001-0000-0000-0000-000000000007", customer_id: customers[10].id, division_id: divisionId, status: "afgerond" as const, order_number: 8007, order_date: daysAgo(90), total_excl_vat: 35200, total_incl_vat: 42592, total_vat: 7392, total_cost_price: 21120, payment_status: "betaald" as const, amount_paid: 42592, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Westersingel 12", installation_postal_code: "3014 GN", installation_city: "Rotterdam", actual_delivery_date: daysAgo(30), actual_installation_date: daysAgo(25), forecast_week: "2026-03" },
-      { id: "f0000001-0000-0000-0000-000000000008", customer_id: customers[0].id, division_id: divisionId, status: "bestel_klaar" as const, order_number: 8008, order_date: daysAgo(4), total_excl_vat: 12500, total_incl_vat: 15125, total_vat: 2625, total_cost_price: 7500, payment_status: "deels_betaald" as const, amount_paid: 5000, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Prinsengracht 263", installation_postal_code: "1016 GV", installation_city: "Amsterdam", forecast_week: "2026-13" },
+      // Order 8004 - levering_gepland TODAY (AGENDA!)
+      { id: "f0000001-0000-0000-0000-000000000004", customer_id: customers[5].id, division_id: divisionId, status: "levering_gepland" as const, order_number: 8004, order_date: daysAgo(30), total_excl_vat: 21300, total_incl_vat: 25773, total_vat: 4473, total_cost_price: 12780, payment_status: "betaald" as const, amount_paid: 25773, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Coolsingel 40", installation_postal_code: "3011 AD", installation_city: "Rotterdam", expected_delivery_date: today, expected_installation_date: daysFromNow(4), forecast_week: "2026-10" },
+      // Order 8005 - montage_gepland TODAY (AGENDA!)
+      { id: "f0000001-0000-0000-0000-000000000005", customer_id: customers[6].id, division_id: divisionId, status: "montage_gepland" as const, order_number: 8005, order_date: daysAgo(45), total_excl_vat: 26800, total_incl_vat: 32428, total_vat: 5628, total_cost_price: 16080, payment_status: "betaald" as const, amount_paid: 32428, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Maliebaan 22", installation_postal_code: "3581 CN", installation_city: "Utrecht", actual_delivery_date: daysAgo(3), expected_installation_date: today, forecast_week: "2026-09" },
+      // Order 8006 - levering_gepland TODAY (AGENDA! 2nd delivery)
+      { id: "f0000001-0000-0000-0000-000000000006", customer_id: customers[8].id, division_id: divisionId, status: "levering_gepland" as const, order_number: 8006, order_date: daysAgo(25), total_excl_vat: 19500, total_incl_vat: 23595, total_vat: 4095, total_cost_price: 11700, payment_status: "betaald" as const, amount_paid: 23595, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Lange Voorhout 8", installation_postal_code: "2514 ED", installation_city: "Den Haag", expected_delivery_date: today, expected_installation_date: daysFromNow(6), forecast_week: "2026-10" },
+      // Order 8007 - montage_gepland, installation tomorrow (calendar)
+      { id: "f0000001-0000-0000-0000-000000000007", customer_id: customers[10].id, division_id: divisionId, status: "montage_gepland" as const, order_number: 8007, order_date: daysAgo(50), total_excl_vat: 35200, total_incl_vat: 42592, total_vat: 7392, total_cost_price: 21120, payment_status: "betaald" as const, amount_paid: 42592, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Westersingel 12", installation_postal_code: "3014 GN", installation_city: "Rotterdam", actual_delivery_date: daysAgo(5), expected_installation_date: daysFromNow(1), forecast_week: "2026-10" },
+      // Order 8008 - bestel_klaar, delivery in 7 days
+      { id: "f0000001-0000-0000-0000-000000000008", customer_id: customers[0].id, division_id: divisionId, status: "bestel_klaar" as const, order_number: 8008, order_date: daysAgo(4), total_excl_vat: 12500, total_incl_vat: 15125, total_vat: 2625, total_cost_price: 7500, payment_status: "deels_betaald" as const, amount_paid: 5000, deposit_required: true, deposit_invoice_sent: true, installation_street_address: "Prinsengracht 263", installation_postal_code: "1016 GV", installation_city: "Amsterdam", expected_delivery_date: daysFromNow(7), expected_installation_date: daysFromNow(12), forecast_week: "2026-13" },
     ];
 
     for (const o of orders) {
@@ -170,27 +235,114 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${orders.length} demo orders created`);
 
-    // ── 8. Order Lines ──
+    // ── 9. Order Sections (FIX 5) ──
+    const orderSections = [
+      // Order 8001 (from quote 3)
+      { id: "cc000001-0000-0000-0000-000000000001", order_id: orders[0].id, quote_section_id: quoteSections[4].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, front_number: "F310", front_color: "Lak Wit Mat", corpus_color: "Wit", subtotal: 10965 },
+      { id: "cc000001-0000-0000-0000-000000000002", order_id: orders[0].id, quote_section_id: quoteSections[5].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, subtotal: 6698 },
+      { id: "cc000001-0000-0000-0000-000000000003", order_id: orders[0].id, quote_section_id: quoteSections[6].id, title: "Werkblad & Spoelbak", section_type: "werkbladen", sort_order: 3, subtotal: 1839 },
+      // Order 8004
+      { id: "cc000001-0000-0000-0000-000000000004", order_id: orders[3].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, front_number: "F310", front_color: "Lak Wit Mat", corpus_color: "Wit", handle_number: "G-220", subtotal: 8500 },
+      { id: "cc000001-0000-0000-0000-000000000005", order_id: orders[3].id, title: "Apparatuur Miele", section_type: "apparatuur", sort_order: 2, subtotal: 6498 },
+      { id: "cc000001-0000-0000-0000-000000000006", order_id: orders[3].id, title: "Sanitair", section_type: "sanitair", sort_order: 3, subtotal: 2384 },
+      // Order 8005
+      { id: "cc000001-0000-0000-0000-000000000007", order_id: orders[4].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Eiken", handle_number: "G-440", subtotal: 11200 },
+      { id: "cc000001-0000-0000-0000-000000000008", order_id: orders[4].id, title: "Apparatuur Miele", section_type: "apparatuur", sort_order: 2, subtotal: 9997 },
+      // Order 8006
+      { id: "cc000001-0000-0000-0000-000000000009", order_id: orders[5].id, title: "Keukenkasten", section_type: "keukenmeubelen", sort_order: 1, front_number: "F205", front_color: "Lak Antraciet", corpus_color: "Antraciet", subtotal: 6500 },
+      { id: "cc000001-0000-0000-0000-000000000010", order_id: orders[5].id, title: "Apparatuur Siemens", section_type: "apparatuur", sort_order: 2, subtotal: 4697 },
+      // Order 8007
+      { id: "cc000001-0000-0000-0000-000000000011", order_id: orders[6].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Wit", handle_number: "G-330", subtotal: 14200 },
+      { id: "cc000001-0000-0000-0000-000000000012", order_id: orders[6].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, subtotal: 9997 },
+      { id: "cc000001-0000-0000-0000-000000000013", order_id: orders[6].id, title: "Werkblad", section_type: "werkbladen", sort_order: 3, subtotal: 1250 },
+      // Order 8008
+      { id: "cc000001-0000-0000-0000-000000000014", order_id: orders[7].id, title: "Keukenkasten Stosa", section_type: "keukenmeubelen", sort_order: 1, front_number: "F101", front_color: "Eiken Natuur", corpus_color: "Wit", handle_number: "G-220", subtotal: 6075 },
+      { id: "cc000001-0000-0000-0000-000000000015", order_id: orders[7].id, title: "Apparatuur", section_type: "apparatuur", sort_order: 2, subtotal: 4697 },
+    ];
+
+    for (const os of orderSections) {
+      await supabase.from("order_sections").upsert(os);
+    }
+    log.push(`✅ ${orderSections.length} demo order sections created`);
+
+    // ── 10. Order Lines for ALL orders (FIX 4) ──
+    const orderIds = orders.map(o => o.id);
+    await supabase.from("order_lines").delete().in("order_id", orderIds);
+
     const orderLines = [
-      { order_id: orders[0].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 8, unit_price: 485, cost_price: 290, line_total: 3880, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
-      { order_id: orders[0].id, product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, cost_price: 375, line_total: 2500, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
-      { order_id: orders[0].id, product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, cost_price: 1749, line_total: 2499, sort_order: 3, vat_rate: 21, supplier_id: mieleId, is_ordered: true, ordered_at: daysAgo(5) },
-      { order_id: orders[0].id, product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, cost_price: 909, line_total: 1299, sort_order: 4, vat_rate: 21, supplier_id: siemensId, is_ordered: false },
-      { order_id: orders[0].id, product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, cost_price: 750, line_total: 1250, sort_order: 5, vat_rate: 21, supplier_id: stosaId },
-      { order_id: orders[2].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, cost_price: 290, line_total: 1940, sort_order: 1, vat_rate: 21, supplier_id: stosaId },
-      { order_id: orders[2].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, cost_price: 1294, line_total: 1849, sort_order: 2, vat_rate: 21, supplier_id: siemensId },
-      { order_id: orders[2].id, product_id: demoProducts[11].id, description: demoProducts[11].name, article_code: demoProducts[11].article_code, quantity: 1, unit_price: 1795, cost_price: 1256, line_total: 1795, sort_order: 3, vat_rate: 21, supplier_id: quookerId },
-      { order_id: orders[4].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 6, unit_price: 485, cost_price: 290, line_total: 2910, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
-      { order_id: orders[4].id, product_id: demoProducts[14].id, description: demoProducts[14].name, article_code: demoProducts[14].article_code, quantity: 3, unit_price: 450, cost_price: 280, line_total: 1350, sort_order: 2, vat_rate: 21, supplier_id: stosaId },
-      { order_id: orders[4].id, product_id: demoProducts[15].id, description: demoProducts[15].name, article_code: demoProducts[15].article_code, quantity: 1, unit_price: 295, cost_price: 195, line_total: 295, sort_order: 3, vat_rate: 21, supplier_id: stosaId },
+      // Order 8001 (besteld)
+      { id: "bb000001-0000-0000-0000-000000000001", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000001", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 8, unit_price: 485, cost_price: 290, line_total: 3880, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000002", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000001", product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, cost_price: 375, line_total: 2500, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000003", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000001", product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 4, unit_price: 475, cost_price: 285, line_total: 1900, sort_order: 3, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000004", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000001", product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 3, unit_price: 895, cost_price: 537, line_total: 2685, sort_order: 4, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000005", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000002", product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, cost_price: 1749, line_total: 2499, sort_order: 1, vat_rate: 21, supplier_id: mieleId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000006", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000002", product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, cost_price: 2939, line_total: 4199, sort_order: 2, vat_rate: 21, supplier_id: mieleId, is_ordered: true, ordered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000007", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000003", product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, cost_price: 750, line_total: 1250, sort_order: 1, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000008", order_id: orders[0].id, section_id: "cc000001-0000-0000-0000-000000000003", product_id: demoProducts[12].id, description: demoProducts[12].name, article_code: demoProducts[12].article_code, quantity: 1, unit_price: 589, cost_price: 412, line_total: 589, sort_order: 2, vat_rate: 21, supplier_id: blancoId },
+
+      // Order 8003 (nieuw)
+      { id: "bb000001-0000-0000-0000-000000000009", order_id: orders[2].id, product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, cost_price: 290, line_total: 1940, sort_order: 1, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000010", order_id: orders[2].id, product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, cost_price: 1294, line_total: 1849, sort_order: 2, vat_rate: 21, supplier_id: siemensId },
+      { id: "bb000001-0000-0000-0000-000000000011", order_id: orders[2].id, product_id: demoProducts[11].id, description: demoProducts[11].name, article_code: demoProducts[11].article_code, quantity: 1, unit_price: 1795, cost_price: 1256, line_total: 1795, sort_order: 3, vat_rate: 21, supplier_id: quookerId },
+
+      // Order 8004 (levering_gepland TODAY)
+      { id: "bb000001-0000-0000-0000-000000000012", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000004", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 5, unit_price: 485, cost_price: 290, line_total: 2425, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000013", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000004", product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 3, unit_price: 625, cost_price: 375, line_total: 1875, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000014", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000004", product_id: demoProducts[5].id, description: demoProducts[5].name, article_code: demoProducts[5].article_code, quantity: 1, unit_price: 785, cost_price: 471, line_total: 785, sort_order: 3, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000015", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000005", product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, cost_price: 1749, line_total: 2499, sort_order: 1, vat_rate: 21, supplier_id: mieleId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000016", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000005", product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, cost_price: 2939, line_total: 4199, sort_order: 2, vat_rate: 21, supplier_id: mieleId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000017", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000006", product_id: demoProducts[11].id, description: demoProducts[11].name, article_code: demoProducts[11].article_code, quantity: 1, unit_price: 1795, cost_price: 1256, line_total: 1795, sort_order: 1, vat_rate: 21, supplier_id: quookerId, is_ordered: true, ordered_at: daysAgo(20) },
+      { id: "bb000001-0000-0000-0000-000000000018", order_id: orders[3].id, section_id: "cc000001-0000-0000-0000-000000000006", product_id: demoProducts[12].id, description: demoProducts[12].name, article_code: demoProducts[12].article_code, quantity: 1, unit_price: 589, cost_price: 412, line_total: 589, sort_order: 2, vat_rate: 21, supplier_id: blancoId, is_ordered: true, ordered_at: daysAgo(20) },
+
+      // Order 8005 (montage_gepland TODAY)
+      { id: "bb000001-0000-0000-0000-000000000019", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000007", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 6, unit_price: 485, cost_price: 290, line_total: 2910, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000020", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000007", product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, cost_price: 375, line_total: 2500, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000021", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000007", product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 3, unit_price: 475, cost_price: 285, line_total: 1425, sort_order: 3, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000022", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000007", product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 3, unit_price: 895, cost_price: 537, line_total: 2685, sort_order: 4, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000023", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000008", product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, cost_price: 1749, line_total: 2499, sort_order: 1, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000024", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000008", product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, cost_price: 2939, line_total: 4199, sort_order: 2, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000025", order_id: orders[4].id, section_id: "cc000001-0000-0000-0000-000000000008", product_id: demoProducts[16].id, description: demoProducts[16].name, article_code: demoProducts[16].article_code, quantity: 1, unit_price: 3299, cost_price: 2309, line_total: 3299, sort_order: 3, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(3) },
+      { id: "bb000001-0000-0000-0000-000000000026", order_id: orders[4].id, product_id: demoProducts[14].id, description: demoProducts[14].name, article_code: demoProducts[14].article_code, quantity: 3, unit_price: 450, cost_price: 280, line_total: 1350, sort_order: 7, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000027", order_id: orders[4].id, product_id: demoProducts[15].id, description: demoProducts[15].name, article_code: demoProducts[15].article_code, quantity: 1, unit_price: 295, cost_price: 195, line_total: 295, sort_order: 8, vat_rate: 21, supplier_id: stosaId },
+
+      // Order 8006 (levering_gepland TODAY)
+      { id: "bb000001-0000-0000-0000-000000000028", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000009", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, cost_price: 290, line_total: 1940, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(15) },
+      { id: "bb000001-0000-0000-0000-000000000029", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000009", product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 4, unit_price: 365, cost_price: 219, line_total: 1460, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(15) },
+      { id: "bb000001-0000-0000-0000-000000000030", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000009", product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, cost_price: 537, line_total: 1790, sort_order: 3, vat_rate: 21, supplier_id: stosaId, is_ordered: true, ordered_at: daysAgo(15) },
+      { id: "bb000001-0000-0000-0000-000000000031", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000010", product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, cost_price: 1294, line_total: 1849, sort_order: 1, vat_rate: 21, supplier_id: siemensId, is_ordered: true, ordered_at: daysAgo(15) },
+      { id: "bb000001-0000-0000-0000-000000000032", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000010", product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, cost_price: 909, line_total: 1299, sort_order: 2, vat_rate: 21, supplier_id: siemensId, is_ordered: true, ordered_at: daysAgo(15) },
+      { id: "bb000001-0000-0000-0000-000000000033", order_id: orders[5].id, section_id: "cc000001-0000-0000-0000-000000000010", product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, cost_price: 1084, line_total: 1549, sort_order: 3, vat_rate: 21, supplier_id: siemensId, is_ordered: true, ordered_at: daysAgo(15) },
+
+      // Order 8007 (montage_gepland, installation tomorrow)
+      { id: "bb000001-0000-0000-0000-000000000034", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000011", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 8, unit_price: 485, cost_price: 290, line_total: 3880, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000035", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000011", product_id: demoProducts[1].id, description: demoProducts[1].name, article_code: demoProducts[1].article_code, quantity: 4, unit_price: 625, cost_price: 375, line_total: 2500, sort_order: 2, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000036", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000011", product_id: demoProducts[3].id, description: demoProducts[3].name, article_code: demoProducts[3].article_code, quantity: 6, unit_price: 475, cost_price: 285, line_total: 2850, sort_order: 3, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000037", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000011", product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 4, unit_price: 895, cost_price: 537, line_total: 3580, sort_order: 4, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000038", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000012", product_id: demoProducts[6].id, description: demoProducts[6].name, article_code: demoProducts[6].article_code, quantity: 1, unit_price: 2499, cost_price: 1749, line_total: 2499, sort_order: 1, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000039", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000012", product_id: demoProducts[17].id, description: demoProducts[17].name, article_code: demoProducts[17].article_code, quantity: 1, unit_price: 4199, cost_price: 2939, line_total: 4199, sort_order: 2, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000040", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000012", product_id: demoProducts[16].id, description: demoProducts[16].name, article_code: demoProducts[16].article_code, quantity: 1, unit_price: 3299, cost_price: 2309, line_total: 3299, sort_order: 3, vat_rate: 21, supplier_id: mieleId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000041", order_id: orders[6].id, section_id: "cc000001-0000-0000-0000-000000000013", product_id: demoProducts[13].id, description: demoProducts[13].name, article_code: demoProducts[13].article_code, quantity: 1, unit_price: 1250, cost_price: 750, line_total: 1250, sort_order: 1, vat_rate: 21, supplier_id: stosaId, is_ordered: true, is_delivered: true, delivered_at: daysAgo(5) },
+      { id: "bb000001-0000-0000-0000-000000000042", order_id: orders[6].id, product_id: demoProducts[14].id, description: demoProducts[14].name, article_code: demoProducts[14].article_code, quantity: 4, unit_price: 450, cost_price: 280, line_total: 1800, sort_order: 8, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000043", order_id: orders[6].id, product_id: demoProducts[15].id, description: demoProducts[15].name, article_code: demoProducts[15].article_code, quantity: 1, unit_price: 295, cost_price: 195, line_total: 295, sort_order: 9, vat_rate: 21, supplier_id: stosaId },
+
+      // Order 8008 (bestel_klaar)
+      { id: "bb000001-0000-0000-0000-000000000044", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000014", product_id: demoProducts[0].id, description: demoProducts[0].name, article_code: demoProducts[0].article_code, quantity: 4, unit_price: 485, cost_price: 290, line_total: 1940, sort_order: 1, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000045", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000014", product_id: demoProducts[2].id, description: demoProducts[2].name, article_code: demoProducts[2].article_code, quantity: 3, unit_price: 365, cost_price: 219, line_total: 1095, sort_order: 2, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000046", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000014", product_id: demoProducts[4].id, description: demoProducts[4].name, article_code: demoProducts[4].article_code, quantity: 2, unit_price: 895, cost_price: 537, line_total: 1790, sort_order: 3, vat_rate: 21, supplier_id: stosaId },
+      { id: "bb000001-0000-0000-0000-000000000047", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000015", product_id: demoProducts[8].id, description: demoProducts[8].name, article_code: demoProducts[8].article_code, quantity: 1, unit_price: 1849, cost_price: 1294, line_total: 1849, sort_order: 1, vat_rate: 21, supplier_id: siemensId },
+      { id: "bb000001-0000-0000-0000-000000000048", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000015", product_id: demoProducts[7].id, description: demoProducts[7].name, article_code: demoProducts[7].article_code, quantity: 1, unit_price: 1299, cost_price: 909, line_total: 1299, sort_order: 2, vat_rate: 21, supplier_id: siemensId },
+      { id: "bb000001-0000-0000-0000-000000000049", order_id: orders[7].id, section_id: "cc000001-0000-0000-0000-000000000015", product_id: demoProducts[9].id, description: demoProducts[9].name, article_code: demoProducts[9].article_code, quantity: 1, unit_price: 1549, cost_price: 1084, line_total: 1549, sort_order: 3, vat_rate: 21, supplier_id: siemensId },
     ];
 
     for (const ol of orderLines) {
-      await supabase.from("order_lines").upsert(ol, { ignoreDuplicates: true });
+      await supabase.from("order_lines").upsert(ol);
     }
     log.push(`✅ ${orderLines.length} demo order lines created`);
 
-    // ── 9. Order Checklist Items ──
+    // ── 11. Order Checklist Items ──
+    // Delete existing first
+    await supabase.from("order_checklist_items").delete().in("order_id", orderIds);
+
     const checklists = [
       { order_id: orders[0].id, label: "Klantgegevens gecontroleerd", checked: true, checked_at: daysAgo(6), sort_order: 1 },
       { order_id: orders[0].id, label: "Technische tekening geüpload", checked: true, checked_at: daysAgo(6), sort_order: 2 },
@@ -213,15 +365,17 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${checklists.length} demo checklist items created`);
 
-    // ── 10. Order Notes ──
+    // ── 12. Order Notes ──
+    await supabase.from("order_notes").delete().in("order_id", orderIds);
+
     const notes = [
       { order_id: orders[0].id, content: "Klant wil graag lichte eiken fronten, corpus wit. Greep: Gola systeem.", note_type: "general" },
       { order_id: orders[0].id, content: "Aanbetaling €15.000 ontvangen op 20-02-2026.", note_type: "payment" },
       { order_id: orders[0].id, content: "Levering via achterdeur, smalle steeg – bespreek met transporteur.", note_type: "delivery" },
       { order_id: orders[2].id, content: "Klant twijfelt nog tussen Quooker Flex en Fusion. Terugbellen vrijdag.", note_type: "general" },
-      { order_id: orders[4].id, content: "Montage ingepland voor maandag 10 maart. 2 monteurs nodig.", note_type: "planning" },
-      { order_id: orders[5].id, content: "Montage succesvol afgerond. Kleine kras op zijpaneel, klant akkoord.", note_type: "general" },
-      { order_id: orders[6].id, content: "Project volledig afgerond en gefactureerd. Klant zeer tevreden.", note_type: "general" },
+      { order_id: orders[4].id, content: "Montage ingepland voor vandaag. 2 monteurs nodig.", note_type: "planning" },
+      { order_id: orders[5].id, content: "Levering vandaag gepland. Bellen klant 30 min van tevoren.", note_type: "delivery" },
+      { order_id: orders[6].id, content: "Alle materialen geleverd. Montage morgen ingepland.", note_type: "planning" },
     ];
 
     for (const n of notes) {
@@ -229,7 +383,7 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${notes.length} demo order notes created`);
 
-    // ── 11. Service Tickets ──
+    // ── 13. Service Tickets ──
     const tickets = [
       { id: "e0000001-0000-0000-0000-000000000001", division_id: divisionId, order_id: orders[5].id, customer_id: customers[8].id, status: "nieuw", priority: "normaal", category: "schade", subject: "Kras op keukenblad na montage", description: "Klant meldt een kleine kras op het composiet werkblad, waarschijnlijk ontstaan tijdens montage.", submitter_name: "Daan Smits", submitter_email: "daan.smits@demo.nl" },
       { id: "e0000001-0000-0000-0000-000000000002", division_id: divisionId, order_id: orders[6].id, customer_id: customers[10].id, status: "in_behandeling", priority: "hoog", category: "garantie", subject: "Vaatwasser lekt na 2 weken", description: "Klant meldt waterlekkage bij de vaatwasser. Mogelijk aansluitprobleem.", submitter_name: "Wouter Bos", submitter_email: "wouter@bosprojecten.nl" },
@@ -243,7 +397,10 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${tickets.length} demo service tickets created`);
 
-    // ── 12. Communication Log ──
+    // ── 14. Communication Log ──
+    const customerIds = customers.map(c => c.id);
+    await supabase.from("communication_log").delete().in("customer_id", customerIds);
+
     const comms = [
       { customer_id: customers[0].id, order_id: orders[7].id, type: "email" as const, direction: "outbound" as const, subject: "Orderbevestiging #8008", body_preview: "Beste Jan, hierbij bevestigen wij uw order voor de nieuwe keuken...", sent_at: daysAgo(4), division_id: divisionId },
       { customer_id: customers[0].id, type: "email" as const, direction: "inbound" as const, subject: "Re: Orderbevestiging #8008", body_preview: "Bedankt! Ziet er goed uit. Wanneer kan ik de aanbetaling overmaken?", sent_at: daysAgo(3), division_id: divisionId },
@@ -254,7 +411,7 @@ Deno.serve(async (req) => {
       { customer_id: customers[9].id, order_id: orders[1].id, type: "whatsapp" as const, direction: "outbound" as const, subject: null, body_preview: "Goedemorgen Fleur! Uw keuken is in productie en loopt op schema 👍", sent_at: daysAgo(2), division_id: divisionId },
       { customer_id: customers[10].id, type: "phone" as const, direction: "inbound" as const, subject: "Telefoongesprek lekkage", body_preview: "Klant belt over lekkage bij vaatwasser. Serviceticket aangemaakt.", sent_at: daysAgo(4), division_id: divisionId },
       { customer_id: customers[3].id, type: "email" as const, direction: "outbound" as const, subject: "Offerte bekeken?", body_preview: "Beste Sophie, we zagen dat u de offerte heeft bekeken. Heeft u nog vragen?", sent_at: daysAgo(1), division_id: divisionId },
-      { customer_id: customers[6].id, order_id: orders[4].id, type: "email" as const, direction: "outbound" as const, subject: "Montage bevestiging", body_preview: "Beste Thomas, de montage van uw keuken staat gepland voor aanstaande maandag...", sent_at: daysAgo(2), division_id: divisionId },
+      { customer_id: customers[6].id, order_id: orders[4].id, type: "email" as const, direction: "outbound" as const, subject: "Montage bevestiging", body_preview: "Beste Thomas, de montage van uw keuken staat gepland voor vandaag...", sent_at: daysAgo(2), division_id: divisionId },
     ];
 
     for (const c of comms) {
@@ -262,7 +419,9 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${comms.length} demo communication logs created`);
 
-    // ── 13. Order Documents (metadata, no actual files) ──
+    // ── 15. Order Documents ──
+    await supabase.from("order_documents").delete().in("order_id", orderIds);
+
     const docs = [
       { order_id: orders[0].id, document_type: "technische_tekening", title: "Keuken Jansen - Plattegrond", file_name: "jansen_plattegrond.pdf", visible_to_customer: true, visible_to_installer: true },
       { order_id: orders[0].id, document_type: "offerte", title: "Offerte Jansen Bouw", file_name: "offerte_jansen.pdf", visible_to_customer: true, visible_to_installer: false },
@@ -276,7 +435,9 @@ Deno.serve(async (req) => {
     }
     log.push(`✅ ${docs.length} demo order documents created`);
 
-    // ── 14. Order Status History ──
+    // ── 16. Order Status History ──
+    await supabase.from("order_status_history").delete().in("order_id", orderIds);
+
     const statusHistory = [
       { order_id: orders[0].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(7) },
       { order_id: orders[0].id, from_status: "nieuw" as const, to_status: "bestel_klaar" as const, created_at: daysAgo(6) },
@@ -285,11 +446,20 @@ Deno.serve(async (req) => {
       { order_id: orders[1].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(12) },
       { order_id: orders[1].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(10) },
       { order_id: orders[1].id, from_status: "besteld" as const, to_status: "in_productie" as const, created_at: daysAgo(8) },
-      { order_id: orders[6].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(90) },
-      { order_id: orders[6].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(85) },
-      { order_id: orders[6].id, from_status: "besteld" as const, to_status: "geleverd" as const, created_at: daysAgo(30) },
-      { order_id: orders[6].id, from_status: "geleverd" as const, to_status: "gemonteerd" as const, created_at: daysAgo(25) },
-      { order_id: orders[6].id, from_status: "gemonteerd" as const, to_status: "afgerond" as const, created_at: daysAgo(20) },
+      { order_id: orders[3].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(30) },
+      { order_id: orders[3].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(28) },
+      { order_id: orders[3].id, from_status: "besteld" as const, to_status: "levering_gepland" as const, created_at: daysAgo(5) },
+      { order_id: orders[4].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(45) },
+      { order_id: orders[4].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(40) },
+      { order_id: orders[4].id, from_status: "besteld" as const, to_status: "geleverd" as const, created_at: daysAgo(3) },
+      { order_id: orders[4].id, from_status: "geleverd" as const, to_status: "montage_gepland" as const, created_at: daysAgo(2) },
+      { order_id: orders[5].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(25) },
+      { order_id: orders[5].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(22) },
+      { order_id: orders[5].id, from_status: "besteld" as const, to_status: "levering_gepland" as const, created_at: daysAgo(3) },
+      { order_id: orders[6].id, from_status: null, to_status: "nieuw" as const, created_at: daysAgo(50) },
+      { order_id: orders[6].id, from_status: "nieuw" as const, to_status: "besteld" as const, created_at: daysAgo(45) },
+      { order_id: orders[6].id, from_status: "besteld" as const, to_status: "geleverd" as const, created_at: daysAgo(5) },
+      { order_id: orders[6].id, from_status: "geleverd" as const, to_status: "montage_gepland" as const, created_at: daysAgo(3) },
     ];
 
     for (const sh of statusHistory) {
