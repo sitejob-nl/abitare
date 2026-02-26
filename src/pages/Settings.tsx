@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, Users, Link2, Pencil, User, Percent } from "lucide-react";
+import { CalendarColorPicker } from "@/components/calendar/CalendarColorPicker";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -107,6 +108,7 @@ const Settings = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <ChangePasswordCard />
               <MicrosoftSettings />
+              <CalendarColorPicker />
             </div>
           </TabsContent>
 

@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          is_visible: boolean
+          target_user_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_visible?: boolean
+          target_user_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_visible?: boolean
+          target_user_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       communication_log: {
         Row: {
           body_preview: string | null
@@ -2101,6 +2125,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          calendar_color: string | null
           created_at: string | null
           division_id: string | null
           email: string
@@ -2110,6 +2135,7 @@ export type Database = {
           phone: string | null
         }
         Insert: {
+          calendar_color?: string | null
           created_at?: string | null
           division_id?: string | null
           email: string
@@ -2119,6 +2145,7 @@ export type Database = {
           phone?: string | null
         }
         Update: {
+          calendar_color?: string | null
           created_at?: string | null
           division_id?: string | null
           email?: string

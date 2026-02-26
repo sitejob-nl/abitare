@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Calendar, Loader2, ExternalLink } from "lucide-react";
+import { Calendar, Loader2, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMsConnectedUsers } from "@/hooks/useMicrosoftCalendar";
 
 interface ScheduleOutlookEventProps {
   orderId: string;
@@ -38,8 +40,16 @@ export function ScheduleOutlookEvent({
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("17:00");
   const [notes, setNotes] = useState("");
+  const [selectedAttendees, setSelectedAttendees] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: msUsers } = useMsConnectedUsers();
+
+  const toggleAttendee = (email: string) => {
+    setSelectedAttendees((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
+  };
 
   const handleCreate = async () => {
     if (!date) return;
@@ -49,7 +59,12 @@ export function ScheduleOutlookEvent({
       const startDateTime = `${date}T${startTime}:00`;
       const endDateTime = `${date}T${endTime}:00`;
 
-      const eventData = {
+      const attendees = selectedAttendees.map((email) => ({
+        emailAddress: { address: email },
+        type: "required",
+      }));
+
+      const eventData: any = {
         subject: `Montage Order #${orderNumber} - ${customerName}`,
         body: {
           contentType: "Text",
@@ -75,6 +90,10 @@ export function ScheduleOutlookEvent({
           : undefined,
       };
 
+      if (attendees.length > 0) {
+        eventData.attendees = attendees;
+      }
+
       const { data: result, error } = await supabase.functions.invoke(
         "microsoft-api",
         {
@@ -89,7 +108,6 @@ export function ScheduleOutlookEvent({
       if (error) throw error;
       if (result?.error) throw new Error(result.error);
 
-      // Save event ID on order
       const eventId = result?.id;
       if (eventId) {
         await supabase
@@ -102,9 +120,10 @@ export function ScheduleOutlookEvent({
 
       toast({
         title: "Outlook event aangemaakt",
-        description: `Montage ingepland op ${new Date(date).toLocaleDateString("nl-NL")}`,
+        description: `Montage ingepland op ${new Date(date).toLocaleDateString("nl-NL")}${attendees.length > 0 ? ` met ${attendees.length} deelnemer(s)` : ""}`,
       });
       setOpen(false);
+      setSelectedAttendees([]);
     } catch (err: any) {
       console.error("Create event error:", err);
       toast({
@@ -134,7 +153,7 @@ export function ScheduleOutlookEvent({
           Plan in Outlook
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Montage inplannen in Outlook</DialogTitle>
           <DialogDescription>
@@ -169,6 +188,33 @@ export function ScheduleOutlookEvent({
               />
             </div>
           </div>
+
+          {/* Attendees */}
+          {msUsers && msUsers.length > 0 && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <UsersIcon className="h-4 w-4" />
+                Deelnemers (optioneel)
+              </Label>
+              <div className="border rounded-md p-3 space-y-2 max-h-[160px] overflow-y-auto">
+                {msUsers.map((u) => (
+                  <label key={u.userId} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                    <Checkbox
+                      checked={selectedAttendees.includes(u.microsoftEmail || u.email)}
+                      onCheckedChange={() => toggleAttendee(u.microsoftEmail || u.email)}
+                    />
+                    <div className="flex items-center gap-2 min-w-0">
+                      {u.calendarColor && (
+                        <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: u.calendarColor }} />
+                      )}
+                      <span className="text-sm truncate">{u.fullName}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Notities (optioneel)</Label>
             <Textarea
