@@ -128,7 +128,7 @@ export function StosaConfigPanel({
                 <SelectValue placeholder="Selecteer frontkleur" />
               </SelectTrigger>
               <SelectContent>
-                {activeFrontColors.map((c: any) => (
+                {activeFrontColors.filter((c: any) => (c.color_code || c.code)).map((c: any) => (
                   <SelectItem key={c.id} value={c.color_code || c.code}>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
@@ -164,7 +164,7 @@ export function StosaConfigPanel({
                 <SelectValue placeholder="Selecteer korpuskleur" />
               </SelectTrigger>
               <SelectContent>
-                {activeCorpusColors.map((c: any) => (
+                {activeCorpusColors.filter((c: any) => (c.color_code || c.code)).map((c: any) => (
                   <SelectItem key={c.id} value={c.color_code || c.code}>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
@@ -229,7 +229,7 @@ export function StosaConfigPanel({
                     <SelectValue placeholder="Selecteer greepkleur" />
                   </SelectTrigger>
                   <SelectContent>
-                    {handleColors.map((c) => (
+                    {handleColors.filter((c) => c.code).map((c) => (
                       <SelectItem key={c.id} value={c.code}>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
@@ -305,7 +305,7 @@ export function StosaConfigPanel({
                 <SelectValue placeholder="Selecteer plintkleur" />
               </SelectTrigger>
               <SelectContent>
-                {plinthColors.map((c) => (
+                {plinthColors.filter((c) => c.code).map((c) => (
                   <SelectItem key={c.id} value={c.code}>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
