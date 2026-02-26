@@ -20,8 +20,97 @@ import { ProductImageGallery } from "@/components/products/ProductImageGallery";
 import { useProduct, useProductCategories, useSuppliers } from "@/hooks/useProducts";
 import { useProductPrices } from "@/hooks/useProductPrices";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import { FileText, ExternalLink, Users } from "lucide-react";
+
+function ProductVariantsCard({ productId, parentProductId }: { productId: string; parentProductId?: string | null }) {
+  const lookupId = parentProductId || productId;
+  const { data: variants, isLoading } = useQuery({
+    queryKey: ["product-variants", lookupId],
+    queryFn: async () => {
+      // Find siblings (same parent) or children
+      const { data } = await supabase
+        .from("products")
+        .select("id, article_code, name, is_active, height_mm, width_mm")
+        .or(`parent_product_id.eq.${lookupId},id.eq.${parentProductId || "00000000-0000-0000-0000-000000000000"}`)
+        .neq("id", productId)
+        .eq("is_active", true)
+        .limit(20);
+      return data || [];
+    },
+    enabled: !!lookupId,
+  });
+
+  if (isLoading || !variants || variants.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          Varianten ({variants.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {variants.map((v) => (
+          <Link key={v.id} to={`/products/${v.id}`} className="flex items-center justify-between text-sm hover:bg-muted/50 rounded px-2 py-1.5 -mx-2 transition-colors">
+            <div className="flex-1 min-w-0">
+              <span className="font-mono text-xs text-muted-foreground mr-2">{v.article_code}</span>
+              <span className="truncate">{v.name}</span>
+            </div>
+            {(v.width_mm || v.height_mm) && (
+              <span className="text-xs text-muted-foreground ml-2">
+                {v.width_mm ? `${Math.round(v.width_mm / 10)}cm` : ""}{v.width_mm && v.height_mm ? " × " : ""}{v.height_mm ? `${Math.round(v.height_mm / 10)}cm` : ""}
+              </span>
+            )}
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProductDocumentsCard({ productId }: { productId: string }) {
+  const { data: documents, isLoading } = useQuery({
+    queryKey: ["product-documents", productId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("product_documents")
+        .select("*")
+        .eq("product_id", productId)
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+  });
+
+  if (isLoading || !documents || documents.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileText className="h-4 w-4" />
+          Documenten ({documents.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {documents.map((doc) => (
+          <a key={doc.id} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between text-sm hover:bg-muted/50 rounded px-2 py-1.5 -mx-2 transition-colors">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span>{doc.name}</span>
+              <Badge variant="outline" className="text-[10px]">{doc.document_type}</Badge>
+            </div>
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+          </a>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 function formatCurrency(value: number | null): string {
   if (value === null || value === undefined) return "€ -";
@@ -842,6 +931,12 @@ const ProductDetail = () => {
               </Card>
             );
           })()}
+
+          {/* Varianten */}
+          <ProductVariantsCard productId={id!} parentProductId={(product as any).parent_product_id} />
+
+          {/* Documenten */}
+          <ProductDocumentsCard productId={id!} />
 
           {/* Range prices */}
           {prices && prices.length > 0 && (

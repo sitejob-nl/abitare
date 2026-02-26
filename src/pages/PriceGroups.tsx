@@ -433,6 +433,8 @@ export default function PriceGroups() {
                       <TableHead>Code</TableHead>
                       <TableHead>Naam</TableHead>
                       <TableHead>Collectie</TableHead>
+                      <TableHead>Editie</TableHead>
+                      <TableHead>Geldigheid</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Kleuren</TableHead>
                       <TableHead className="w-[100px]">Acties</TableHead>
@@ -440,15 +442,21 @@ export default function PriceGroups() {
                   </TableHeader>
                   <TableBody>
                     {pgLoading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Laden...</TableCell></TableRow>
-                    ) : priceGroups.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Geen prijsgroepen gevonden</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Laden...</TableCell></TableRow>
+                     ) : priceGroups.length === 0 ? (
+                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Geen prijsgroepen gevonden</TableCell></TableRow>
                     ) : (
                       priceGroups.map((pg) => (
                         <TableRow key={pg.id}>
                           <TableCell className="font-mono font-medium">{pg.code}</TableCell>
                           <TableCell>{pg.name}</TableCell>
                           <TableCell>{pg.collection || "-"}</TableCell>
+                          <TableCell className="text-xs">{(pg as any).edition || "-"}</TableCell>
+                          <TableCell className="text-xs">
+                            {(pg as any).valid_from || (pg as any).valid_until
+                              ? `${(pg as any).valid_from || "?"} – ${(pg as any).valid_until || "∞"}`
+                              : "-"}
+                          </TableCell>
                           <TableCell>
                             {pg.is_glass ? <Badge variant="outline">Glas</Badge> : <Badge variant="secondary">Front</Badge>}
                           </TableCell>

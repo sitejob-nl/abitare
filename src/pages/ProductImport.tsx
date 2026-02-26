@@ -14,6 +14,7 @@ import { useJsonImport, type JsonPayload } from '@/hooks/useJsonImport';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImportValidation, validateImportData, ValidationResult } from '@/components/import/ImportValidation';
 import { ImportHistory } from '@/components/import/ImportHistory';
+import { ImportHealthDashboard } from '@/components/import/ImportHealthDashboard';
 import { PimsImportTab } from '@/components/import/PimsImportTab';
 import { StosaImportDialog } from '@/components/products/StosaImportDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -701,6 +702,9 @@ export default function ProductImport() {
             <p className="text-muted-foreground">Importeer producten vanuit prijslijsten</p>
           </div>
         </div>
+
+        {/* Import Health Dashboard */}
+        <ImportHealthDashboard />
 
         {/* Import History */}
         <ImportHistory />

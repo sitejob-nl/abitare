@@ -326,6 +326,17 @@ const Inbox = () => {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<MicrosoftEmail | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter emails client-side based on search query
+  const filteredEmails = emails?.filter((email) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const sender = (email.from?.emailAddress?.name || email.from?.emailAddress?.address || "").toLowerCase();
+    const subject = (email.subject || "").toLowerCase();
+    const preview = (email.bodyPreview || "").toLowerCase();
+    return sender.includes(q) || subject.includes(q) || preview.includes(q);
+  });
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["microsoft-emails"] });
@@ -443,15 +454,15 @@ const Inbox = () => {
       <div className="md:hidden">
         <Card className="overflow-hidden">
           <div className="p-3 border-b border-border bg-muted/30">
-            <Input placeholder="Zoeken in emails..." className="h-9" />
+            <Input placeholder="Zoeken in emails..." className="h-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
           <ScrollArea className="h-[calc(100vh-280px)] min-h-[400px]">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : emails && emails.length > 0 ? (
-              emails.map((email) => (
+            ) : filteredEmails && filteredEmails.length > 0 ? (
+              filteredEmails.map((email) => (
                 <EmailListItem
                   key={email.id}
                   email={email}
@@ -475,15 +486,15 @@ const Inbox = () => {
         {/* Email List Panel */}
         <Card className="overflow-hidden flex flex-col">
           <div className="p-3 border-b border-border bg-muted/30">
-            <Input placeholder="Zoeken in emails..." className="h-9" />
+            <Input placeholder="Zoeken in emails..." className="h-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
           <ScrollArea className="flex-1">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : emails && emails.length > 0 ? (
-              emails.map((email) => (
+            ) : filteredEmails && filteredEmails.length > 0 ? (
+              filteredEmails.map((email) => (
                 <EmailListItem
                   key={email.id}
                   email={email}
