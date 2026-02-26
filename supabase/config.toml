@@ -3,12 +3,6 @@ project_id = "lqfqxspaamzhtgxhvlib"
 [functions.import-products]
 verify_jwt = false
 
-[functions.exact-auth]
-verify_jwt = false
-
-[functions.exact-auth-callback]
-verify_jwt = false
-
 [functions.exact-api]
 verify_jwt = false
 
@@ -22,6 +16,18 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.exact-sync-invoices]
+verify_jwt = false
+
+[functions.exact-sync-sales-orders]
+verify_jwt = false
+
+[functions.exact-sync-purchase-orders]
+verify_jwt = false
+
+[functions.exact-config]
+verify_jwt = false
+
+[functions.exact-register-tenant]
 verify_jwt = false
 
 [functions.tradeplace-config]
@@ -46,12 +52,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.microsoft-api]
-verify_jwt = false
-
-[functions.exact-sync-sales-orders]
-verify_jwt = false
-
-[functions.exact-sync-purchase-orders]
 verify_jwt = false
 
 [functions.portal-data]
@@ -85,4 +85,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.tradeplace-bulk-price-update]
+verify_jwt = false
+
+[functions.seed-demo-data]
 verify_jwt = false

@@ -1,134 +1,107 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-interface ExactWebhookPayload {
-  Content: {
-    Topic: string;
-    Action: string;
-    Division: number;
-    Key: string;
-    ExactOnlineEndpoint: string;
-  };
-  HashCode: string;
-}
-
+/**
+ * Receives forwarded webhooks from SiteJob Connect.
+ * Connect verifies the HMAC from Exact Online and forwards the Content node
+ * with the tenant's webhook_secret in the X-Webhook-Secret header.
+ */
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const webhookSecret = Deno.env.get("EXACT_WEBHOOK_SECRET");
-    if (!webhookSecret) {
-      console.error("EXACT_WEBHOOK_SECRET not configured");
-      return new Response("Configuration error", { status: 500 });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("Missing Supabase configuration");
       return new Response("Configuration error", { status: 500 });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse the webhook payload
-    const payload: ExactWebhookPayload = await req.json();
-    console.log("Received webhook:", JSON.stringify(payload));
-
-    // Validate the webhook signature using Web Crypto API
-    const content = payload.Content;
-    const receivedHash = payload.HashCode;
-
-    // Create HMAC signature using the webhook secret
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(webhookSecret);
-    const messageData = encoder.encode(JSON.stringify(content));
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyData,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-
-    const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-    const calculatedHash = btoa(String.fromCharCode(...new Uint8Array(signature)));
-
-    if (calculatedHash !== receivedHash) {
-      console.error("Invalid webhook signature - rejecting request");
+    // Verify X-Webhook-Secret header
+    const receivedSecret = req.headers.get("X-Webhook-Secret");
+    if (!receivedSecret) {
+      console.error("Missing X-Webhook-Secret header");
       return new Response("Unauthorized", { status: 401 });
     }
 
-    // Get the connection for this division
+    // Parse the forwarded content (already verified by Connect)
+    const content = await req.json();
+    const { Topic, Division, Key, ExactOnlineEndpoint, EventAction } = content;
+
+    console.log(`Received webhook: ${EventAction} on ${Topic} - Key: ${Key}`);
+
+    // Find connection by division and verify secret
     const { data: connection, error: connError } = await supabase
       .from("exact_online_connections")
-      .select("*")
-      .eq("exact_division", content.Division)
+      .select("id, division_id, webhook_secret")
+      .eq("exact_division", Division)
       .eq("is_active", true)
       .single();
 
     if (connError || !connection) {
-      console.log("No connection found for division:", content.Division);
-      return new Response("OK", { status: 200 }); // Acknowledge but don't process
+      console.log("No connection found for division:", Division);
+      return new Response("OK", { status: 200 });
+    }
+
+    // Verify the webhook secret matches
+    const { decryptToken, isEncrypted } = await import("../_shared/crypto.ts");
+    let storedSecret = connection.webhook_secret;
+    if (storedSecret && isEncrypted(storedSecret)) {
+      storedSecret = await decryptToken(storedSecret);
+    }
+
+    if (storedSecret !== receivedSecret) {
+      console.error("Invalid webhook secret for division:", Division);
+      return new Response("Unauthorized", { status: 401 });
     }
 
     // Log the webhook event
     await supabase.from("exact_webhook_logs").insert({
       connection_id: connection.id,
-      topic: content.Topic,
-      action: content.Action,
-      exact_division: content.Division,
-      entity_key: content.Key,
-      endpoint: content.ExactOnlineEndpoint,
+      topic: Topic,
+      action: EventAction || "Unknown",
+      exact_division: Division,
+      entity_key: Key,
+      endpoint: ExactOnlineEndpoint,
       processed: false,
     });
 
     // Process based on topic
-    switch (content.Topic) {
+    switch (Topic) {
+      case "Accounts":
       case "CRM.Accounts":
         await processAccountWebhook(supabase, connection, content);
         break;
+      case "SalesInvoices":
       case "SalesInvoice.SalesInvoices":
-        await processInvoiceWebhook(supabase, connection, content);
+        await processInvoiceWebhook(supabase, content);
         break;
       default:
-        console.log("Unhandled topic:", content.Topic);
+        console.log("Unhandled topic:", Topic);
     }
 
     return new Response("OK", { status: 200, headers: corsHeaders });
   } catch (error: unknown) {
     console.error("Webhook processing error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(errorMessage, { status: 500, headers: corsHeaders });
+    return new Response("Internal error", { status: 500, headers: corsHeaders });
   }
 });
 
 // deno-lint-ignore no-explicit-any
-async function processAccountWebhook(
-  supabase: any,
-  connection: { id: string; division_id: string },
-  content: ExactWebhookPayload["Content"]
-) {
-  console.log(`Processing Account webhook: ${content.Action} - ${content.Key}`);
+async function processAccountWebhook(supabase: any, connection: { id: string; division_id: string }, content: any) {
+  console.log(`Processing Account webhook: ${content.EventAction} - ${content.Key}`);
 
-  if (content.Action === "Delete") {
-    // Mark customer as needing sync review (don't auto-delete)
+  if (content.EventAction === "Delete") {
     await supabase
       .from("customers")
       .update({ exact_account_id: null })
       .eq("exact_account_id", content.Key)
       .eq("division_id", connection.division_id);
   } else {
-    // For Create/Update, mark as processed
     await supabase.from("exact_webhook_logs").update({
       processed: true,
       processed_at: new Date().toISOString(),
@@ -137,14 +110,9 @@ async function processAccountWebhook(
 }
 
 // deno-lint-ignore no-explicit-any
-async function processInvoiceWebhook(
-  supabase: any,
-  connection: { id: string; division_id: string },
-  content: ExactWebhookPayload["Content"]
-) {
-  console.log(`Processing Invoice webhook: ${content.Action} - ${content.Key}`);
+async function processInvoiceWebhook(supabase: any, content: any) {
+  console.log(`Processing Invoice webhook: ${content.EventAction} - ${content.Key}`);
   
-  // Log for processing - actual update would fetch from Exact API
   await supabase.from("exact_webhook_logs").update({
     processed: true,
     processed_at: new Date().toISOString(),

@@ -1,13 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { decryptToken, encryptToken, isEncrypted } from "../_shared/crypto.ts";
-
-const EXACT_API_URL = "https://start.exactonline.nl";
-const EXACT_TOKEN_URL = "https://start.exactonline.nl/api/oauth2/token";
+import { getExactTokenFromConnection } from "../_shared/exact-connect.ts";
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -21,7 +17,6 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const { divisionId, endpoint, method = "GET", body } = await req.json();
 
     if (!divisionId || !endpoint) {
@@ -40,50 +35,17 @@ serve(async (req) => {
       throw new Error("No active Exact Online connection found for this division");
     }
 
-    // Check if token needs refresh
-    // Decrypt the stored tokens
-    let accessToken = connection.access_token;
-    let refreshToken = connection.refresh_token;
-    
-    // Handle migration: check if tokens are encrypted
-    if (isEncrypted(accessToken)) {
-      accessToken = await decryptToken(accessToken);
-    }
-    if (isEncrypted(refreshToken)) {
-      refreshToken = await decryptToken(refreshToken);
-    }
-
-    const tokenExpiry = new Date(connection.token_expires_at);
-    
-    if (new Date() >= tokenExpiry) {
-      // Refresh the token
-      const newTokens = await refreshAccessToken(refreshToken);
-      accessToken = newTokens.access_token;
-
-      // Encrypt new tokens before storing
-      const encryptedAccessToken = await encryptToken(newTokens.access_token);
-      const encryptedRefreshToken = await encryptToken(newTokens.refresh_token);
-
-      // Update stored tokens
-      const tokenExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
-      await supabase
-        .from("exact_online_connections")
-        .update({
-          access_token: encryptedAccessToken,
-          refresh_token: encryptedRefreshToken,
-          token_expires_at: tokenExpiresAt.toISOString(),
-        })
-        .eq("id", connection.id);
-    }
+    // Get fresh token from SiteJob Connect
+    const tokenData = await getExactTokenFromConnection(connection);
 
     // Make the actual API request to Exact Online
-    const exactEndpoint = endpoint.replace("{division}", connection.exact_division.toString());
-    const exactUrl = `${EXACT_API_URL}${exactEndpoint}`;
+    const exactEndpoint = endpoint.replace("{division}", tokenData.division.toString());
+    const exactUrl = `${tokenData.base_url}${exactEndpoint}`;
 
     const exactResponse = await fetch(exactUrl, {
       method,
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/json",
         "Content-Type": "application/json",
       },
@@ -114,32 +76,3 @@ serve(async (req) => {
     );
   }
 });
-
-async function refreshAccessToken(refreshToken: string) {
-  const clientId = Deno.env.get("EXACT_CLIENT_ID");
-  const clientSecret = Deno.env.get("EXACT_CLIENT_SECRET");
-
-  if (!clientId || !clientSecret) {
-    throw new Error("Missing Exact Online credentials");
-  }
-
-  const response = await fetch(EXACT_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Token refresh failed: ${errorText}`);
-  }
-
-  return response.json();
-}
