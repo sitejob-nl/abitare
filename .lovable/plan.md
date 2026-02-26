@@ -1,37 +1,40 @@
 
 
-## Probleem
+## Verbetering AddProductDialog UI
 
-De productenfilter in `AddProductDialog.tsx` werkt niet om twee redenen:
+De huidige dialoog heeft meerdere UX-problemen:
+- Product zoeken via een combobox-popover is onhandig (extra klik, klein venster)
+- Filters, zoekresultaten en formuliervelden staan allemaal gestapeld in een smalle kolom
+- Na productselectie verschijnt pas het formulier, wat de flow breekt
+- Veel verticale scroll nodig
 
-1. **`p.category` is een object, geen string** — De query haalt `category: product_categories(id, name, code)` op als een genest object. De filter vergelijkt dit object met `.toLowerCase()`, wat altijd `"[object object]"` oplevert en nooit matcht.
+### Aanpak: Breed tweepanelen-design
 
-2. **Filter moet `kitchen_group` gebruiken** — De categorie-buttons (onderkast, bovenkast, etc.) komen overeen met het `kitchen_group` veld op products, niet met de `category` relatie. Bovendien gebruiken de `kitchen_group` waarden underscores (`hoge_kast`) terwijl de button `"hoge kast"` heeft (met spatie).
+**Stap 1: Verbreed de dialoog en maak een tweepanelen-layout**
+- Vergroot van `sm:max-w-[550px]` naar `sm:max-w-[900px]`
+- Linkerpaneel (60%): filters + scrollbare productlijst als kaarten/rijen
+- Rechterpaneel (40%): formuliervelden (aantal, prijs, afmetingen, omschrijving)
 
-## Oplossing
+**Stap 2: Inline productlijst in plaats van combobox**
+- Vervang de Popover/Command combobox door een directe zoekbalk + scrollbare lijst
+- Toon producten als compacte rijen met artikelcode, naam, prijs, breedte en energielabel
+- Klikken selecteert direct (highlight) en vult het rechterpaneel
 
-### Stap 1: Fix categorie-filter in AddProductDialog.tsx
+**Stap 3: Filters bovenaan het linkerpaneel**
+- Zoekbalk bovenaan
+- Categorie-buttons + breedte-filter op één regel eronder
+- Leverancier-toggle als subtiele checkbox
 
-Wijzig de `filteredProducts` filter (regel ~115-126):
-- Vervang `p.category` door `p.kitchen_group`
-- Gebruik underscore-notatie in de filter buttons (`hoge_kast` i.p.v. `"hoge kast"`)
-- Update de filterwaarden in de buttons array om te matchen met de database-waarden: `onderkast`, `bovenkast`, `hoge_kast`, `apparatuur`
+**Stap 4: Rechterpaneel altijd zichtbaar**
+- Toon het formulier altijd, maar disabled/placeholder wanneer geen product geselecteerd
+- Geselecteerd product bovenaan als compacte kaart met naam + artikelcode
+- Daaronder: prijs, aantal, afmetingen, extra omschrijving in een compact grid
+- Prijstype-toggle en override als accordion/collapsible voor gevorderde opties
 
-### Stap 2: Update category filter buttons
+**Stap 5: Vrije regel tab behouden**
+- De "Vrije regel" tab blijft hetzelfde maar profiteert van de bredere dialoog
+- Velden in een beter grid (2 kolommen i.p.v. 5)
 
-Wijzig de filter-buttons array (regel ~412-428):
-```
-{ value: "", label: "Alle" },
-{ value: "onderkast", label: "Onderkast" },
-{ value: "bovenkast", label: "Bovenkast" },
-{ value: "hoge_kast", label: "Hoge kast" },
-{ value: "apparatuur", label: "Apparatuur" },
-```
-
-En het filter-vergelijkingslogica:
-```js
-if (categoryFilter && p.kitchen_group !== categoryFilter) return false;
-```
-
-In plaats van de huidige `.includes().toLowerCase()` vergelijking op het geneste object.
+### Bestanden
+- `src/components/quotes/AddProductDialog.tsx` — volledige UI-herstructurering
 
