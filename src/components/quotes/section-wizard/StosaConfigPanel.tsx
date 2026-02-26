@@ -130,7 +130,10 @@ export function StosaConfigPanel({
               <SelectContent>
                 {activeFrontColors.map((c: any) => (
                   <SelectItem key={c.id} value={c.color_code || c.code}>
-                    {c.color_code || c.code} - {c.color_name || c.name}
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
+                      {c.color_code || c.code} - {c.color_name || c.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -163,7 +166,10 @@ export function StosaConfigPanel({
               <SelectContent>
                 {activeCorpusColors.map((c: any) => (
                   <SelectItem key={c.id} value={c.color_code || c.code}>
-                    {c.color_code || c.code} - {c.color_name || c.name}
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
+                      {c.color_code || c.code} - {c.color_name || c.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -225,7 +231,10 @@ export function StosaConfigPanel({
                   <SelectContent>
                     {handleColors.map((c) => (
                       <SelectItem key={c.id} value={c.code}>
-                        {c.name}
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
+                          {c.name}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -298,7 +307,10 @@ export function StosaConfigPanel({
               <SelectContent>
                 {plinthColors.map((c) => (
                   <SelectItem key={c.id} value={c.code}>
-                    {c.name}
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
+                      {c.name}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
