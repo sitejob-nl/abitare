@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDivisionChange } from "@/hooks/useDivisionChange";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -16,6 +17,9 @@ export function AppLayout({ children, title, breadcrumb }: AppLayoutProps) {
   
   // Clear React Query cache when division changes
   useDivisionChange();
+
+  // Subscribe to realtime changes across all key tables
+  useRealtimeSync();
 
   return (
     <div className="flex h-screen overflow-hidden">

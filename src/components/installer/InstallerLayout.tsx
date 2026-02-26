@@ -5,6 +5,7 @@ import logo from "@/assets/logo.svg";
 import { ClipboardList, FileCheck, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 interface InstallerLayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,8 @@ export function InstallerLayout({ children }: InstallerLayoutProps) {
   const location = useLocation();
   const { profile, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  
+  useRealtimeSync();
 
   const displayName = profile?.full_name || profile?.email || "Monteur";
   const initials = displayName
