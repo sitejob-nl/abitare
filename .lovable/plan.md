@@ -1,23 +1,20 @@
 
 
-## Fix: Producten laden voor STOSA prijsgroep
+## Fix: RPC type mismatch in `get_products_for_price_group`
 
-**Probleem**: `.in("id", [624 UUIDs])` in `useProducts.ts` regel 93 stuurt alle IDs als URL-parameters via PostgREST → overschrijdt de ~8KB URL-limiet → query faalt stilletjes.
+**Probleem**: De RPC geeft een 400 error: `"Returned type character varying(255) does not match expected type text in column 18"`. De functie declareert `supplier_name text` in de return type, maar `suppliers.name` is `varchar(255)` in de database. PostgreSQL ziet dit als type mismatch.
 
-**Oplossing**: Eén nieuwe database-functie die de join server-side doet.
+**Oplossing**: Eén migratie die de functie opnieuw aanmaakt met expliciete `::text` casts op de varchar kolommen, of de return types wijzigt naar `varchar`.
 
-### Stap 1: Nieuwe database-functie
+### Stap 1: Database migratie
 
-Maak RPC `get_products_for_price_group` die products + product_prices joined en direct gefilterde, gepagineerde producten retourneert (met supplier/category info). Parameters: `p_price_group_id`, `p_search`, `p_kitchen_group`, `p_show_inactive`, `p_sort_field`, `p_sort_dir`, `p_limit`, `p_offset`.
+`CREATE OR REPLACE FUNCTION get_products_for_price_group` — cast `s.name`, `s.code`, `pc.name`, en `pc.code` naar `::text` in de SELECT, zodat ze matchen met de gedeclareerde return types.
 
-### Stap 2: Update `useProducts` hook
+De betreffende kolommen:
+- `s.name` → `s.name::text AS supplier_name`  
+- `s.code` → `s.code::text AS supplier_code`
+- `pc.name` → `pc.name::text AS category_name`
+- `pc.code` → `pc.code::text AS category_code`
 
-Wanneer `priceGroupId` is gezet:
-- Roep de nieuwe RPC aan in plaats van de twee-staps flow (regel 68-94)
-- Geen `.in()` meer nodig
-- Fallback naar huidige query wanneer geen `priceGroupId`
-
-### Bestanden
-- **Database**: nieuwe migratie met `get_products_for_price_group` functie
-- `src/hooks/useProducts.ts` — vervang de twee-staps `.in()` logica
+Geen frontend-wijzigingen nodig.
 
