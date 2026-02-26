@@ -1,124 +1,145 @@
 
 
-## Plan: Migratie Exact Online naar SiteJob Connect
+## Plan: Alle 5 Exact Online API-verbeterpunten implementeren
 
-### Huidige situatie
-Het systeem beheert OAuth tokens zelf: `exact-auth` start de OAuth flow, `exact-auth-callback` wisselt de code om voor tokens, en elke sync-functie (`exact-sync-customers`, `exact-sync-invoices`, `exact-sync-sales-orders`, `exact-sync-purchase-orders`, `exact-api`, `exact-webhooks-manage`) heeft een eigen `getValidToken()` functie die tokens decrypteert, refresht en opslaat. Dit is 6x gedupliceerde token-logica.
+### Overzicht
 
-Met SiteJob Connect wordt token-management centraal afgehandeld. Het systeem haalt bij elke API call een verse token op via Connect.
+5 verbeterpunten in scope:
+1. **SalesInvoices API** i.p.v. SalesEntries
+2. **Contactpersonen** synchronisatie via `/crm/Contacts`
+3. **Offertes** synchronisatie via `/crm/Quotations`
+4. **Artikelen** synchronisatie via `/logistics/Items`
+5. **Webhook topics** uitbreiden + daadwerkelijke data-sync bij events
 
-### Wat verandert
+### Database migratie
 
-```text
-HUIDIG:
-  exact-auth → Exact OAuth → exact-auth-callback → DB (encrypted tokens)
-  sync-functies → decrypt → refresh indien nodig → Exact API
+Nieuwe kolommen toevoegen:
 
-NIEUW:
-  ExactOnlineSettings → popup connect.sitejob.nl → postMessage → exact-config (ontvangt division info)
-  sync-functies → exact-token (SiteJob Connect) → Exact API (met verse token)
+```sql
+-- Customers: Exact contact ID voor contactpersonen-sync
+ALTER TABLE customers ADD COLUMN exact_contact_id text;
+
+-- Quotes: Exact quotation ID + nummer
+ALTER TABLE quotes ADD COLUMN exact_quotation_id text;
+ALTER TABLE quotes ADD COLUMN exact_quotation_number text;
+
+-- Products: Exact item ID voor artikelen-sync
+ALTER TABLE products ADD COLUMN exact_item_id text;
 ```
 
-### Stap 1: Database migratie
+Geen `invoices` tabel gevonden — facturen worden via `orders.exact_invoice_id` bijgehouden. Dit blijft zo, maar de waarde wordt nu een Exact `InvoiceID` GUID i.p.v. een `EntryNumber`.
 
-Wijzig de `exact_online_connections` tabel:
-- **Verwijder** kolommen: `access_token`, `refresh_token`, `token_expires_at` (tokens worden niet meer lokaal opgeslagen)
-- **Voeg toe**: `tenant_id TEXT`, `webhook_secret TEXT` (encrypted), `company_name TEXT`, `region TEXT DEFAULT 'nl'`
-- De kolommen `division_id`, `exact_division`, `is_active`, `connected_at`, `webhooks_enabled` blijven
+### Stap 1: Factuur-sync naar SalesInvoices API
 
-### Stap 2: Nieuwe secret toevoegen
+**Bestand:** `supabase/functions/exact-sync-invoices/index.ts`
 
-- `CONNECT_API_KEY` — nodig voor tenant-registratie bij SiteJob Connect
+Wijzigingen:
+- Vervang `SalesEntries` + `SalesEntryLines` interfaces door `SalesInvoices` + `SalesInvoiceLines`
+- POST endpoint wordt `/salesinvoice/SalesInvoices` met geneste `SalesInvoiceLines`
+- Regels krijgen `Item` (Exact item GUID als beschikbaar), `Quantity`, `NetPrice`, `Description`, `VATCode`
+- Fallback naar `GLAccount` als er geen `exact_item_id` gekoppeld is aan het product
+- Na succesvolle POST: sla `InvoiceID` op in `orders.exact_invoice_id` en `InvoiceNumber` als referentie
+- Verwijder `mapToExactSalesEntry` functie, vervang door `mapToExactSalesInvoice`
+- Journal code selectie: zoek Journal met Type 70 (verkoopfactuurjournaal) i.p.v. Type 50/20
 
-### Stap 3: Shared helper `_shared/exact-connect.ts`
+### Stap 2: Contactpersonen synchronisatie
 
-Eén gedeelde functie die alle sync-functies gebruiken:
+**Nieuw bestand:** `supabase/functions/exact-sync-contacts/index.ts`
 
-```typescript
-async function getExactToken(tenantId: string, webhookSecret: string): Promise<{
-  access_token: string;
-  division: number;
-  base_url: string;
-}> {
-  // POST naar SiteJob Connect exact-token endpoint
-  // Bij needs_reauth: throw specifieke error
-}
-```
+Acties: `push`, `pull`, `sync`
 
-Vervangt alle 6 gedupliceerde `getValidToken()` functies. Geen decrypt/encrypt meer nodig.
+**Push** (klant → Exact):
+- Per customer met `exact_account_id`: POST/PUT naar `/crm/Contacts`
+- Map: `first_name` → `FirstName`, `last_name` → `LastName`, `email` → `Email`, `phone` → `BusinessPhone`, `mobile` → `BusinessMobile`, `city` → `City`, `postal_code` → `Postcode`
+- Sla `exact_contact_id` op na POST
 
-### Stap 4: Nieuwe edge function `exact-config`
+**Pull** (Exact → klant):
+- GET `/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact`
+- Match op `Account` GUID → lokale customer via `exact_account_id`
+- Update contactgegevens als `IsMainContact = true`
 
-Ontvangt POST van SiteJob Connect na succesvolle OAuth:
-- Verifieert `X-Webhook-Secret` header
-- Slaat `division`, `company_name`, `region` op in `exact_online_connections`
-- Handelt ook `action: disconnect` af
+**Config:** Voeg `exact-sync-contacts` toe aan `supabase/config.toml` met `verify_jwt = false`
 
-### Stap 5: Edge function `exact-register-tenant` (eenmalig)
+### Stap 3: Offertes synchronisatie
 
-Registreert Abitare als tenant bij SiteJob Connect. Wordt aangeroepen vanuit de settings-pagina als er nog geen `tenant_id` is.
+**Nieuw bestand:** `supabase/functions/exact-sync-quotes/index.ts`
 
-### Stap 6: Refactor alle sync edge functions
+Acties: `push`, `pull_status`
 
-Betreft 6 bestanden:
-- `exact-api/index.ts`
-- `exact-sync-customers/index.ts`
-- `exact-sync-invoices/index.ts`
-- `exact-sync-sales-orders/index.ts`
-- `exact-sync-purchase-orders/index.ts`
-- `exact-webhooks-manage/index.ts`
+**Push:**
+- Per quote zonder `exact_quotation_id`: POST naar `/crm/Quotations`
+- Map: `customer.exact_account_id` → `OrderAccount`, `quote_date` → `QuotationDate`, `valid_until` → `ClosingDate`, `reference` → `Description`
+- Geneste `QuotationLines` uit `quote_lines` (filter `is_group_header`): `Description`, `Quantity`, `UnitPrice`, optioneel `Item` (via `product.exact_item_id`)
+- Sla `QuotationID` en `QuotationNumber` op
 
-Per functie:
-1. Verwijder `import { decryptToken, encryptToken, isEncrypted } from "../_shared/crypto.ts"`
-2. Verwijder `EXACT_TOKEN_URL` constant
-3. Verwijder hele `getValidToken()` functie (40-50 regels per bestand)
-4. Importeer `getExactToken` uit `_shared/exact-connect.ts`
-5. Vervang token-ophaling: in plaats van `connection.access_token` decrypt → `getExactToken(connection.tenant_id, decryptedWebhookSecret)`
-6. Gebruik `base_url` uit Connect response i.p.v. hardcoded `EXACT_API_URL`
+**Pull status:**
+- GET bestaande quotations, update lokale status bij accept/reject in Exact
 
-### Stap 7: Refactor `exact-webhooks-manage`
+**Config:** Voeg `exact-sync-quotes` toe aan `supabase/config.toml`
 
-- Wijzig webhook CallbackURL naar SiteJob Connect router: `https://xeshjkznwdrxjjhbpisn.supabase.co/functions/v1/exact-webhook-router`
-- Bestaande `exact-webhook` functie wordt aangepast om forwarded webhooks van Connect te ontvangen (verificatie via `X-Webhook-Secret` header i.p.v. HMAC)
+### Stap 4: Artikelen synchronisatie
 
-### Stap 8: Verwijder oude auth functies
+**Nieuw bestand:** `supabase/functions/exact-sync-items/index.ts`
 
-- **Verwijder**: `exact-auth/index.ts` en `exact-auth-callback/index.ts` (OAuth flow gaat via SiteJob Connect)
-- **Cleanup**: `supabase/config.toml` entries voor `exact-auth` en `exact-auth-callback`
+Acties: `push`, `pull`, `sync`
 
-### Stap 9: Frontend — `ExactOnlineSettings.tsx`
+**Push:**
+- Per product zonder `exact_item_id`: POST naar `/logistics/Items`
+- Map: `article_code` → `Code`, `name` → `Description`, `base_price` als `CostPriceStandard`, `IsSalesItem: true`
+- Sla `exact_item_id` op
 
-- Vervang `useStartExactAuth` (redirect naar OAuth) met popup naar `connect.sitejob.nl/exact-setup?tenant_id={id}`
-- Luister op `postMessage` event `exact-connected` (zelfde patroon als WhatsApp)
-- Verwijder OAuth callback handling (`useEffect` met `searchParams`)
-- Toon `company_name` uit Connect config
+**Pull:**
+- Bulk GET `/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem`
+- Match op `Code` ↔ `article_code`, update of insert
 
-### Stap 10: Frontend — `useExactOnline.ts`
+**Config:** Voeg `exact-sync-items` toe aan `supabase/config.toml`
 
-- Verwijder `useStartExactAuth` mutation
-- Voeg `useRegisterExactTenant` mutation toe
-- Pas `useDisconnectExact` aan om disconnect ook naar Connect te melden
-- Interface `ExactOnlineConnection` bijwerken (tenant_id, webhook_secret, company_name, region; geen access_token/refresh_token meer)
+### Stap 5: Webhook topics uitbreiden + processing
+
+**Bestand:** `supabase/functions/exact-webhooks-manage/index.ts`
+- Voeg topics toe: `"SalesOrder.SalesOrders"`, `"Logistics.Items"`, `"CRM.Quotations"`
+
+**Bestand:** `supabase/functions/exact-webhook/index.ts`
+- Voeg cases toe in de switch:
+  - `SalesOrder.SalesOrders`: bij Create/Update → fetch order data van Exact, update lokale `orders` tabel (`exact_sales_order_id`, status)
+  - `Logistics.Items`: bij Create/Update → fetch item, upsert product met matching `article_code`
+  - `CRM.Quotations`: bij Update → fetch quotation status, update lokale quote status
+  - `CRM.Accounts` Create/Update → fetch account data, upsert customer (nu alleen logging)
+  - `SalesInvoice.SalesInvoices` Create/Update → fetch invoice, update betaalstatus
+
+Per webhook processing: haal het record op via GET `{ExactOnlineEndpoint}` met de access token en sync de data.
+
+### Stap 6: Frontend hooks
+
+**Bestand:** `src/hooks/useExactOnline.ts`
+
+Toevoegen:
+- `useSyncContacts` — mutation voor `exact-sync-contacts`
+- `useSyncQuotes` — mutation voor `exact-sync-quotes`
+- `useSyncItems` — mutation voor `exact-sync-items`
+
+### Stap 7: Frontend settings UI
+
+**Bestand:** `src/components/settings/ExactOnlineSettings.tsx`
+
+Sync-blokken uitbreiden met:
+- **Contactpersonen sync** (push/pull/sync buttons)
+- **Offertes sync** (push naar Exact / status ophalen)
+- **Artikelen sync** (push/pull/sync buttons)
+- Bestaand klanten-blok en webhooks behouden
 
 ### Bestanden overzicht
 
 | Actie | Bestand |
 |---|---|
-| Nieuw | `supabase/functions/_shared/exact-connect.ts` |
-| Nieuw | `supabase/functions/exact-config/index.ts` |
-| Nieuw | `supabase/functions/exact-register-tenant/index.ts` |
-| Refactor | `supabase/functions/exact-api/index.ts` |
-| Refactor | `supabase/functions/exact-sync-customers/index.ts` |
-| Refactor | `supabase/functions/exact-sync-invoices/index.ts` |
-| Refactor | `supabase/functions/exact-sync-sales-orders/index.ts` |
-| Refactor | `supabase/functions/exact-sync-purchase-orders/index.ts` |
-| Refactor | `supabase/functions/exact-webhooks-manage/index.ts` |
-| Refactor | `supabase/functions/exact-webhook/index.ts` |
-| Refactor | `src/components/settings/ExactOnlineSettings.tsx` |
-| Refactor | `src/hooks/useExactOnline.ts` |
-| Verwijder | `supabase/functions/exact-auth/index.ts` |
-| Verwijder | `supabase/functions/exact-auth-callback/index.ts` |
-| Migratie | `exact_online_connections` tabel |
-| Config | `supabase/config.toml` (nieuwe functies, verwijder oude) |
-| Secret | `CONNECT_API_KEY` toevoegen |
+| Migratie | Kolommen: `customers.exact_contact_id`, `quotes.exact_quotation_id/number`, `products.exact_item_id` |
+| Refactor | `supabase/functions/exact-sync-invoices/index.ts` (SalesEntries → SalesInvoices) |
+| Nieuw | `supabase/functions/exact-sync-contacts/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-quotes/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-items/index.ts` |
+| Refactor | `supabase/functions/exact-webhooks-manage/index.ts` (3 extra topics) |
+| Refactor | `supabase/functions/exact-webhook/index.ts` (daadwerkelijke data-sync) |
+| Refactor | `src/hooks/useExactOnline.ts` (3 nieuwe mutations) |
+| Refactor | `src/components/settings/ExactOnlineSettings.tsx` (3 nieuwe sync-blokken) |
+| Config | `supabase/config.toml` (3 nieuwe functies) |
 
