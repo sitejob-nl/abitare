@@ -50,6 +50,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { MentionTextarea, extractMentionedUserIds } from "@/components/service/MentionTextarea";
 import { ComposeEmailDialog } from "@/components/customers/ComposeEmailDialog";
 import { useServiceTicket } from "@/hooks/useServiceTicket";
 import {
@@ -206,8 +207,9 @@ export default function ServiceTicketDetail() {
 
   const handleAddNote = () => {
     if (!noteContent.trim()) return;
+    const mentionedUserIds = extractMentionedUserIds(noteContent, users);
     addNote.mutate(
-      { ticketId: ticket.id, content: noteContent },
+      { ticketId: ticket.id, content: noteContent, mentionedUserIds },
       { onSuccess: () => setNoteContent("") }
     );
   };
@@ -251,6 +253,27 @@ export default function ServiceTicketDetail() {
   const getCustomerName = (customer: { first_name: string | null; last_name: string } | null) => {
     if (!customer) return "";
     return [customer.first_name, customer.last_name].filter(Boolean).join(" ");
+  };
+
+  // Render note content with highlighted @mentions
+  const renderNoteContent = (content: string) => {
+    const parts = content.split(/(@[^\s@]+(?:\s[^\s@]+)?)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        const name = part.slice(1);
+        const isUser = users.some(
+          (u) => u.full_name?.toLowerCase() === name.toLowerCase() || u.email.toLowerCase() === name.toLowerCase()
+        );
+        if (isUser) {
+          return (
+            <span key={i} className="font-medium text-primary bg-primary/10 rounded px-0.5">
+              {part}
+            </span>
+          );
+        }
+      }
+      return part;
+    });
   };
 
   return (
@@ -364,19 +387,17 @@ export default function ServiceTicketDetail() {
                             {format(new Date(note.created_at), "d MMM yyyy HH:mm", { locale: nl })}
                           </span>
                         </div>
-                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                        <p className="text-sm whitespace-pre-wrap">{renderNoteContent(note.content)}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
                 <div className="flex gap-2">
-                  <Textarea
-                    placeholder="Voeg een notitie toe..."
+                  <MentionTextarea
                     value={noteContent}
-                    onChange={(e) => setNoteContent(e.target.value)}
+                    onChange={setNoteContent}
                     rows={2}
-                    className="flex-1"
                   />
                   <Button
                     size="icon"

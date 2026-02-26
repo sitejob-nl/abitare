@@ -1,9 +1,17 @@
 import { cn } from "@/lib/utils";
 import { useActionItems } from "@/hooks/useActionItems";
 import { Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export function ActionList() {
   const { data: actions, isLoading } = useActionItems(6);
+  const navigate = useNavigate();
+
+  const handleClick = (action: { sourceType: string; sourceId: string }) => {
+    if (action.sourceType === "quote") navigate(`/quotes/${action.sourceId}`);
+    else if (action.sourceType === "order") navigate(`/orders/${action.sourceId}`);
+    else if (action.sourceType === "mention") navigate(`/service/${action.sourceId}`);
+  };
 
   if (isLoading) {
     return (
@@ -31,6 +39,7 @@ export function ActionList() {
           {actions.map((action) => (
             <li
               key={action.id}
+              onClick={() => handleClick(action)}
               className="flex cursor-pointer items-center gap-4 border-b border-border-light px-6 py-4 transition-colors last:border-b-0 hover:bg-muted/50"
             >
               <div
@@ -51,7 +60,12 @@ export function ActionList() {
                   ))}
                 </div>
               </div>
-              <span className="rounded-md bg-muted px-2.5 py-1 text-[11px] font-medium text-foreground/70">
+              <span className={cn(
+                "rounded-md px-2.5 py-1 text-[11px] font-medium",
+                action.sourceType === "mention" 
+                  ? "bg-violet-100 text-violet-700"
+                  : "bg-muted text-foreground/70"
+              )}>
                 {action.type}
               </span>
             </li>

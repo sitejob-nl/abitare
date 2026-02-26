@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, ShoppingCart, CreditCard, Calendar, Wrench, ExternalLink } from "lucide-react";
+import { Bell, ShoppingCart, CreditCard, Calendar, Wrench, ExternalLink, AtSign } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -13,22 +13,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Notification {
   id: string;
-  type: "order" | "payment" | "calendar" | "service";
+  type: "order" | "payment" | "calendar" | "service" | "mention";
   title: string;
   description: string;
   url: string;
   createdAt: Date;
   isRead?: boolean;
+  mentionId?: string;
 }
 
 export function NotificationsDropdown() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Fetch recent orders (last 7 days)
   const { data: recentOrders } = useQuery({
@@ -98,8 +102,54 @@ export function NotificationsDropdown() {
     },
   });
 
+  // Fetch unread mentions for current user
+  const { data: unreadMentions } = useQuery({
+    queryKey: ["user-mentions", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase
+        .from("user_mentions")
+        .select(`
+          id, content_preview, created_at, is_read,
+          ticket:service_tickets(id, ticket_number, subject),
+          mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+        `)
+        .eq("user_id", user.id)
+        .eq("is_read", false)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Mark mention as read
+  const markRead = useMutation({
+    mutationFn: async (mentionId: string) => {
+      await supabase.from("user_mentions").update({ is_read: true }).eq("id", mentionId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-mentions"] });
+    },
+  });
+
   // Build notifications list
   const notifications: Notification[] = [];
+
+  // Add mention notifications first (highest priority)
+  unreadMentions?.forEach((mention: any) => {
+    const ticket = mention.ticket;
+    const mentioner = mention.mentioner;
+    notifications.push({
+      id: `mention-${mention.id}`,
+      type: "mention",
+      title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+      description: ticket ? `Ticket #${ticket.ticket_number}: ${mention.content_preview || ticket.subject}` : (mention.content_preview || ""),
+      url: ticket ? `/service/${ticket.id}` : "/service",
+      createdAt: new Date(mention.created_at),
+      mentionId: mention.id,
+    });
+  });
 
   recentOrders?.forEach((order: any) => {
     const customerName = order.customers?.company_name || order.customers?.last_name || "Onbekend";
@@ -151,7 +201,9 @@ export function NotificationsDropdown() {
   // Sort by date (newest first) and limit
   const sortedNotifications = notifications
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 10);
+    .slice(0, 15);
+
+  const unreadCount = (unreadMentions?.length || 0);
 
   const getIcon = (type: Notification["type"]) => {
     switch (type) {
@@ -163,10 +215,16 @@ export function NotificationsDropdown() {
         return <Calendar className="h-4 w-4 text-success" />;
       case "service":
         return <Wrench className="h-4 w-4 text-danger" />;
+      case "mention":
+        return <AtSign className="h-4 w-4 text-violet-600" />;
     }
   };
 
   const handleClick = (notification: Notification) => {
+    // Mark mention as read when clicked
+    if (notification.mentionId) {
+      markRead.mutate(notification.mentionId);
+    }
     navigate(notification.url);
     setOpen(false);
   };
@@ -176,9 +234,9 @@ export function NotificationsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon" className="relative h-9 w-9 md:h-10 md:w-10">
           <Bell className="h-[18px] w-[18px]" />
-          {sortedNotifications.length > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-danger text-[10px] font-semibold text-white">
-              {sortedNotifications.length > 9 ? "9+" : sortedNotifications.length}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
@@ -186,9 +244,11 @@ export function NotificationsDropdown() {
       <DropdownMenuContent align="end" className="w-80 bg-popover z-50">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificaties</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            {sortedNotifications.length} meldingen
-          </span>
+          {unreadCount > 0 && (
+            <span className="text-xs font-normal text-muted-foreground">
+              {unreadCount} ongelezen
+            </span>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <ScrollArea className="h-[300px]">
@@ -200,7 +260,7 @@ export function NotificationsDropdown() {
             sortedNotifications.map((notification) => (
               <DropdownMenuItem
                 key={notification.id}
-                className="flex items-start gap-3 p-3 cursor-pointer focus:bg-accent"
+                className={`flex items-start gap-3 p-3 cursor-pointer focus:bg-accent ${notification.type === "mention" ? "bg-violet-50/50" : ""}`}
                 onClick={() => handleClick(notification)}
               >
                 <div className="mt-0.5">{getIcon(notification.type)}</div>

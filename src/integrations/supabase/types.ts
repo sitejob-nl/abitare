@@ -3711,6 +3711,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_mentions: {
+        Row: {
+          content_preview: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          mentioned_by: string | null
+          note_id: string | null
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          content_preview?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          mentioned_by?: string | null
+          note_id?: string | null
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          content_preview?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          mentioned_by?: string | null
+          note_id?: string | null
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_mentions_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "service_ticket_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_mentions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string

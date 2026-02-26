@@ -9,7 +9,7 @@ export interface ActionItem {
   meta: string[];
   type: string;
   priority: "high" | "medium" | "low";
-  sourceType: "quote" | "order" | "customer";
+  sourceType: "quote" | "order" | "customer" | "mention";
   sourceId: string;
 }
 
@@ -19,10 +19,10 @@ function getCustomerName(customer: { first_name?: string; last_name?: string; co
 }
 
 export function useActionItems(limit = 10) {
-  const { activeDivisionId } = useAuth();
+  const { activeDivisionId, user } = useAuth();
 
   return useQuery({
-    queryKey: ["action-items", limit, activeDivisionId],
+    queryKey: ["action-items", limit, activeDivisionId, user?.id],
     queryFn: async () => {
       const today = new Date().toISOString().split('T')[0];
       const actions: ActionItem[] = [];
@@ -110,6 +110,21 @@ export function useActionItems(limit = 10) {
         depositReminderQuery = depositReminderQuery.eq("division_id", activeDivisionId);
       }
 
+      // Unread mentions for current user
+      const mentionsQuery = user?.id
+        ? supabase
+            .from("user_mentions")
+            .select(`
+              id, content_preview, created_at,
+              ticket:service_tickets(id, ticket_number, subject),
+              mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+            `)
+            .eq("user_id", user.id)
+            .eq("is_read", false)
+            .order("created_at", { ascending: false })
+            .limit(5)
+        : null;
+
       // Run all queries in parallel
       const [
         expiredQuotesResult,
@@ -118,6 +133,7 @@ export function useActionItems(limit = 10) {
         depositToSendResult,
         depositFollowUpResult,
         depositReminderResult,
+        mentionsResult,
       ] = await Promise.all([
         expiredQuotesQuery,
         pendingOrdersQuery,
@@ -125,7 +141,26 @@ export function useActionItems(limit = 10) {
         depositToSendQuery,
         depositFollowUpQuery,
         depositReminderQuery,
+        mentionsQuery || Promise.resolve({ data: [] }),
       ]);
+
+      // Unread mentions (highest priority - personal tasks)
+      (mentionsResult.data as any[] || []).forEach((mention: any) => {
+        const ticket = mention.ticket;
+        const mentioner = mention.mentioner;
+        actions.push({
+          id: `mention-${mention.id}`,
+          title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+          meta: [
+            ticket ? `Ticket #${ticket.ticket_number}` : "Serviceticket",
+            mention.content_preview ? mention.content_preview.slice(0, 60) : "",
+          ].filter(Boolean),
+          type: "Vermelding",
+          priority: "high",
+          sourceType: "mention",
+          sourceId: ticket?.id || "",
+        });
+      });
 
       // Expired quotes
       expiredQuotesResult.data?.forEach((quote) => {
