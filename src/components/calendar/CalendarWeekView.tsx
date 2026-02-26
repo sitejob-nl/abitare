@@ -1,4 +1,4 @@
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, parseISO } from "date-fns";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, parseISO, getISOWeek } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { CalendarEventCard, type CalendarEventData } from "./CalendarEventCard";
@@ -113,11 +113,16 @@ export function CalendarWeekView({
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const weekNumber = getISOWeek(weekStart);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      {/* Header with day names and dates */}
-      <div className="grid grid-cols-7 border-b border-border bg-muted/50">
+      {/* Header with week number, day names and dates */}
+      <div className="grid grid-cols-[40px_repeat(7,1fr)] border-b border-border bg-muted/50">
+        {/* Week number header */}
+        <div className="flex items-center justify-center px-1 py-3 border-r border-border">
+          <span className="text-[10px] font-semibold text-muted-foreground">W{weekNumber}</span>
+        </div>
         {days.map((day) => (
           <div
             key={day.toISOString()}
@@ -142,7 +147,9 @@ export function CalendarWeekView({
       </div>
 
       {/* Days grid */}
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-[40px_repeat(7,1fr)]">
+        {/* Empty cell for alignment */}
+        <div className="border-r border-b border-border" />
         {days.map((day) => (
           <DroppableDay
             key={day.toISOString()}

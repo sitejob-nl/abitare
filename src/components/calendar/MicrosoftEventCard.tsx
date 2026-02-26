@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Calendar } from "lucide-react";
+import { Calendar, Lock } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import type { MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
@@ -16,22 +16,54 @@ interface MicrosoftEventCardProps {
   compact?: boolean;
 }
 
+function isPrivateEvent(event: MicrosoftCalendarEvent) {
+  return event.sensitivity === "private" || event.sensitivity === "confidential";
+}
+
 export function MicrosoftEventCard({ event, compact = false }: MicrosoftEventCardProps) {
   const startTime = parseISO(event.start.dateTime);
   const endTime = parseISO(event.end.dateTime);
+  const isPrivate = isPrivateEvent(event);
+  const ownerColor = event._ownerColor;
+
+  const cardStyle = ownerColor
+    ? { backgroundColor: `${ownerColor}20`, borderLeft: `3px solid ${ownerColor}` }
+    : undefined;
 
   const card = (
     <div
       className={cn(
         "flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium cursor-pointer transition-colors",
-        "bg-accent text-accent-foreground hover:bg-accent/80",
+        !ownerColor && "bg-accent text-accent-foreground hover:bg-accent/80",
+        ownerColor && "hover:opacity-80",
         compact && "py-0.5"
       )}
+      style={cardStyle}
     >
-      <Calendar className="h-3 w-3 flex-shrink-0" />
-      <span className="truncate">{event.subject || "Geen onderwerp"}</span>
+      {isPrivate ? (
+        <Lock className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+      ) : (
+        <Calendar className="h-3 w-3 flex-shrink-0" />
+      )}
+      <span className="truncate">
+        {isPrivate ? "Bezet" : (event.subject || "Geen onderwerp")}
+      </span>
+      {event._ownerName && event._ownerName !== "Mijn agenda" && (
+        <span className="text-[9px] text-muted-foreground ml-auto truncate max-w-[60px]">
+          {event._ownerName.split(" ")[0]}
+        </span>
+      )}
     </div>
   );
+
+  // Don't show popover details for private events
+  if (isPrivate) {
+    return (
+      <div className="cursor-default">
+        {card}
+      </div>
+    );
+  }
 
   return (
     <Popover>
@@ -43,7 +75,9 @@ export function MicrosoftEventCard({ event, compact = false }: MicrosoftEventCar
           <div>
             <h4 className="font-semibold text-sm">{event.subject || "Geen onderwerp"}</h4>
             <p className="text-xs text-muted-foreground mt-1">
-              Microsoft Agenda
+              {event._ownerName && event._ownerName !== "Mijn agenda" 
+                ? `${event._ownerName} — Microsoft Agenda`
+                : "Microsoft Agenda"}
             </p>
           </div>
 

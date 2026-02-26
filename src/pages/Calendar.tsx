@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ServiceTicketSidebar } from "@/components/calendar/ServiceTicketSidebar";
+import { CalendarSubscriptionPanel } from "@/components/calendar/CalendarSubscriptionPanel";
 import { useScheduleServiceTicket } from "@/hooks/useServiceTicketMutations";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight, Loader2, Truck, Wrench, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +32,7 @@ import {
   addDays,
   subDays,
   parseISO,
+  getISOWeek,
 } from "date-fns";
 import { nl } from "date-fns/locale";
 import { DndContext, DragEndEvent, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -42,10 +45,11 @@ import { ConflictBadge } from "@/components/calendar/ConflictBadge";
 import { MicrosoftEventCard } from "@/components/calendar/MicrosoftEventCard";
 import { useCalendarConflicts, type ConflictInfo } from "@/hooks/useCalendarConflicts";
 import { useUpdateEventDate } from "@/hooks/useUpdateEventDate";
-import { useMicrosoftCalendarEvents, type MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
+import { useMicrosoftCalendarEvents, useCalendarSubscriptions, type MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
 import { useInstallers } from "@/hooks/useInstallers";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 function useCalendarEvents(month: Date) {
   const start = startOfMonth(subMonths(month, 1));
@@ -56,13 +60,12 @@ function useCalendarEvents(month: Date) {
     queryFn: async () => {
       const events: CalendarEventData[] = [];
 
-      // Get deliveries with installer info
       const { data: deliveries } = await supabase
         .from("orders")
         .select(`
-          id, order_number, expected_delivery_date, installer_id,
+          id, order_number, expected_delivery_date, installer_id, salesperson_id,
           customer:customers(first_name, last_name, company_name, phone, mobile, street_address, city),
-          installer:profiles!orders_installer_id_fkey(full_name)
+          installer:profiles!orders_installer_id_fkey(full_name, calendar_color)
         `)
         .gte("expected_delivery_date", format(start, "yyyy-MM-dd"))
         .lte("expected_delivery_date", format(end, "yyyy-MM-dd"))
@@ -70,8 +73,8 @@ function useCalendarEvents(month: Date) {
 
       if (deliveries) {
         deliveries.forEach((order) => {
-          const customer = order.customer as { first_name?: string; last_name?: string; company_name?: string; phone?: string; mobile?: string; street_address?: string; city?: string } | null;
-          const installerData = order.installer as { full_name: string | null } | { full_name: string | null }[] | null;
+          const customer = order.customer as any;
+          const installerData = order.installer as any;
           const installer = Array.isArray(installerData) ? installerData[0] : installerData;
           const customerName = customer?.company_name || 
             [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
@@ -85,19 +88,20 @@ function useCalendarEvents(month: Date) {
             orderNumber: order.order_number,
             installerId: order.installer_id,
             installerName: installer?.full_name,
+            installerColor: installer?.calendar_color,
+            salespersonId: (order as any).salesperson_id,
             customerPhone: customer?.mobile || customer?.phone,
             customerAddress: customer?.street_address ? `${customer.street_address}, ${customer.city || ""}`.trim() : null,
           });
         });
       }
 
-      // Get installations with installer info
       const { data: installations } = await supabase
         .from("orders")
         .select(`
-          id, order_number, expected_installation_date, installer_id,
+          id, order_number, expected_installation_date, installer_id, salesperson_id,
           customer:customers(first_name, last_name, company_name, phone, mobile, street_address, city),
-          installer:profiles!orders_installer_id_fkey(full_name)
+          installer:profiles!orders_installer_id_fkey(full_name, calendar_color)
         `)
         .gte("expected_installation_date", format(start, "yyyy-MM-dd"))
         .lte("expected_installation_date", format(end, "yyyy-MM-dd"))
@@ -105,8 +109,8 @@ function useCalendarEvents(month: Date) {
 
       if (installations) {
         installations.forEach((order) => {
-          const customer = order.customer as { first_name?: string; last_name?: string; company_name?: string; phone?: string; mobile?: string; street_address?: string; city?: string } | null;
-          const installerData = order.installer as { full_name: string | null } | { full_name: string | null }[] | null;
+          const customer = order.customer as any;
+          const installerData = order.installer as any;
           const installer = Array.isArray(installerData) ? installerData[0] : installerData;
           const customerName = customer?.company_name || 
             [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
@@ -120,13 +124,14 @@ function useCalendarEvents(month: Date) {
             orderNumber: order.order_number,
             installerId: order.installer_id,
             installerName: installer?.full_name,
+            installerColor: installer?.calendar_color,
+            salespersonId: (order as any).salesperson_id,
             customerPhone: customer?.mobile || customer?.phone,
             customerAddress: customer?.street_address ? `${customer.street_address}, ${customer.city || ""}`.trim() : null,
           });
         });
       }
 
-      // Get scheduled service tickets
       const { data: tickets } = await supabase
         .from("service_tickets")
         .select(`
@@ -140,13 +145,13 @@ function useCalendarEvents(month: Date) {
 
       if (tickets) {
         tickets.forEach((ticket) => {
-          const customer = ticket.customer as { first_name?: string; last_name?: string; company_name?: string; phone?: string; mobile?: string; street_address?: string; city?: string } | null;
+          const customer = ticket.customer as any;
           const customerName = customer?.company_name || 
             [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
           
           events.push({
             id: `service-${ticket.id}`,
-            orderId: ticket.id, // needed for drag compatibility
+            orderId: ticket.id,
             date: ticket.planned_date!,
             type: "service",
             customerName,
@@ -164,7 +169,6 @@ function useCalendarEvents(month: Date) {
   });
 }
 
-// Forecast week query
 function useForecastWeekOrders(month: Date) {
   return useQuery({
     queryKey: ["forecast-week-orders", format(month, "yyyy-MM")],
@@ -177,7 +181,7 @@ function useForecastWeekOrders(month: Date) {
         .is("expected_delivery_date", null);
 
       return (data || []).map((order) => {
-        const customer = order.customer as { first_name?: string; last_name?: string; company_name?: string } | null;
+        const customer = order.customer as any;
         const customerName = customer?.company_name || 
           [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
         return { ...order, customerName };
@@ -186,21 +190,40 @@ function useForecastWeekOrders(month: Date) {
   });
 }
 
+// Fetch user roles for tab filtering
+function useUserRolesMap() {
+  return useQuery({
+    queryKey: ["user-roles-map"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+      if (error) throw error;
+      const map: Record<string, string[]> = {};
+      (data || []).forEach((r) => {
+        if (!map[r.user_id]) map[r.user_id] = [];
+        map[r.user_id].push(r.role);
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 function parseForecastWeekToMonday(forecastWeek: string): string | null {
-  // Format: YYYY-Wnn
   const match = forecastWeek.match(/^(\d{4})-W(\d{1,2})$/);
   if (!match) return null;
   const year = parseInt(match[1]);
   const week = parseInt(match[2]);
-  // ISO week: Jan 4 is always in week 1
   const jan4 = new Date(year, 0, 4);
-  const dayOfWeek = jan4.getDay() || 7; // Mon=1..Sun=7
+  const dayOfWeek = jan4.getDay() || 7;
   const monday = new Date(jan4);
   monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
   return format(monday, "yyyy-MM-dd");
 }
 
-// Draggable event component for month view
+type AgendaTab = "overview" | "sales" | "monteurs" | "mijn";
+
 function DraggableMonthEvent({ event }: { event: CalendarEventData }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: event.id,
@@ -226,7 +249,6 @@ function DraggableMonthEvent({ event }: { event: CalendarEventData }) {
   );
 }
 
-// Droppable day cell for month view
 function DroppableMonthDay({ 
   day, 
   dayEvents,
@@ -235,6 +257,8 @@ function DroppableMonthDay({
   isCurrentMonth,
   isTodayDate,
   dayConflict,
+  weekNumber,
+  showWeekNumber,
   onDayClick,
 }: { 
   day: Date; 
@@ -244,6 +268,8 @@ function DroppableMonthDay({
   isCurrentMonth: boolean;
   isTodayDate: boolean;
   dayConflict?: ConflictInfo;
+  weekNumber?: number;
+  showWeekNumber?: boolean;
   onDayClick: (date: Date) => void;
 }) {
   const dateStr = format(day, "yyyy-MM-dd");
@@ -270,6 +296,11 @@ function DroppableMonthDay({
       )}
     >
       <div className="flex items-center gap-1 mb-0.5 sm:mb-1">
+        {showWeekNumber && weekNumber && (
+          <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium mr-0.5">
+            W{weekNumber}
+          </span>
+        )}
         <div
           className={cn(
             "text-xs sm:text-sm font-medium",
@@ -285,7 +316,6 @@ function DroppableMonthDay({
         {dayConflict && <ConflictBadge conflict={dayConflict} />}
       </div>
       <div className="space-y-0.5 sm:space-y-1">
-        {/* Forecast week badge */}
         {forecastOrders.length > 0 && (
           <div className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] sm:text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
             📋 {forecastOrders.length} forecast
@@ -312,27 +342,42 @@ const CalendarPage = () => {
   const [view, setView] = useState<CalendarView>("month");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [installerFilter, setInstallerFilter] = useState<string>("all");
+  const [agendaTab, setAgendaTab] = useState<AgendaTab>("overview");
   const [draggingEvent, setDraggingEvent] = useState<CalendarEventData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const { user } = useAuth();
   const { data: events, isLoading } = useCalendarEvents(currentDate);
   const { data: conflicts } = useCalendarConflicts(currentDate);
-  const { data: microsoftEvents } = useMicrosoftCalendarEvents(currentDate);
+  const { data: subscriptions } = useCalendarSubscriptions();
   const { data: msConnection } = useMicrosoftConnection();
   const { data: forecastOrders } = useForecastWeekOrders(currentDate);
   const { data: installers } = useInstallers();
+  const { data: userRolesMap } = useUserRolesMap();
   const updateEventDate = useUpdateEventDate();
   const scheduleTicket = useScheduleServiceTicket();
 
+  // Build subscribed emails for multi-user MS calendar
+  const subscribedEmails = useMemo(() => {
+    if (!subscriptions) return [];
+    return subscriptions
+      .filter((s: any) => s.is_visible && s.target)
+      .map((s: any) => ({
+        email: s.target?.email || "",
+        name: s.target?.full_name || s.target?.email || "Onbekend",
+        color: s.target?.calendar_color || "#6366F1",
+      }))
+      .filter((s) => s.email);
+  }, [subscriptions]);
+
+  const { data: microsoftEvents } = useMicrosoftCalendarEvents(currentDate, subscribedEmails);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
+      activationConstraint: { distance: 8 },
     })
   );
 
-  // Build forecast map: dateStr -> orders[]
   const forecastMap = useMemo(() => {
     const map: Record<string, { id: string; order_number: number; customerName: string }[]> = {};
     forecastOrders?.forEach((order) => {
@@ -345,20 +390,41 @@ const CalendarPage = () => {
     return map;
   }, [forecastOrders]);
 
-  const filteredEvents = events?.filter((event) => {
-    // Type filter
+  // Tab-based filtering
+  const tabFilteredEvents = useMemo(() => {
+    if (!events) return [];
+    if (agendaTab === "overview") return events;
+    if (agendaTab === "mijn") {
+      return events.filter((e) => e.installerId === user?.id || e.salespersonId === user?.id);
+    }
+    if (agendaTab === "monteurs") {
+      return events.filter((e) => {
+        if (!e.installerId) return false;
+        const roles = userRolesMap?.[e.installerId] || [];
+        return roles.includes("monteur");
+      });
+    }
+    if (agendaTab === "sales") {
+      return events.filter((e) => {
+        const spId = e.salespersonId;
+        if (!spId) return false;
+        const roles = userRolesMap?.[spId] || [];
+        return roles.includes("verkoper") || roles.includes("manager") || roles.includes("admin");
+      });
+    }
+    return events;
+  }, [events, agendaTab, user?.id, userRolesMap]);
+
+  const filteredEvents = tabFilteredEvents.filter((event) => {
     if (typeFilter !== "all" && typeFilter !== "microsoft" && event.type !== typeFilter) return false;
-    // Installer filter
     if (installerFilter !== "all" && event.installerId !== installerFilter) return false;
     return true;
-  }) || [];
+  });
 
-  // Filter Microsoft events based on filter
   const filteredMsEvents = (typeFilter === "all" || typeFilter === "microsoft") 
     ? (microsoftEvents || []) 
     : [];
 
-  // Add conflict info to events
   const eventsWithConflicts = filteredEvents.map((event) => ({
     ...event,
     hasConflict: event.type === "installation" && 
@@ -378,7 +444,6 @@ const CalendarPage = () => {
     });
   }, [filteredMsEvents]);
 
-  // Navigation handlers
   const goToPrevious = () => {
     if (view === "month") setCurrentDate(subMonths(currentDate, 1));
     else if (view === "week") setCurrentDate(subWeeks(currentDate, 1));
@@ -406,13 +471,11 @@ const CalendarPage = () => {
   const handleDragEnd = async (event: DragEndEvent) => {
     setDraggingEvent(null);
     const { active, over } = event;
-    
     if (!over) return;
 
     const activeId = active.id.toString();
     const newDate = over.id as string;
 
-    // Handle service ticket drop
     if (activeId.startsWith("service-ticket-")) {
       const ticketId = activeId.replace("service-ticket-", "");
       const ticketData = active.data.current?.ticket as { status?: string } | undefined;
@@ -432,11 +495,8 @@ const CalendarPage = () => {
       return;
     }
 
-    // Handle order event drop
     const draggedEvent = active.data.current?.event as CalendarEventData;
     if (draggedEvent.date === newDate) return;
-
-    // Don't allow dragging service events (they don't have order fields)
     if (draggedEvent.type === "service") return;
 
     try {
@@ -445,7 +505,6 @@ const CalendarPage = () => {
         field: draggedEvent.type === "delivery" ? "expected_delivery_date" : "expected_installation_date",
         date: newDate,
       });
-
       toast({
         title: "Datum bijgewerkt",
         description: `${draggedEvent.type === "delivery" ? "Levering" : "Montage"} verplaatst naar ${format(new Date(newDate), "d MMMM yyyy", { locale: nl })}.`,
@@ -459,7 +518,6 @@ const CalendarPage = () => {
     }
   };
 
-  // Month view calendar grid
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
@@ -469,13 +527,12 @@ const CalendarPage = () => {
   const mobileDayNames = ["M", "D", "W", "D", "V", "Z", "Z"];
   const desktopDayNames = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
 
-  // Get title based on view
   const getViewTitle = () => {
     if (view === "month") return format(currentDate, "MMMM yyyy", { locale: nl });
     if (view === "week") {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
       const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-      return `${format(weekStart, "d MMM", { locale: nl })} - ${format(weekEnd, "d MMM yyyy", { locale: nl })}`;
+      return `Week ${getISOWeek(weekStart)} · ${format(weekStart, "d MMM", { locale: nl })} - ${format(weekEnd, "d MMM yyyy", { locale: nl })}`;
     }
     return format(currentDate, "EEEE d MMMM yyyy", { locale: nl });
   };
@@ -519,26 +576,28 @@ const CalendarPage = () => {
         </div>
       </div>
 
+      {/* Agenda Tabs */}
+      <div className="mb-4">
+        <Tabs value={agendaTab} onValueChange={(v) => setAgendaTab(v as AgendaTab)}>
+          <TabsList>
+            <TabsTrigger value="overview">Overzicht</TabsTrigger>
+            <TabsTrigger value="sales">Sales</TabsTrigger>
+            <TabsTrigger value="monteurs">Monteurs</TabsTrigger>
+            <TabsTrigger value="mijn">Mijn agenda</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
       {/* Navigation */}
       <div className="mb-4 sm:mb-5 flex items-center justify-between">
         <div className="flex items-center gap-1 sm:gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8 sm:h-9 sm:w-9"
-            onClick={goToPrevious}
-          >
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={goToPrevious}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8 sm:h-9 sm:w-9"
-            onClick={goToNext}
-          >
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={goToNext}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <h2 className="ml-1 sm:ml-2 text-sm sm:text-lg font-semibold text-foreground capitalize truncate max-w-[140px] sm:max-w-none">
+          <h2 className="ml-1 sm:ml-2 text-sm sm:text-lg font-semibold text-foreground capitalize truncate max-w-[200px] sm:max-w-none">
             {getViewTitle()}
           </h2>
         </div>
@@ -586,6 +645,8 @@ const CalendarPage = () => {
                     const dateStr = format(day, "yyyy-MM-dd");
                     const dayConflict = conflicts?.find((c) => c.date === dateStr);
                     const dayForecast = forecastMap[dateStr] || [];
+                    const isMonday = day.getDay() === 1;
+                    const weekNum = isMonday ? getISOWeek(day) : undefined;
 
                     return (
                       <DroppableMonthDay
@@ -597,6 +658,8 @@ const CalendarPage = () => {
                         isCurrentMonth={isCurrentMonth}
                         isTodayDate={isTodayDate}
                         dayConflict={dayConflict}
+                        weekNumber={weekNum}
+                        showWeekNumber={isMonday}
                         onDayClick={handleDayClick}
                       />
                     );
@@ -625,8 +688,9 @@ const CalendarPage = () => {
             )}
           </div>
 
-          {/* Service Ticket Sidebar */}
-          <div className="hidden lg:block">
+          {/* Right Sidebar */}
+          <div className="hidden lg:flex lg:flex-col lg:gap-4 lg:w-[260px] lg:shrink-0">
+            <CalendarSubscriptionPanel />
             <ServiceTicketSidebar
               isOpen={sidebarOpen}
               onToggle={() => setSidebarOpen(!sidebarOpen)}
