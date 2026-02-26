@@ -13,11 +13,22 @@ export function useInstallers() {
   return useQuery({
     queryKey: ["installers"],
     queryFn: async () => {
-      // For now, fetch all active users - in future could filter by role
+      // Fetch only users with the 'monteur' role
+      const { data: roleRows, error: roleError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "monteur");
+
+      if (roleError) throw roleError;
+
+      const installerIds = (roleRows || []).map((r) => r.user_id);
+      if (installerIds.length === 0) return [] as Installer[];
+
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, email, phone")
         .eq("is_active", true)
+        .in("id", installerIds)
         .order("full_name");
 
       if (error) throw error;
