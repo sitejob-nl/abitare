@@ -240,22 +240,43 @@ export function useAddTicketNote() {
       ticketId,
       content,
       noteType = "intern",
+      mentionedUserIds = [],
     }: {
       ticketId: string;
       content: string;
       noteType?: string;
+      mentionedUserIds?: string[];
     }) => {
-      const { error } = await supabase.from("service_ticket_notes").insert({
+      const { data: note, error } = await supabase.from("service_ticket_notes").insert({
         ticket_id: ticketId,
         content,
         note_type: noteType,
         created_by: user?.id,
-      });
+      }).select("id").single();
 
       if (error) throw error;
+
+      // Create mention records
+      if (mentionedUserIds.length > 0 && user?.id && note) {
+        const contentPreview = content.length > 100 ? content.slice(0, 100) + "…" : content;
+        const mentionInserts = mentionedUserIds
+          .filter((uid) => uid !== user.id) // Don't notify yourself
+          .map((uid) => ({
+            user_id: uid,
+            mentioned_by: user.id,
+            ticket_id: ticketId,
+            note_id: note.id,
+            content_preview: contentPreview,
+          }));
+
+        if (mentionInserts.length > 0) {
+          await supabase.from("user_mentions").insert(mentionInserts);
+        }
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["service-ticket", variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["user-mentions"] });
       toast({ title: "Notitie toegevoegd" });
     },
     onError: (error) => {
