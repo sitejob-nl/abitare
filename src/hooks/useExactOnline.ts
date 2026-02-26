@@ -8,8 +8,10 @@ interface ExactOnlineConnection {
   exact_division: number | null;
   is_active: boolean;
   connected_at: string | null;
-  token_expires_at: string | null;
   webhooks_enabled: boolean | null;
+  tenant_id: string | null;
+  company_name: string | null;
+  region: string | null;
 }
 
 export function useExactOnlineConnections() {
@@ -22,29 +24,30 @@ export function useExactOnlineConnections() {
         .order("connected_at", { ascending: false });
 
       if (error) throw error;
-      return data as ExactOnlineConnection[];
+      return data as unknown as ExactOnlineConnection[];
     },
   });
 }
 
-export function useStartExactAuth() {
+export function useRegisterExactTenant() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (divisionId: string) => {
-      const { data, error } = await supabase.functions.invoke("exact-auth", {
+      const { data, error } = await supabase.functions.invoke("exact-register-tenant", {
         body: { divisionId },
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      return data.authUrl as string;
+      return data as { tenant_id: string; success: boolean; already_registered?: boolean };
     },
-    onSuccess: (authUrl) => {
-      // Redirect to Exact Online OAuth
-      window.location.href = authUrl;
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exact-online-connections"] });
     },
     onError: (error) => {
-      toast.error(`Fout bij starten OAuth: ${error.message}`);
+      toast.error(`Fout bij registratie: ${error.message}`);
     },
   });
 }
@@ -56,14 +59,14 @@ export function useDisconnectExact() {
     mutationFn: async (connectionId: string) => {
       const { error } = await supabase
         .from("exact_online_connections")
-        .delete()
+        .update({ is_active: false })
         .eq("id", connectionId);
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exact-online-connections"] });
-      toast.success("Exact Online verbinding verwijderd");
+      toast.success("Exact Online verbinding ontkoppeld");
     },
     onError: (error) => {
       toast.error(`Fout bij ontkoppelen: ${error.message}`);

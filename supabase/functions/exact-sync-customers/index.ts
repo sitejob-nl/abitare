@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { decryptToken, encryptToken, isEncrypted } from "../_shared/crypto.ts";
-
-const EXACT_API_URL = "https://start.exactonline.nl";
-const EXACT_TOKEN_URL = "https://start.exactonline.nl/api/oauth2/token";
+import { getExactTokenFromConnection } from "../_shared/exact-connect.ts";
 
 interface AbitareCustomer {
   id: string;
@@ -55,14 +52,12 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const { action, divisionId, customerId } = await req.json();
 
     if (!divisionId) {
       throw new Error("divisionId is required");
     }
 
-    // Get connection for this division
     const { data: connection, error: connError } = await supabase
       .from("exact_online_connections")
       .select("*")
@@ -74,20 +69,19 @@ serve(async (req) => {
       throw new Error("No active Exact Online connection found for this division");
     }
 
-    // Get valid access token
-    const accessToken = await getValidToken(supabase, connection);
-    const exactDivision = connection.exact_division;
+    // Get fresh token from SiteJob Connect
+    const tokenData = await getExactTokenFromConnection(connection);
+    const accessToken = tokenData.access_token;
+    const baseUrl = tokenData.base_url;
+    const exactDivision = tokenData.division;
 
     if (action === "push") {
-      // Push single customer or all customers to Exact
-      return await pushCustomers(supabase, accessToken, exactDivision, divisionId, customerId);
+      return await pushCustomers(supabase, accessToken, baseUrl, exactDivision, divisionId, customerId);
     } else if (action === "pull") {
-      // Pull customers from Exact to Abitare
-      return await pullCustomers(supabase, accessToken, exactDivision, divisionId);
+      return await pullCustomers(supabase, accessToken, baseUrl, exactDivision, divisionId);
     } else if (action === "sync") {
-      // Full bidirectional sync
-      const pushResult = await pushCustomersInternal(supabase, accessToken, exactDivision, divisionId, customerId);
-      const pullResult = await pullCustomersInternal(supabase, accessToken, exactDivision, divisionId);
+      const pushResult = await pushCustomersInternal(supabase, accessToken, baseUrl, exactDivision, divisionId, customerId);
+      const pullResult = await pullCustomersInternal(supabase, accessToken, baseUrl, exactDivision, divisionId);
       
       return new Response(JSON.stringify({
         success: true,
@@ -105,123 +99,78 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
 
 async function pushCustomers(
   // deno-lint-ignore no-explicit-any
-  supabase: any,
-  accessToken: string,
-  exactDivision: number,
-  divisionId: string,
-  customerId?: string
+  supabase: any, accessToken: string, baseUrl: string, exactDivision: number, divisionId: string, customerId?: string
 ): Promise<Response> {
-  const result = await pushCustomersInternal(supabase, accessToken, exactDivision, divisionId, customerId);
+  const result = await pushCustomersInternal(supabase, accessToken, baseUrl, exactDivision, divisionId, customerId);
   return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
 async function pushCustomersInternal(
   // deno-lint-ignore no-explicit-any
-  supabase: any,
-  accessToken: string,
-  exactDivision: number,
-  divisionId: string,
-  customerId?: string
+  supabase: any, accessToken: string, baseUrl: string, exactDivision: number, divisionId: string, customerId?: string
 ) {
-  // Get customers to sync
-  let query = supabase
-    .from("customers")
-    .select("*")
-    .eq("division_id", divisionId);
-
-  if (customerId) {
-    query = query.eq("id", customerId);
-  }
-
+  let query = supabase.from("customers").select("*").eq("division_id", divisionId);
+  if (customerId) query = query.eq("id", customerId);
   const { data: customers, error } = await query;
-
   if (error) throw error;
 
-  const results = {
-    success: true,
-    created: 0,
-    updated: 0,
-    failed: 0,
-    errors: [] as string[],
-  };
+  const results = { success: true, created: 0, updated: 0, failed: 0, errors: [] as string[] };
 
   for (const customer of customers as AbitareCustomer[]) {
     try {
       const exactAccount = mapToExactAccount(customer);
 
       if (customer.exact_account_id) {
-        // Update existing account
         const response = await fetch(
-          `${EXACT_API_URL}/api/v1/${exactDivision}/crm/Accounts(guid'${customer.exact_account_id}')`,
+          `${baseUrl}/api/v1/${exactDivision}/crm/Accounts(guid'${customer.exact_account_id}')`,
           {
             method: "PUT",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify(exactAccount),
           }
         );
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`Failed to update customer ${customer.id}:`, errorText);
           results.failed++;
           results.errors.push(`Update failed for ${customer.last_name}: ${errorText}`);
         } else {
-          await response.text(); // Consume response
+          await response.text();
           results.updated++;
         }
       } else {
-        // Create new account
         const response = await fetch(
-          `${EXACT_API_URL}/api/v1/${exactDivision}/crm/Accounts`,
+          `${baseUrl}/api/v1/${exactDivision}/crm/Accounts`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify(exactAccount),
           }
         );
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`Failed to create customer ${customer.id}:`, errorText);
           results.failed++;
           results.errors.push(`Create failed for ${customer.last_name}: ${errorText}`);
         } else {
           const data = await response.json();
           const exactId = data.d?.ID;
-
           if (exactId) {
-            // Update customer with Exact ID
-            await supabase
-              .from("customers")
-              .update({ exact_account_id: exactId })
-              .eq("id", customer.id);
+            await supabase.from("customers").update({ exact_account_id: exactId }).eq("id", customer.id);
           }
           results.created++;
         }
       }
     } catch (err) {
-      console.error(`Error syncing customer ${customer.id}:`, err);
       results.failed++;
       results.errors.push(`Error for ${customer.last_name}: ${String(err)}`);
     }
@@ -232,51 +181,32 @@ async function pushCustomersInternal(
 
 async function pullCustomers(
   // deno-lint-ignore no-explicit-any
-  supabase: any,
-  accessToken: string,
-  exactDivision: number,
-  divisionId: string
+  supabase: any, accessToken: string, baseUrl: string, exactDivision: number, divisionId: string
 ): Promise<Response> {
-  const result = await pullCustomersInternal(supabase, accessToken, exactDivision, divisionId);
+  const result = await pullCustomersInternal(supabase, accessToken, baseUrl, exactDivision, divisionId);
   return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
 async function pullCustomersInternal(
   // deno-lint-ignore no-explicit-any
-  supabase: any,
-  accessToken: string,
-  exactDivision: number,
-  divisionId: string
+  supabase: any, accessToken: string, baseUrl: string, exactDivision: number, divisionId: string
 ) {
-  const results = {
-    success: true,
-    imported: 0,
-    updated: 0,
-    skipped: 0,
-    errors: [] as string[],
-  };
+  const results = { success: true, imported: 0, updated: 0, skipped: 0, errors: [] as string[] };
 
-  // Get accounts from Exact Online using pagination
   let hasMore = true;
   let skipToken = "";
   
   while (hasMore) {
-    // Use sync endpoint for bulk retrieval (pagesize up to 1000 vs 60 on standard)
-    const url = `${EXACT_API_URL}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000${skipToken}`;
+    const url = `${baseUrl}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000${skipToken}`;
     
     const fetchResponse = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
 
     if (!fetchResponse.ok) {
-      const errorText = await fetchResponse.text();
-      throw new Error(`Failed to fetch accounts from Exact: ${errorText}`);
+      throw new Error(`Failed to fetch accounts from Exact: ${await fetchResponse.text()}`);
     }
 
     const responseData = await fetchResponse.json();
@@ -284,54 +214,30 @@ async function pullCustomersInternal(
 
     for (const account of accounts as ExactAccount[]) {
       try {
-        // Check if customer already exists in Abitare
         const { data: existingCustomer } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("exact_account_id", account.ID)
-          .single();
+          .from("customers").select("id").eq("exact_account_id", account.ID).single();
 
         if (existingCustomer) {
-          // Update existing customer
-          const updateData = mapFromExactAccount(account);
-          await supabase
-            .from("customers")
-            .update(updateData)
-            .eq("id", existingCustomer.id);
+          await supabase.from("customers").update(mapFromExactAccount(account)).eq("id", existingCustomer.id);
           results.updated++;
         } else {
-          // Check if customer exists by email or name
           const { data: matchingCustomer } = await supabase
-            .from("customers")
-            .select("id, exact_account_id")
+            .from("customers").select("id, exact_account_id")
             .eq("division_id", divisionId)
             .or(`email.eq.${account.Email},last_name.eq.${account.Name}`)
-            .is("exact_account_id", null)
-            .limit(1)
-            .single();
+            .is("exact_account_id", null).limit(1).single();
 
           if (matchingCustomer) {
-            // Link existing customer
-            await supabase
-              .from("customers")
-              .update({ exact_account_id: account.ID })
-              .eq("id", matchingCustomer.id);
+            await supabase.from("customers").update({ exact_account_id: account.ID }).eq("id", matchingCustomer.id);
             results.updated++;
           } else {
-            // Create new customer
-            const newCustomer = {
+            const { error: insertError } = await supabase.from("customers").insert({
               ...mapFromExactAccount(account),
               exact_account_id: account.ID,
               division_id: divisionId,
-              customer_type: "zakelijk" as const, // Default to business for imported
-            };
-
-            const { error: insertError } = await supabase
-              .from("customers")
-              .insert(newCustomer);
-
+              customer_type: "zakelijk" as const,
+            });
             if (insertError) {
-              console.error(`Failed to import customer ${account.Name}:`, insertError);
               results.errors.push(`Import failed for ${account.Name}: ${insertError.message}`);
             } else {
               results.imported++;
@@ -344,10 +250,8 @@ async function pullCustomersInternal(
       }
     }
 
-    // Check for next page
     const nextLink = responseData.d?.__next;
     if (nextLink) {
-      // Extract skip token from next link
       const skipMatch = nextLink.match(/\$skiptoken=([^&]+)/);
       skipToken = skipMatch ? `&$skiptoken=${skipMatch[1]}` : "";
       hasMore = !!skipToken;
@@ -360,7 +264,6 @@ async function pullCustomersInternal(
 }
 
 function mapToExactAccount(customer: AbitareCustomer): ExactAccount {
-  // Determine the name based on customer type
   let name = customer.last_name;
   if (customer.customer_type === "zakelijk" && customer.company_name) {
     name = customer.company_name;
@@ -369,7 +272,7 @@ function mapToExactAccount(customer: AbitareCustomer): ExactAccount {
   }
 
   return {
-    Code: customer.customer_number.toString(), // Exact Online only accepts numeric codes
+    Code: customer.customer_number.toString(),
     Name: name,
     Email: customer.email || undefined,
     Phone: customer.phone || customer.mobile || undefined,
@@ -379,7 +282,7 @@ function mapToExactAccount(customer: AbitareCustomer): ExactAccount {
     Country: customer.country === "Nederland" ? "NL" : customer.country || undefined,
     VATNumber: customer.vat_number || undefined,
     ChamberOfCommerce: customer.coc_number || undefined,
-    Status: "C", // C = Customer
+    Status: "C",
   };
 }
 
@@ -395,66 +298,4 @@ function mapFromExactAccount(account: ExactAccount): Partial<AbitareCustomer> {
     vat_number: account.VATNumber || null,
     coc_number: account.ChamberOfCommerce || null,
   };
-}
-
-// deno-lint-ignore no-explicit-any
-async function getValidToken(supabase: any, connection: any) {
-  // Decrypt stored tokens
-  let accessToken = connection.access_token;
-  let refreshToken = connection.refresh_token;
-  
-  if (isEncrypted(accessToken)) {
-    accessToken = await decryptToken(accessToken);
-  }
-  if (isEncrypted(refreshToken)) {
-    refreshToken = await decryptToken(refreshToken);
-  }
-
-  const tokenExpiry = new Date(connection.token_expires_at);
-
-  if (new Date() >= tokenExpiry) {
-    const clientId = Deno.env.get("EXACT_CLIENT_ID");
-    const clientSecret = Deno.env.get("EXACT_CLIENT_SECRET");
-
-    if (!clientId || !clientSecret) {
-      throw new Error("Missing Exact Online credentials");
-    }
-
-    const response = await fetch(EXACT_TOKEN_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Token refresh failed");
-    }
-
-    const tokens = await response.json();
-    const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-
-    // Encrypt new tokens before storing
-    const encryptedAccessToken = await encryptToken(tokens.access_token);
-    const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
-
-    await supabase
-      .from("exact_online_connections")
-      .update({
-        access_token: encryptedAccessToken,
-        refresh_token: encryptedRefreshToken,
-        token_expires_at: newExpiresAt.toISOString(),
-      })
-      .eq("id", connection.id);
-
-    return tokens.access_token;
-  }
-
-  return accessToken;
 }
