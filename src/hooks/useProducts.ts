@@ -65,18 +65,36 @@ export function useProducts(options: UseProductsOptions = {}) {
   return useQuery({
     queryKey: ["products", { ...filterOpts, limit, sortField, sortDirection, page, pageSize, priceGroupId }],
     queryFn: async () => {
-      // Step 1: If priceGroupId is set, fetch valid product IDs first
-      let priceGroupProductIds: string[] | null = null;
+      // Server-side price group filtering via RPC to avoid URL length limits
       if (priceGroupId) {
-        const { data: ids, error: rpcError } = await supabase
-          .rpc("get_products_by_price_group", { p_price_group_id: priceGroupId });
+        const offset = (page - 1) * pageSize;
+        const { data: rows, error: rpcError } = await supabase
+          .rpc("get_products_for_price_group", {
+            p_price_group_id: priceGroupId,
+            p_search: search || null,
+            p_supplier_id: (supplierId && supplierId !== "all") ? supplierId : null,
+            p_category_id: (categoryId && categoryId !== "all") ? categoryId : null,
+            p_show_inactive: showInactive,
+            p_sort_field: sortField,
+            p_sort_dir: sortDirection,
+            p_limit: limit || pageSize,
+            p_offset: limit ? 0 : offset,
+            p_price_min: priceMin ?? null,
+            p_price_max: priceMax ?? null,
+          });
         if (rpcError) throw rpcError;
-        priceGroupProductIds = (ids as string[]) ?? [];
-        if (priceGroupProductIds.length === 0) {
-          return { data: [], count: 0, page, pageSize };
-        }
+        const rpcRows = (rows ?? []) as any[];
+        const totalCount = rpcRows.length > 0 ? Number(rpcRows[0].total_count) : 0;
+        // Map RPC result to match the shape of a normal products query
+        const mapped = rpcRows.map((r: any) => ({
+          ...r,
+          supplier: r.supplier_id ? { id: r.supplier_id, name: r.supplier_name, code: r.supplier_code } : null,
+          category: r.category_id ? { id: r.category_id, name: r.category_name, code: r.category_code } : null,
+        }));
+        return { data: mapped, count: totalCount, page, pageSize };
       }
 
+      // Standard query (no price group filter)
       let query = supabase
         .from("products")
         .select(`
@@ -87,11 +105,6 @@ export function useProducts(options: UseProductsOptions = {}) {
         .order(sortField, { ascending: sortDirection === "asc" });
 
       query = applyFilters(query, filterOpts);
-
-      // Step 2: Filter to only products with a price in this price group
-      if (priceGroupProductIds) {
-        query = query.in("id", priceGroupProductIds);
-      }
 
       if (limit) {
         query = query.limit(limit);
