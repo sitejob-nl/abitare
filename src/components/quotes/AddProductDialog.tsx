@@ -140,15 +140,16 @@ export function AddProductDialog({
     await refetchPrice(productId, overrideRangeId);
   };
 
-  const refetchPrice = async (productId: string, overrideId: string | null, selectedPriceType?: "abitare" | "boekprijs") => {
+  const refetchPrice = async (productId: string, overrideId: string | null, selectedPriceType?: "abitare" | "boekprijs", priceGroupOverrideId?: string | null) => {
     const product = products?.find(p => p.id === productId);
     if (!product) return;
 
     const currentPriceType = selectedPriceType || priceType;
+    const effectivePriceGroupId = priceGroupOverrideId !== undefined ? priceGroupOverrideId : sectionPriceGroupId;
 
     setIsLoadingPrice(true);
     try {
-      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId, quoteDefaultRangeId, undefined, sectionPriceGroupId);
+      const priceResult = await fetchProductPrice(productId, sectionRangeId || null, overrideId, quoteDefaultRangeId, undefined, effectivePriceGroupId);
       if (priceResult.price != null) {
         setUnitPrice(priceResult.price.toString());
         setPriceSource(priceResult.source);
@@ -195,7 +196,7 @@ export function AddProductDialog({
     const newOverrideId = value === "none" ? null : value;
     setOverrideRangeId(newOverrideId);
     if (selectedProductId) {
-      refetchPrice(selectedProductId, newOverrideId);
+      refetchPrice(selectedProductId, hasPriceGroups ? null : newOverrideId, undefined, hasPriceGroups ? newOverrideId : undefined);
     }
   };
 
@@ -220,7 +221,7 @@ export function AddProductDialog({
         price_type: priceType,
       };
 
-      if (overrideRangeId) {
+      if (overrideRangeId && !hasPriceGroups) {
         lineData.range_override_id = overrideRangeId;
       }
 
