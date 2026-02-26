@@ -1,82 +1,44 @@
 
-# Bulk inkoopprijzen ophalen via Tradeplace
 
-## Wat is er nodig
+## Analyse: Verschil demo-bestand vs huidige implementatie
 
-De edge function `tradeplace-product-price` bestaat al en kan prijzen ophalen per EAN-code. Maar om dit bruikbaar te maken voor het bijwerken van alle productprijzen per leverancier zijn er drie dingen nodig:
+Na vergelijking van de huidige code met de eerder geanalyseerde demo vallen deze ontbrekende onderdelen op:
 
-### 1. Leveranciers koppelen (bestaande UI)
+### Wat nog ontbreekt
 
-De Tradeplace-instellingenpagina (`TradeplaceSettings.tsx` + `SupplierTradeplaceDialog.tsx`) bestaat al. Daar kun je per leverancier de GLN en TP-ID invullen en `tradeplace_enabled` aanzetten. Dit is een handmatige stap die je zelf moet doen voor bijv. Bosch, Miele, Siemens, Atag, Gaggenau.
+1. **Hex-kleurbolletjes bij kleur-selectors** -- De demo toont een gekleurd rondje (`●`) naast elke kleur in alle dropdowns (front, corpus, greep, plint). De huidige `StosaConfigPanel` toont alleen tekst in de `SelectItem`s.
 
-Geen code-aanpassing nodig -- alleen configuratie.
+2. **Opvouwbare sectiekaarten** -- In de demo zijn secties standaard ingeklapt (alleen header + subtotaal zichtbaar). Met een klik klap je de regels open. De huidige `SortableSectionCard` is altijd volledig open.
 
-### 2. Server-side bulk price update edge function
+3. **Kleur-gecodeerde sectie-header achtergrond** -- De demo geeft de volledige header-achtergrond de sectiekleur (lichtblauw, lichtoranje, lichtgroen), niet alleen een smal bolletje. De huidige implementatie heeft alleen een `w-1 h-5 rounded-full` stip.
 
-Een nieuwe edge function `tradeplace-bulk-price-update` die:
-- Alle actieve producten met EAN-code ophaalt voor een leverancier
-- Ze in batches van 50 stuks naar TMH2 stuurt (ProductPriceRequest)
-- De teruggekomen nettoprijzen wegschrijft als `cost_price` op het product
-- Een samenvatting retourneert (bijgewerkt / niet gevonden / fouten)
+4. **Configuratie-samenvatting onder sectie-header** -- De demo toont een compacte inline samenvatting van de configuratie (model, kleur, greep) direct onder de sectie-header. De huidige `SectionConfigDisplay` bestaat maar is niet visueel compact zoals de demo.
 
-```text
-POST tradeplace-bulk-price-update
-Body: { supplier_id: "uuid" }
+5. **Product-filters (categorie/breedte)** -- De demo filtert producten op categorie-tabs en breedte-slider bij het toevoegen. De huidige `AddProductDialog` heeft alleen een zoekveld.
 
-Response: {
-  success: true,
-  supplier_name: "Miele",
-  total_products: 1639,
-  batches_sent: 33,
-  updated: 1580,
-  not_found: 42,
-  errors: 17
-}
-```
+6. **Energielabels bij apparatuur** -- De demo toont energielabel-badges (A+++, A++) bij apparatuurproducten. Dit ontbreekt volledig.
 
-### 3. UI: "Prijzen ophalen" knop per leverancier
+7. **Zijbalk met live totalen** -- De demo heeft een sticky samenvattingspaneel aan de rechterkant dat meeloopt met scrollen. De huidige pagina toont totalen alleen onderaan.
 
-Op de Tradeplace-instellingenpagina (`TradeplaceSettings.tsx`) een actie-knop toevoegen per gekoppelde leverancier: **"Inkoopprijzen bijwerken"**. Deze knop:
-- Roept de nieuwe edge function aan
-- Toont een laad-indicator (kan even duren bij 1600+ producten)
-- Toont een samenvatting na afloop (x bijgewerkt, x niet gevonden)
+---
 
-## Wijzigingen
+### Implementatieplan
 
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/tradeplace-bulk-price-update/index.ts` | **Nieuw** - Bulk prijsophaling met batching |
-| `supabase/config.toml` | Nieuwe function registreren |
-| `src/hooks/useTradeplace.ts` | Nieuwe `useBulkPriceUpdate` mutation hook |
-| `src/components/settings/TradeplaceSettings.tsx` | "Inkoopprijzen bijwerken" knop per leverancier |
+**Stap 1: Hex-kleurbolletjes in alle kleur-selectors**
+- `StosaConfigPanel.tsx`: Voeg een `<div className="w-3 h-3 rounded-full border" style={{ backgroundColor: hex }}/>` toe in elke `SelectItem` voor front-, corpus-, greep- en plintkleur.
 
-## Technische details
+**Stap 2: Opvouwbare sectiekaarten**
+- `SortableSectionCard.tsx`: Voeg een `isCollapsed` state toe. In collapsed mode: toon alleen header + subtotaal. Toggle met een chevron-knop. Gebruik `Collapsible` van Radix.
 
-### Edge function: `tradeplace-bulk-price-update`
+**Stap 3: Volledige kleur-gecodeerde header-achtergrond**
+- `SortableSectionCard.tsx`: Vervang de `w-1` stip door een achtergrondkleur op de hele `CardHeader`. Gebruik lichte varianten: `bg-sky-50`, `bg-orange-50`, `bg-emerald-50`, etc.
 
-- Haalt producten op: `SELECT id, ean_code FROM products WHERE supplier_id = $1 AND ean_code IS NOT NULL AND is_active = true`
-- Batcht in groepen van 50 EAN-codes
-- Hergebruikt dezelfde TMH2 API-aanroep als `tradeplace-product-price` (XML ProductPriceRequest)
-- Per batch: matcht EAN-codes terug en doet `UPDATE products SET cost_price = net_price WHERE ean_code = $ean`
-- Logt elke batch in `tradeplace_messages` (audit trail)
-- Retourneert aggregaat-resultaat
+**Stap 4: Compacte configuratie-samenvatting**
+- `SortableSectionCard.tsx`: Toon onder de header een compacte regel met kleurbolletjes en labels (bijv. "Alev | E3 | Noce Eucalipto ● | Greeploos") wanneer `configuration` JSONB beschikbaar is.
 
-### Batching logica
+**Stap 5: Categorie-/breedte-filters in AddProductDialog**
+- `AddProductDialog.tsx`: Voeg filter-tabs toe voor categorie (bovenkast, onderkast, hoge kast) en een breedte-filter dropdown (30, 45, 60, 90 cm). Filter de productenlijst op `category` en `width_mm`.
 
-```text
-Totaal: 1639 producten (Miele)
-Batch grootte: 50
-Aantal batches: 33
-Per batch: 1 ProductPriceRequest XML -> 1 ProductPriceReply XML
-Totale doorlooptijd: ~30-60 seconden (afhankelijk van TMH2 responstijd)
-```
+**Stap 6: Sticky totalen-sidebar op QuoteDetail**
+- `QuoteDetail.tsx`: Op desktop (lg+), toon een sticky sidebar rechts met de live QuoteTotals. Op mobiel blijft het onderaan.
 
-### Prijs-mapping
-
-De nettoprijzen uit de TMH2-reply worden opgeslagen als `cost_price` op het product. Dit is de daadwerkelijke inkoopprijs. De bestaande `base_price` (verkoopprijs) en `book_price` (catalogusprijs) blijven ongewijzigd.
-
-### Geen impact op bestaande functionaliteit
-
-- De individuele `tradeplace-product-price` function blijft beschikbaar voor ad-hoc prijscontroles
-- Bestaande prijshierarchie (price_groups, supplier_discounts) wordt niet aangetast
-- Alleen `cost_price` wordt bijgewerkt, geen verkoopprijzen
