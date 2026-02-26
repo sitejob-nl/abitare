@@ -459,7 +459,7 @@ export type Database = {
       }
       exact_online_connections: {
         Row: {
-          access_token: string | null
+          company_name: string | null
           connected_at: string | null
           connected_by: string | null
           created_at: string | null
@@ -467,13 +467,14 @@ export type Database = {
           exact_division: number | null
           id: string
           is_active: boolean | null
-          refresh_token: string | null
-          token_expires_at: string | null
+          region: string | null
+          tenant_id: string | null
           updated_at: string | null
+          webhook_secret: string | null
           webhooks_enabled: boolean | null
         }
         Insert: {
-          access_token?: string | null
+          company_name?: string | null
           connected_at?: string | null
           connected_by?: string | null
           created_at?: string | null
@@ -481,13 +482,14 @@ export type Database = {
           exact_division?: number | null
           id?: string
           is_active?: boolean | null
-          refresh_token?: string | null
-          token_expires_at?: string | null
+          region?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
+          webhook_secret?: string | null
           webhooks_enabled?: boolean | null
         }
         Update: {
-          access_token?: string | null
+          company_name?: string | null
           connected_at?: string | null
           connected_by?: string | null
           created_at?: string | null
@@ -495,9 +497,10 @@ export type Database = {
           exact_division?: number | null
           id?: string
           is_active?: boolean | null
-          refresh_token?: string | null
-          token_expires_at?: string | null
+          region?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
+          webhook_secret?: string | null
           webhooks_enabled?: boolean | null
         }
         Relationships: [
