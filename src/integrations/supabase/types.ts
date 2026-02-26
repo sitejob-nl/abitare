@@ -4654,6 +4654,47 @@ export type Database = {
         Args: { p_price_group_id: string }
         Returns: string[]
       }
+      get_products_for_price_group: {
+        Args: {
+          p_category_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_price_group_id: string
+          p_price_max?: number
+          p_price_min?: number
+          p_search?: string
+          p_show_inactive?: boolean
+          p_sort_dir?: string
+          p_sort_field?: string
+          p_supplier_id?: string
+        }
+        Returns: {
+          article_code: string
+          base_price: number
+          book_price: number
+          category_code: string
+          category_id: string
+          category_name: string
+          cost_price: number
+          depth_mm: number
+          description: string
+          height_mm: number
+          id: string
+          is_active: boolean
+          kitchen_group: string
+          name: string
+          price_group_price: number
+          pricing_unit: Database["public"]["Enums"]["pricing_unit"]
+          sku: string
+          supplier_code: string
+          supplier_id: string
+          supplier_name: string
+          total_count: number
+          type_code: string
+          type_name_nl: string
+          width_mm: number
+        }[]
+      }
       get_related_products: {
         Args: { _product_id: string }
         Returns: {
