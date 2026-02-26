@@ -386,6 +386,12 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
                   </span>
                 )}
               </div>
+              {/* Price source indicator */}
+              {(line as any).price_source_metadata && (
+                <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 text-emerald-700 bg-emerald-50" title={JSON.stringify((line as any).price_source_metadata)}>
+                  {(line as any).price_source_metadata?.source === "manual" ? "Handmatig" : "Prijsgroep"}
+                </Badge>
+              )}
               {/* Override badge and price type badge */}
               {line.product_id && (
                 <div className="flex items-center gap-1 flex-wrap">

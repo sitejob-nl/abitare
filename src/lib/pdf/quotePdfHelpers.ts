@@ -418,10 +418,19 @@ export function drawSpecsTable(
   const leftSpecs: { label: string; value: string }[] = [];
   const rightSpecs: { label: string; value: string }[] = [];
 
+  // Extract extra fields from configuration JSON
+  const config = (section as any).configuration as Record<string, any> | null;
+  const modelName = config?.model_name || config?.modelName;
+  const gripColor = config?.grip_color || config?.gripColor;
+  const frontTypeName = config?.front_type_name || config?.frontTypeName;
+
+  if (modelName) leftSpecs.push({ label: "Model:", value: modelName });
+  if (frontTypeName) leftSpecs.push({ label: "Fronttype:", value: frontTypeName });
   if (section.front_number) leftSpecs.push({ label: "Frontnummer:", value: section.front_number });
   if (section.front_color) leftSpecs.push({ label: "Kleur front:", value: section.front_color });
   if (section.corpus_color) leftSpecs.push({ label: "Corpuskleur:", value: section.corpus_color });
   if (section.handle_number) leftSpecs.push({ label: "Greepnummer:", value: section.handle_number });
+  if (gripColor) leftSpecs.push({ label: "Kleur greep:", value: gripColor });
   if (section.workbench_material) leftSpecs.push({ label: "Uitvoering:", value: section.workbench_material });
   if (section.workbench_edge) leftSpecs.push({ label: "Randafwerking:", value: section.workbench_edge });
 

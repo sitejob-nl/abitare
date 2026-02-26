@@ -43,7 +43,24 @@ export function AgendaToday() {
                 )}
               />
               <div className="flex-1">
-                <div className="text-sm font-medium text-foreground">{item.title}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">{item.title}</span>
+                  {(() => {
+                    const [h, m] = item.time.split(":").map(Number);
+                    const itemDate = new Date();
+                    itemDate.setHours(h, m, 0, 0);
+                    const now = new Date();
+                    const diffMs = itemDate.getTime() - now.getTime();
+                    if (diffMs > 0 && diffMs <= 3600000) {
+                      return (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                          Binnenkort
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
                 <div className="text-xs text-muted-foreground">{item.subtitle}</div>
               </div>
             </div>

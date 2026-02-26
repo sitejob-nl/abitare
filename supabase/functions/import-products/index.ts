@@ -188,8 +188,11 @@ Deno.serve(async (req) => {
       )
     }
 
-    const body: ImportRequest & { file_name?: string } = await req.json()
-    const { supplier_id, category_id, import_mode = 'standard', file_name } = body
+    const body: ImportRequest & { file_name?: string; replace_all?: boolean } = await req.json()
+    const { supplier_id, category_id, import_mode = 'standard', file_name, replace_all } = body
+
+    // Store raw payload for audit/debug (truncate if too large)
+    const rawPayloadForLog = JSON.stringify(body).length < 5_000_000 ? body : { _truncated: true, supplier_id, import_mode, product_count: body.products?.length || body.price_group_data?.products?.length || 0 }
 
     if (!supplier_id) {
       return new Response(
@@ -199,7 +202,7 @@ Deno.serve(async (req) => {
     }
 
     if (import_mode === 'price_groups' && body.price_group_data) {
-      return handlePriceGroupImport(supabase, supplier_id, category_id, body.price_group_data, user.id, file_name)
+      return handlePriceGroupImport(supabase, supplier_id, category_id, body.price_group_data, user.id, file_name, rawPayloadForLog)
     }
 
     // ============================================================
@@ -255,6 +258,23 @@ Deno.serve(async (req) => {
     inserted = newProducts.length
     updated = existingProducts.length
 
+    // Soft delete: mark products not in batch as inactive (only when replace_all flag is set)
+    if (replace_all) {
+      const importedCodes = new Set(productsToUpsert.map(p => p.article_code))
+      const codesToDeactivate = allExisting?.filter((e: any) => !importedCodes.has(e.article_code)).map((e: any) => e.article_code) || []
+      if (codesToDeactivate.length > 0) {
+        for (let i = 0; i < codesToDeactivate.length; i += 500) {
+          const chunk = codesToDeactivate.slice(i, i + 500)
+          await supabase
+            .from('products')
+            .update({ is_active: false })
+            .eq('supplier_id', supplier_id)
+            .in('article_code', chunk)
+        }
+        console.log(`[import] Soft-deleted ${codesToDeactivate.length} products not in batch`)
+      }
+    }
+
     // Log to import_logs
     try {
       const { data: divisionRow } = await supabase.rpc('get_user_division_id', { _user_id: user.id })
@@ -270,6 +290,7 @@ Deno.serve(async (req) => {
         errors: errors.length,
         error_details: errors.length > 0 ? errors : null,
         imported_by: user.id,
+        raw_payload: rawPayloadForLog,
       })
     } catch (logErr) {
       console.error('[import] Failed to write import_log:', logErr)
@@ -300,6 +321,7 @@ async function handlePriceGroupImport(
   data: { products: PriceGroupProduct[], ranges: PriceGroupRange[], prices: PriceGroupPrice[] },
   userId: string,
   fileName?: string,
+  rawPayload?: any,
 ) {
   const errors: string[] = []
   const stats = {
@@ -614,6 +636,7 @@ async function handlePriceGroupImport(
         errors: errors.length,
         error_details: errors.length > 0 ? errors : null,
         imported_by: userId,
+        raw_payload: rawPayload || null,
       })
     } catch (logErr) {
       console.error('[import] Failed to write import_log:', logErr)

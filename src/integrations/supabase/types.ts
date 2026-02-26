@@ -571,6 +571,7 @@ export type Database = {
           imported_by: string | null
           inserted: number | null
           metadata: Json | null
+          raw_payload: Json | null
           skipped: number | null
           source: string
           supplier_id: string | null
@@ -587,6 +588,7 @@ export type Database = {
           imported_by?: string | null
           inserted?: number | null
           metadata?: Json | null
+          raw_payload?: Json | null
           skipped?: number | null
           source?: string
           supplier_id?: string | null
@@ -603,6 +605,7 @@ export type Database = {
           imported_by?: string | null
           inserted?: number | null
           metadata?: Json | null
+          raw_payload?: Json | null
           skipped?: number | null
           source?: string
           supplier_id?: string | null
@@ -1588,6 +1591,7 @@ export type Database = {
           code: string
           collection: string | null
           created_at: string | null
+          edition: string | null
           has_gola_system: boolean | null
           id: string
           is_glass: boolean | null
@@ -1597,11 +1601,14 @@ export type Database = {
           sort_order: number | null
           supplier_id: string | null
           thickness_mm: number | null
+          valid_from: string | null
+          valid_until: string | null
         }
         Insert: {
           code: string
           collection?: string | null
           created_at?: string | null
+          edition?: string | null
           has_gola_system?: boolean | null
           id?: string
           is_glass?: boolean | null
@@ -1611,11 +1618,14 @@ export type Database = {
           sort_order?: number | null
           supplier_id?: string | null
           thickness_mm?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
         }
         Update: {
           code?: string
           collection?: string | null
           created_at?: string | null
+          edition?: string | null
           has_gola_system?: boolean | null
           id?: string
           is_glass?: boolean | null
@@ -1625,6 +1635,8 @@ export type Database = {
           sort_order?: number | null
           supplier_id?: string | null
           thickness_mm?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
         }
         Relationships: [
           {
@@ -1718,6 +1730,55 @@ export type Database = {
             columns: ["range_id"]
             isOneToOne: false
             referencedRelation: "product_ranges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_documents: {
+        Row: {
+          created_at: string
+          document_type: string
+          id: string
+          name: string
+          product_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          document_type?: string
+          id?: string
+          name: string
+          product_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          id?: string
+          name?: string
+          product_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_documents_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_documents_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_documents_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -1954,6 +2015,7 @@ export type Database = {
           noise_class: string | null
           noise_db: number | null
           norm_hours: number | null
+          parent_product_id: string | null
           pims_last_synced: string | null
           pricing_unit: Database["public"]["Enums"]["pricing_unit"] | null
           product_family: string | null
@@ -2015,6 +2077,7 @@ export type Database = {
           noise_class?: string | null
           noise_db?: number | null
           norm_hours?: number | null
+          parent_product_id?: string | null
           pims_last_synced?: string | null
           pricing_unit?: Database["public"]["Enums"]["pricing_unit"] | null
           product_family?: string | null
@@ -2076,6 +2139,7 @@ export type Database = {
           noise_class?: string | null
           noise_db?: number | null
           norm_hours?: number | null
+          parent_product_id?: string | null
           pims_last_synced?: string | null
           pricing_unit?: Database["public"]["Enums"]["pricing_unit"] | null
           product_family?: string | null
@@ -2112,6 +2176,27 @@ export type Database = {
             columns: ["discount_group_id"]
             isOneToOne: false
             referencedRelation: "discount_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products_with_price_groups"
             referencedColumns: ["id"]
           },
           {
@@ -2230,6 +2315,7 @@ export type Database = {
           is_group_header: boolean | null
           line_total: number | null
           parent_line_id: string | null
+          price_source_metadata: Json | null
           price_type: string | null
           product_id: string | null
           quantity: number | null
@@ -2257,6 +2343,7 @@ export type Database = {
           is_group_header?: boolean | null
           line_total?: number | null
           parent_line_id?: string | null
+          price_source_metadata?: Json | null
           price_type?: string | null
           product_id?: string | null
           quantity?: number | null
@@ -2284,6 +2371,7 @@ export type Database = {
           is_group_header?: boolean | null
           line_total?: number | null
           parent_line_id?: string | null
+          price_source_metadata?: Json | null
           price_type?: string | null
           product_id?: string | null
           quantity?: number | null
