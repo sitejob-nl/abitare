@@ -263,58 +263,78 @@ const QuoteDetail = () => {
         </Button>
       </div>
 
-      {/* Sections with drag & drop */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleSectionDragEnd}
-      >
-        <SortableContext items={sectionIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-4">
-            {sections && sections.length > 0 ? (
-              sections.map((section) => (
-                <SortableSectionCard
-                  key={section.id}
-                  section={section}
-                  quoteId={id!}
-                  quoteDefaultRangeId={quote.default_range_id}
-                />
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Deze offerte heeft nog geen secties.
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Klik op "Nieuwe sectie" om te beginnen.
-                </p>
+      {/* Sections + Sticky sidebar layout */}
+      <div className="lg:flex lg:gap-6">
+        <div className="flex-1 min-w-0">
+          {/* Sections with drag & drop */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleSectionDragEnd}
+          >
+            <SortableContext items={sectionIds} strategy={verticalListSortingStrategy}>
+              <div className="space-y-4">
+                {sections && sections.length > 0 ? (
+                  sections.map((section) => (
+                    <SortableSectionCard
+                      key={section.id}
+                      section={section}
+                      quoteId={id!}
+                      quoteDefaultRangeId={quote.default_range_id}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Deze offerte heeft nog geen secties.
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Klik op "Nieuwe sectie" om te beginnen.
+                    </p>
+                  </div>
+                )}
               </div>
+            </SortableContext>
+          </DndContext>
+
+          {/* Discount & Payment terms editor */}
+          {sections && sections.length > 0 && (
+            <QuoteDiscountEditor
+              quoteId={id!}
+              discountAmount={quote.discount_amount || 0}
+              discountPercentage={quote.discount_percentage}
+              discountDescription={quote.discount_description}
+              paymentTermsDescription={quote.payment_terms_description}
+              paymentCondition={quote.payment_condition}
+              subtotalExclVat={subtotalExclVat}
+            />
+          )}
+
+          {/* Totals - mobile only */}
+          <div className="lg:hidden">
+            {sections && sections.length > 0 && (
+              <QuoteTotals
+                sections={sections}
+                discountAmount={quote.discount_amount || 0}
+                paymentTerms={quote.payment_terms_description || undefined}
+              />
             )}
           </div>
-        </SortableContext>
-      </DndContext>
+        </div>
 
-      {/* Discount & Payment terms editor */}
-      {sections && sections.length > 0 && (
-        <QuoteDiscountEditor
-          quoteId={id!}
-          discountAmount={quote.discount_amount || 0}
-          discountPercentage={quote.discount_percentage}
-          discountDescription={quote.discount_description}
-          paymentTermsDescription={quote.payment_terms_description}
-          paymentCondition={quote.payment_condition}
-          subtotalExclVat={subtotalExclVat}
-        />
-      )}
-
-      {/* Totals */}
-      {sections && sections.length > 0 && (
-        <QuoteTotals
-          sections={sections}
-          discountAmount={quote.discount_amount || 0}
-          paymentTerms={quote.payment_terms_description || undefined}
-        />
-      )}
+        {/* Sticky sidebar - desktop only */}
+        <div className="hidden lg:block w-72 shrink-0">
+          <div className="sticky top-20">
+            {sections && sections.length > 0 && (
+              <QuoteTotals
+                sections={sections}
+                discountAmount={quote.discount_amount || 0}
+                paymentTerms={quote.payment_terms_description || undefined}
+              />
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Action buttons */}
       <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">

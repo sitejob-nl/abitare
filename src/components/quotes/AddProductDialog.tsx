@@ -98,6 +98,10 @@ export function AddProductDialog({
   // Supplier filter
   const [showAllSuppliers, setShowAllSuppliers] = useState(false);
 
+  // Category and width filters
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [widthFilter, setWidthFilter] = useState("all");
+
   const { data: productsResult, isLoading: productsLoading } = useProducts({
     search: productSearch || undefined,
     supplierId: showAllSuppliers ? undefined : (sectionSupplierId || undefined),
@@ -106,6 +110,20 @@ export function AddProductDialog({
     pageSize: 100,
   });
   const products = productsResult?.data;
+
+  // Filter products by category and width
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    return products.filter((p: any) => {
+      if (categoryFilter && p.category && !p.category.toLowerCase().includes(categoryFilter.toLowerCase())) {
+        return false;
+      }
+      if (widthFilter !== "all" && p.width_mm != null && p.width_mm !== parseInt(widthFilter)) {
+        return false;
+      }
+      return true;
+    });
+  }, [products, categoryFilter, widthFilter]);
 
   // Fetch ranges for override dropdown - filtered by section supplier
   const { data: ranges } = useProductRanges(sectionSupplierId || undefined);
@@ -354,6 +372,8 @@ export function AddProductDialog({
     setIsGroupHeader(false);
     setGroupTitle("");
     setShowAllSuppliers(false);
+    setCategoryFilter("");
+    setWidthFilter("all");
   };
 
   return (
@@ -387,6 +407,45 @@ export function AddProductDialog({
               </div>
             )}
 
+            {/* Category filter tabs */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { value: "", label: "Alle" },
+                { value: "onderkast", label: "Onderkast" },
+                { value: "bovenkast", label: "Bovenkast" },
+                { value: "hoge kast", label: "Hoge kast" },
+                { value: "lade", label: "Lade" },
+              ].map((cat) => (
+                <Button
+                  key={cat.value}
+                  variant={categoryFilter === cat.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setCategoryFilter(cat.value)}
+                >
+                  {cat.label}
+                </Button>
+              ))}
+            </div>
+
+            {/* Width filter */}
+            <div className="flex items-center gap-2">
+              <Label className="text-xs shrink-0">Breedte:</Label>
+              <Select value={widthFilter} onValueChange={setWidthFilter}>
+                <SelectTrigger className="h-7 text-xs w-28">
+                  <SelectValue placeholder="Alle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  <SelectItem value="300">30 cm</SelectItem>
+                  <SelectItem value="450">45 cm</SelectItem>
+                  <SelectItem value="600">60 cm</SelectItem>
+                  <SelectItem value="900">90 cm</SelectItem>
+                  <SelectItem value="1200">120 cm</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Product Search */}
             <div className="space-y-2">
               <Label>Product *</Label>
@@ -419,7 +478,7 @@ export function AddProductDialog({
                         <>
                           <CommandEmpty>Geen producten gevonden.</CommandEmpty>
                           <CommandGroup>
-                            {products?.map((product) => (
+                            {filteredProducts?.map((product) => (
                               <CommandItem
                                 key={product.id}
                                 value={product.id}
@@ -433,15 +492,27 @@ export function AddProductDialog({
                                       : "opacity-0"
                                   )}
                                 />
-                                <div className="flex flex-col">
+                                <div className="flex flex-col flex-1">
                                   <span className="font-medium">
                                     {product.article_code} - {product.name}
                                   </span>
-                                  {product.base_price && (
-                                    <span className="text-xs text-muted-foreground">
-                                      Basisprijs: € {product.base_price.toFixed(2)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {product.base_price && (
+                                      <span className="text-xs text-muted-foreground">
+                                        € {product.base_price.toFixed(2)}
+                                      </span>
+                                    )}
+                                    {(product as any).width_mm && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {(product as any).width_mm}mm
+                                      </span>
+                                    )}
+                                    {(product as any).energy_label && (
+                                      <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                        {(product as any).energy_label}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </CommandItem>
                             ))}
