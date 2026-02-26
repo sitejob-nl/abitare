@@ -166,6 +166,8 @@ const QuoteDetail = () => {
           discount_amount: quote.discount_amount,
           customer: quote.customer as any,
           division: quote.division as any,
+          show_line_prices: (quote as any).show_line_prices,
+          show_article_codes: (quote as any).show_article_codes,
         },
         sections
       );
@@ -396,6 +398,8 @@ const QuoteDetail = () => {
         currentCorpusColorId={quote.default_corpus_color_id}
         currentRequiresTransport={(quote as any).requires_transport ?? false}
         currentRequiresKooiaap={(quote as any).requires_kooiaap ?? false}
+        currentShowLinePrices={(quote as any).show_line_prices ?? true}
+        currentShowArticleCodes={(quote as any).show_article_codes ?? true}
       />
     </AppLayout>
   );

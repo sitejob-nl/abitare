@@ -38,6 +38,8 @@ export interface QuoteData {
   // Extra optional fields
   advisor_name?: string | null;
   show_prices?: boolean;
+  show_line_prices?: boolean;
+  show_article_codes?: boolean;
 }
 
 export interface SectionWithLines extends QuoteSection {

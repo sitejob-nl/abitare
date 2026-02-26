@@ -43,7 +43,8 @@ function renderSections(
   margin: number,
   startY: number,
   quote: QuoteData,
-  showPrices: boolean
+  showPrices: boolean,
+  showArticleCodes: boolean = true
 ): number {
   let yPos = startY;
 
@@ -120,7 +121,7 @@ function renderSections(
         // Main line
         tableBody.push([
           lineNum.toString(),
-          line.article_code || "",
+          showArticleCodes ? (line.article_code || "") : "",
           line.description,
           formatDimension(line.height_mm),
           formatDimension(line.width_mm),
@@ -149,7 +150,7 @@ function renderSections(
         subLines.forEach((subLine) => {
           tableBody.push([
             { content: subLine.sub_line_number || ".", styles: { fontSize: 8 } },
-            { content: subLine.article_code || "", styles: { fontSize: 8 } },
+            { content: showArticleCodes ? (subLine.article_code || "") : "", styles: { fontSize: 8 } },
             { content: subLine.description, styles: { fontSize: 8 } },
             { content: "", styles: { fontSize: 8 } },
             { content: "", styles: { fontSize: 8 } },
@@ -252,6 +253,7 @@ export function generateQuotePdf(quote: QuoteData, sections: SectionWithLines[])
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   const showPrices = quote.show_prices !== false;
+  const showArticleCodes = quote.show_article_codes !== false;
 
   // Page 1: Header with customer and company info
   let yPos = drawFirstPageHeader(doc, quote, pageWidth, margin);
@@ -266,7 +268,7 @@ export function generateQuotePdf(quote: QuoteData, sections: SectionWithLines[])
   yPos = drawIntroText(doc, quote, margin, pageWidth, yPos);
 
   // Sections with products
-  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices);
+  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices, showArticleCodes);
 
   // Check for new page before totals
   if (yPos > pageHeight - 80) {
@@ -330,6 +332,7 @@ export function generateQuotePdfBase64(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   const showPrices = quote.show_prices !== false;
+  const showArticleCodes = quote.show_article_codes !== false;
 
   // Page 1: Header with customer and company info
   let yPos = drawFirstPageHeader(doc, quote, pageWidth, margin);
@@ -344,7 +347,7 @@ export function generateQuotePdfBase64(
   yPos = drawIntroText(doc, quote, margin, pageWidth, yPos);
 
   // Sections with products
-  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices);
+  yPos = renderSections(doc, sections, pageWidth, pageHeight, margin, yPos, quote, showPrices, showArticleCodes);
 
   // Check for new page before totals
   if (yPos > pageHeight - 80) {
