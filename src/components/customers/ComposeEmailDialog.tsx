@@ -170,6 +170,8 @@ export function ComposeEmailDialog({
           phone: null,
         },
         division: null,
+        show_line_prices: (quote as any).show_line_prices,
+        show_article_codes: (quote as any).show_article_codes,
       };
 
       const { base64, filename } = generateQuotePdfBase64(quoteData, sectionsWithLines);

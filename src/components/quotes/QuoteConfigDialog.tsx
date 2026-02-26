@@ -45,6 +45,8 @@ interface QuoteConfigDialogProps {
   currentCorpusColorId?: string | null;
   currentRequiresTransport?: boolean;
   currentRequiresKooiaap?: boolean;
+  currentShowLinePrices?: boolean;
+  currentShowArticleCodes?: boolean;
 }
 
 export function QuoteConfigDialog({
@@ -60,6 +62,8 @@ export function QuoteConfigDialog({
   currentCorpusColorId,
   currentRequiresTransport,
   currentRequiresKooiaap,
+  currentShowLinePrices,
+  currentShowArticleCodes,
 }: QuoteConfigDialogProps) {
   const updateQuote = useUpdateQuote();
 
@@ -72,6 +76,8 @@ export function QuoteConfigDialog({
   const [corpusColorId, setCorpusColorId] = useState(currentCorpusColorId || "");
   const [requiresTransport, setRequiresTransport] = useState(currentRequiresTransport ?? false);
   const [requiresKooiaap, setRequiresKooiaap] = useState(currentRequiresKooiaap ?? false);
+  const [showLinePrices, setShowLinePrices] = useState(currentShowLinePrices ?? true);
+  const [showArticleCodes, setShowArticleCodes] = useState(currentShowArticleCodes ?? true);
 
   const { data: suppliers = [] } = useSuppliers();
   const { data: ranges = [] } = useProductRanges(supplierId || undefined);
@@ -113,8 +119,10 @@ export function QuoteConfigDialog({
       setSelectedCollection("");
       setRequiresTransport(currentRequiresTransport ?? false);
       setRequiresKooiaap(currentRequiresKooiaap ?? false);
+      setShowLinePrices(currentShowLinePrices ?? true);
+      setShowArticleCodes(currentShowArticleCodes ?? true);
     }
-  }, [open, currentCategory, currentReference, currentSupplierId, currentRangeId, currentColorId, currentPriceGroupId, currentCorpusColorId, currentRequiresTransport, currentRequiresKooiaap]);
+  }, [open, currentCategory, currentReference, currentSupplierId, currentRangeId, currentColorId, currentPriceGroupId, currentCorpusColorId, currentRequiresTransport, currentRequiresKooiaap, currentShowLinePrices, currentShowArticleCodes]);
 
   const handleSupplierChange = (value: string) => {
     setSupplierId(value);
@@ -148,6 +156,8 @@ export function QuoteConfigDialog({
         default_corpus_color_id: corpusColorId || null,
         requires_transport: requiresTransport,
         requires_kooiaap: requiresKooiaap,
+        show_line_prices: showLinePrices,
+        show_article_codes: showArticleCodes,
       });
 
       toast({
@@ -309,6 +319,27 @@ export function QuoteConfigDialog({
               </Select>
             </div>
           )}
+
+          {/* PDF display options */}
+          <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
+            <div className="text-sm font-medium">PDF weergave</div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="showArticleCodes" className="text-sm font-normal">Toon artikelcodes op offerte</Label>
+              <Switch
+                id="showArticleCodes"
+                checked={showArticleCodes}
+                onCheckedChange={setShowArticleCodes}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="showLinePrices" className="text-sm font-normal">Toon prijzen per regel op offerte</Label>
+              <Switch
+                id="showLinePrices"
+                checked={showLinePrices}
+                onCheckedChange={setShowLinePrices}
+              />
+            </div>
+          </div>
 
           {/* Transport options for tegels */}
           {category === "tegels" && (

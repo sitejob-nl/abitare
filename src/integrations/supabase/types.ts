@@ -2499,6 +2499,8 @@ export type Database = {
           revision_number: number
           salesperson_id: string | null
           sent_at: string | null
+          show_article_codes: boolean
+          show_line_prices: boolean
           status: Database["public"]["Enums"]["quote_status"] | null
           subtotal_montage: number | null
           subtotal_products: number | null
@@ -2540,6 +2542,8 @@ export type Database = {
           revision_number?: number
           salesperson_id?: string | null
           sent_at?: string | null
+          show_article_codes?: boolean
+          show_line_prices?: boolean
           status?: Database["public"]["Enums"]["quote_status"] | null
           subtotal_montage?: number | null
           subtotal_products?: number | null
@@ -2581,6 +2585,8 @@ export type Database = {
           revision_number?: number
           salesperson_id?: string | null
           sent_at?: string | null
+          show_article_codes?: boolean
+          show_line_prices?: boolean
           status?: Database["public"]["Enums"]["quote_status"] | null
           subtotal_montage?: number | null
           subtotal_products?: number | null
