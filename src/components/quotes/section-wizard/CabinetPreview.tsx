@@ -14,9 +14,21 @@ interface CabinetPreviewProps {
   plinthColors: { code: string; hex?: string | null; name: string }[];
 }
 
-function findHex(colors: { code: string; hex?: string | null }[], code?: string): string {
-  if (!code) return "#e5e7eb";
-  return colors.find((c) => c.code === code)?.hex || "#e5e7eb";
+const TYPE_FALLBACKS: Record<string, string> = {
+  front: "#D4C5A9",   // warm beige
+  corpus: "#F0EDE8",  // light cream
+  handle: "#878681",  // titanium grey
+  plinth: "#A8A9AD",  // aluminium grey
+};
+
+function findHex(
+  colors: { code: string; hex?: string | null }[],
+  code?: string,
+  colorType?: string
+): string {
+  const fallback = (colorType && TYPE_FALLBACKS[colorType]) || "#e5e7eb";
+  if (!code) return fallback;
+  return colors.find((c) => c.code === code)?.hex || fallback;
 }
 
 function findName(colors: { code: string; name: string }[], code?: string): string | undefined {
@@ -32,10 +44,10 @@ export function CabinetPreview({
   handleColors,
   plinthColors,
 }: CabinetPreviewProps) {
-  const frontHex = findHex(frontColors, config.front_color);
-  const corpusHex = findHex(corpusColors, config.corpus_color);
-  const handleHex = findHex(handleColors, config.handle_color);
-  const plinthHex = findHex(plinthColors, config.plinth_color);
+  const frontHex = findHex(frontColors, config.front_color, "front");
+  const corpusHex = findHex(corpusColors, config.corpus_color, "corpus");
+  const handleHex = findHex(handleColors, config.handle_color, "handle");
+  const plinthHex = findHex(plinthColors, config.plinth_color, "plinth");
 
   const frontName = findName(frontColors, config.front_color);
   const handleName = findName(handleColors, config.handle_color);
