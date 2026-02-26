@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Truck, Wrench, User, Calendar, ExternalLink, AlertTriangle } from "lucide-react";
+import { Truck, Wrench, Headphones, User, Calendar, ExternalLink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -52,6 +52,27 @@ export function CalendarEventPopover({ event, children }: CalendarEventPopoverPr
     }
   };
 
+  const isService = event.type === "service";
+  const linkTo = isService ? `/service/${event.ticketId}` : `/orders/${event.orderId}`;
+
+  const getIcon = () => {
+    if (event.type === "delivery") return <Truck className="h-4 w-4 text-cyan-600" />;
+    if (event.type === "service") return <Headphones className="h-4 w-4 text-violet-600" />;
+    return <Wrench className="h-4 w-4 text-emerald-600" />;
+  };
+
+  const getIconBg = () => {
+    if (event.type === "delivery") return "bg-cyan-100";
+    if (event.type === "service") return "bg-violet-100";
+    return "bg-emerald-100";
+  };
+
+  const getLabel = () => {
+    if (event.type === "delivery") return "Levering";
+    if (event.type === "service") return "Serviceticket";
+    return "Montage";
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -62,25 +83,17 @@ export function CalendarEventPopover({ event, children }: CalendarEventPopoverPr
           {/* Header */}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              {event.type === "delivery" ? (
-                <div className="rounded-full bg-cyan-100 p-1.5">
-                  <Truck className="h-4 w-4 text-cyan-600" />
-                </div>
-              ) : (
-                <div className="rounded-full bg-emerald-100 p-1.5">
-                  <Wrench className="h-4 w-4 text-emerald-600" />
-                </div>
-              )}
+              <div className={`rounded-full ${getIconBg()} p-1.5`}>
+                {getIcon()}
+              </div>
               <div>
-                <p className="font-semibold text-sm">
-                  {event.type === "delivery" ? "Levering" : "Montage"}
-                </p>
+                <p className="font-semibold text-sm">{getLabel()}</p>
                 <p className="text-xs text-muted-foreground">
-                  Order #{event.orderNumber}
+                  {isService ? (event.ticketSubject || "Serviceticket") : `Order #${event.orderNumber}`}
                 </p>
               </div>
             </div>
-            <Link to={`/orders/${event.orderId}`}>
+            <Link to={linkTo}>
               <Button variant="ghost" size="icon" className="h-7 w-7">
                 <ExternalLink className="h-4 w-4" />
               </Button>
