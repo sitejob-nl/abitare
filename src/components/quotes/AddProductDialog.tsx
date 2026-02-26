@@ -115,7 +115,7 @@ export function AddProductDialog({
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     return products.filter((p: any) => {
-      if (categoryFilter && p.category && !p.category.toLowerCase().includes(categoryFilter.toLowerCase())) {
+      if (categoryFilter && p.kitchen_group !== categoryFilter) {
         return false;
       }
       if (widthFilter !== "all" && p.width_mm != null && p.width_mm !== parseInt(widthFilter)) {
@@ -413,8 +413,8 @@ export function AddProductDialog({
                 { value: "", label: "Alle" },
                 { value: "onderkast", label: "Onderkast" },
                 { value: "bovenkast", label: "Bovenkast" },
-                { value: "hoge kast", label: "Hoge kast" },
-                { value: "lade", label: "Lade" },
+                { value: "hoge_kast", label: "Hoge kast" },
+                { value: "apparatuur", label: "Apparatuur" },
               ].map((cat) => (
                 <Button
                   key={cat.value}
