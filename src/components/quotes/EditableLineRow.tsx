@@ -19,6 +19,7 @@ import {
 import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
 import { fetchProductPrice } from "@/hooks/useProductPrices";
 import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
+import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ interface EditableLineRowProps {
   sectionRangeId?: string | null;
   quoteDefaultRangeId?: string | null;
   sectionPriceGroupId?: string | null;
+  sectionSupplierId?: string | null;
 }
 
 function formatCurrency(value: number | null): string {
@@ -52,7 +54,7 @@ function parseDimension(value: string): number | null {
   return num * 10; // Convert cm to mm
 }
 
-export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId, sectionPriceGroupId }: EditableLineRowProps) {
+export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId, sectionPriceGroupId, sectionSupplierId }: EditableLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
   
@@ -67,10 +69,12 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
   const [articleCode, setArticleCode] = useState(line.article_code || "");
   const [showOverridePopover, setShowOverridePopover] = useState(false);
 
-  // Override range data
+  // Override range/price group data
   const overrideRangeId = (line as any).range_override_id as string | null;
   const { data: overrideRange } = useProductRange(overrideRangeId);
   const { data: ranges } = useProductRanges();
+  const { data: priceGroups } = usePriceGroups(sectionSupplierId || undefined);
+  const hasPriceGroups = !!sectionPriceGroupId && (priceGroups?.length ?? 0) > 0;
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -416,11 +420,18 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">Geen override</SelectItem>
-                            {ranges?.map((range) => (
-                              <SelectItem key={range.id} value={range.id}>
-                                {range.code} - {range.name || range.collection || ""}
-                              </SelectItem>
-                            ))}
+                            {hasPriceGroups
+                              ? priceGroups?.map((pg) => (
+                                  <SelectItem key={pg.id} value={pg.id}>
+                                    {pg.code} - {pg.name}
+                                  </SelectItem>
+                                ))
+                              : ranges?.map((range) => (
+                                  <SelectItem key={range.id} value={range.id}>
+                                    {range.code} - {range.name || range.collection || ""}
+                                  </SelectItem>
+                                ))
+                            }
                           </SelectContent>
                         </Select>
                       </div>
