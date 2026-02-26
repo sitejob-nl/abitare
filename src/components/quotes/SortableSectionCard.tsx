@@ -153,6 +153,16 @@ export function SortableSectionCard({ section, quoteId, quoteDefaultRangeId, onE
             <button {...listeners} className="cursor-grab touch-none shrink-0">
               <GripVertical className="h-4 w-4 text-muted-foreground/50 hover:text-muted-foreground" />
             </button>
+            <div className={cn(
+              "w-1 h-5 rounded-full shrink-0",
+              section.section_type === "meubelen" && "bg-sky-500",
+              section.section_type === "apparatuur" && "bg-orange-500",
+              section.section_type === "werkbladen" && "bg-emerald-500",
+              section.section_type === "montage" && "bg-violet-500",
+              section.section_type === "transport" && "bg-amber-500",
+              section.section_type === "overig" && "bg-slate-400",
+              !["meubelen", "apparatuur", "werkbladen", "montage", "transport", "overig"].includes(section.section_type) && "bg-muted-foreground/30"
+            )} />
             <CardTitle className="text-sm md:text-base font-semibold uppercase tracking-wide truncate">
               {section.title || sectionLabel}
             </CardTitle>

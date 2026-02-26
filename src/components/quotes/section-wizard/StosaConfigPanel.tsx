@@ -12,6 +12,7 @@ import { useStosaFrontTypes, useStosaColors } from "@/hooks/useStosaData";
 import { usePriceGroupColors, useSupplierColors } from "@/hooks/usePriceGroupColors";
 import type { StosaConfig } from "@/types/quote-sections";
 import { HANDLE_TYPES, PLINTH_TYPES, PLINTH_HEIGHTS, WORKTOP_THICKNESSES } from "@/types/quote-sections";
+import { CabinetPreview } from "./CabinetPreview";
 
 interface StosaConfigPanelProps {
   modelCode: string | null;
@@ -46,6 +47,28 @@ export function StosaConfigPanel({
     onChange({ ...config, ...partial });
   };
 
+  // Build color arrays for the cabinet preview
+  const previewFrontColors = activeFrontColors.map((c: any) => ({
+    code: c.color_code || c.code,
+    hex: c.hex_color,
+    name: c.color_name || c.name,
+  }));
+  const previewCorpusColors = activeCorpusColors.map((c: any) => ({
+    code: c.color_code || c.code,
+    hex: c.hex_color,
+    name: c.color_name || c.name,
+  }));
+  const previewHandleColors = handleColors.map((c: any) => ({
+    code: c.code,
+    hex: c.hex_color,
+    name: c.name,
+  }));
+  const previewPlinthColors = plinthColors.map((c: any) => ({
+    code: c.code,
+    hex: c.hex_color,
+    name: c.name,
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -54,6 +77,17 @@ export function StosaConfigPanel({
           Stel de uitvoering in voor deze sectie
         </p>
       </div>
+
+      {/* Live Cabinet Preview */}
+      {(config.front_color || config.corpus_color || config.handle_color || config.plinth_color) && (
+        <CabinetPreview
+          config={config}
+          frontColors={previewFrontColors}
+          corpusColors={previewCorpusColors}
+          handleColors={previewHandleColors}
+          plinthColors={previewPlinthColors}
+        />
+      )}
 
       {/* Front */}
       <div className="space-y-3">

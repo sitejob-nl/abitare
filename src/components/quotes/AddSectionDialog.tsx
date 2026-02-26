@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { useCreateQuoteSection, SECTION_TYPES } from "@/hooks/useQuoteSections";
 import { useSupplier } from "@/hooks/useSuppliers";
 import { isStosaSupplier } from "@/hooks/useStosaData";
@@ -22,6 +21,7 @@ import { SupplierSelector } from "./section-wizard/SupplierSelector";
 import { StosaModelSelector } from "./section-wizard/StosaModelSelector";
 import { WizardPriceGroupSelector } from "./section-wizard/PriceGroupSelector";
 import { StosaConfigPanel } from "./section-wizard/StosaConfigPanel";
+import { WizardProgressBar } from "./section-wizard/WizardProgressBar";
 
 interface AddSectionDialogProps {
   open: boolean;
@@ -234,8 +234,8 @@ export function AddSectionDialog({
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nieuwe sectie</DialogTitle>
-          <Progress value={progressPercent} className="h-1.5 mt-2" />
         </DialogHeader>
+        <WizardProgressBar steps={wizardSteps} currentStep={step} />
 
         <div className="py-2 min-h-[200px]">
           {step === "type" && (
