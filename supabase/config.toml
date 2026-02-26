@@ -89,3 +89,12 @@ verify_jwt = false
 
 [functions.seed-demo-data]
 verify_jwt = false
+
+[functions.exact-sync-contacts]
+verify_jwt = false
+
+[functions.exact-sync-quotes]
+verify_jwt = false
+
+[functions.exact-sync-items]
+verify_jwt = false
