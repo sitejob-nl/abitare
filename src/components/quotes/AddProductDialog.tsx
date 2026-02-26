@@ -121,7 +121,7 @@ export function AddProductDialog({
   // Fetch ranges and price groups for override dropdown
   const { data: ranges } = useProductRanges(sectionSupplierId || undefined);
   const { data: priceGroups } = usePriceGroups(sectionSupplierId || undefined);
-  const hasPriceGroups = !!sectionPriceGroupId && (priceGroups?.length ?? 0) > 0;
+  const hasPriceGroups = (priceGroups?.length ?? 0) > 0;
 
   const selectedProduct = useMemo(() => {
     return products?.find((p) => p.id === selectedProductId);
