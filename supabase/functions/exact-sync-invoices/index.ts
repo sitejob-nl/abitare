@@ -16,35 +16,30 @@ interface AbitareOrder {
   exact_invoice_id: string | null;
   exact_sales_order_id: string | null;
   division_id: string | null;
-  customer?: { exact_account_id: string | null; last_name: string; company_name: string | null };
-  order_lines?: AbitareOrderLine[];
+  // deno-lint-ignore no-explicit-any
+  customer?: any;
+  // deno-lint-ignore no-explicit-any
+  order_lines?: any[];
 }
 
-interface AbitareOrderLine {
-  id: string;
-  description: string;
-  quantity: number | null;
-  unit_price: number;
-  vat_rate: number | null;
-  line_total: number | null;
-  article_code: string | null;
-}
-
-interface ExactSalesEntryLine {
-  GLAccount: string;
+interface ExactSalesInvoiceLine {
+  Item?: string;
+  GLAccount?: string;
   Description: string;
-  AmountFC: number;
+  Quantity: number;
+  NetPrice: number;
   VATCode: string;
 }
 
-interface ExactSalesEntry {
-  Customer: string;
-  EntryDate?: string;
+interface ExactSalesInvoice {
   Journal: string;
+  OrderedBy: string;
   Description?: string;
   YourRef?: string;
   Currency: string;
-  SalesEntryLines: ExactSalesEntryLine[];
+  OrderDate?: string;
+  PaymentCondition?: string;
+  SalesInvoiceLines: ExactSalesInvoiceLine[];
 }
 
 serve(async (req) => {
@@ -106,7 +101,7 @@ async function pushInvoicesInternal(supabase: any, accessToken: string, baseUrl:
     id, order_number, order_date, customer_id, total_excl_vat, total_vat, total_incl_vat,
     payment_status, amount_paid, exact_invoice_id, exact_sales_order_id, division_id,
     customers!inner(exact_account_id, last_name, company_name),
-    order_lines(id, description, quantity, unit_price, vat_rate, line_total, article_code)
+    order_lines(id, description, quantity, unit_price, vat_rate, line_total, article_code, is_group_header, product_id)
   `).eq("division_id", divisionId);
 
   if (orderId) { query = query.eq("id", orderId); }
@@ -115,7 +110,31 @@ async function pushInvoicesInternal(supabase: any, accessToken: string, baseUrl:
   const { data: orders, error } = await query;
   if (error) throw error;
 
+  // Pre-fetch product exact_item_ids for all products in these orders
+  const productIds = new Set<string>();
+  for (const order of orders as AbitareOrder[]) {
+    for (const line of (order.order_lines || [])) {
+      if (line.product_id) productIds.add(line.product_id);
+    }
+  }
+
+  const productItemMap = new Map<string, string>();
+  if (productIds.size > 0) {
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, exact_item_id")
+      .in("id", Array.from(productIds))
+      .not("exact_item_id", "is", null);
+    for (const p of (products || [])) {
+      if (p.exact_item_id) productItemMap.set(p.id, p.exact_item_id);
+    }
+  }
+
   const results = { success: true, created: 0, skipped: 0, failed: 0, errors: [] as string[] };
+
+  // Get journal and GL account once
+  const journalCode = await getSalesInvoiceJournal(accessToken, baseUrl, exactDivision);
+  const glAccountId = await getDefaultRevenueGLAccount(accessToken, baseUrl, exactDivision);
 
   for (const order of orders as AbitareOrder[]) {
     try {
@@ -123,22 +142,18 @@ async function pushInvoicesInternal(supabase: any, accessToken: string, baseUrl:
 
       const customer = order.customer || (order as any).customers;
       let accountId = customer?.exact_account_id;
-      
+
       if (!accountId) {
         accountId = await ensureCustomerInExact(supabase, accessToken, baseUrl, exactDivision, order.customer_id);
         if (!accountId) { results.skipped++; results.errors.push(`Order #${order.order_number}: Kon klant niet aanmaken in Exact Online`); continue; }
       }
 
-      const glAccountId = await getDefaultRevenueGLAccount(accessToken, baseUrl, exactDivision);
-      if (!glAccountId) { results.failed++; results.errors.push(`Order #${order.order_number}: Kon geen standaard omzet-grootboekrekening vinden`); continue; }
+      const exactInvoice = mapToExactSalesInvoice(order, accountId, glAccountId, journalCode, productItemMap);
 
-      const journalCode = await getDefaultSalesJournal(accessToken, baseUrl, exactDivision);
-      const exactEntry = mapToExactSalesEntry(order, accountId, glAccountId, journalCode);
-
-      const response = await fetch(`${baseUrl}/api/v1/${exactDivision}/salesentry/SalesEntries`, {
+      const response = await fetch(`${baseUrl}/api/v1/${exactDivision}/salesinvoice/SalesInvoices`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(exactEntry),
+        body: JSON.stringify(exactInvoice),
       });
 
       if (!response.ok) {
@@ -147,11 +162,14 @@ async function pushInvoicesInternal(supabase: any, accessToken: string, baseUrl:
         results.errors.push(`Order #${order.order_number}: ${errorText}`);
       } else {
         const data = await response.json();
-        const entryNumber = data.d?.EntryNumber;
-        const entryId = data.d?.EntryID;
-        if (entryId || entryNumber) {
-          await supabase.from("orders").update({ exact_invoice_id: entryNumber?.toString() || entryId }).eq("id", order.id);
+        const invoiceId = data.d?.InvoiceID;
+        const invoiceNumber = data.d?.InvoiceNumber;
+        if (invoiceId) {
+          await supabase.from("orders").update({
+            exact_invoice_id: invoiceId,
+          }).eq("id", order.id);
         }
+        console.log(`Invoice created for order #${order.order_number}: InvoiceID=${invoiceId}, InvoiceNumber=${invoiceNumber}`);
         results.created++;
       }
     } catch (err) {
@@ -181,22 +199,30 @@ async function pullPaymentStatusInternal(supabase: any, accessToken: string, bas
   const { data: orders, error } = await query;
   if (error) throw error;
 
-  const receivablesMap = await fetchReceivablesList(accessToken, baseUrl, exactDivision);
-
+  // For SalesInvoices, fetch by InvoiceID (GUID) 
   for (const order of orders) {
     try {
-      const receivable = receivablesMap.get(String(order.exact_invoice_id));
-      let amountPaid = 0;
-      let paymentStatus: "open" | "deels_betaald" | "betaald" = "open";
+      const invoiceId = order.exact_invoice_id;
+      const url = `${baseUrl}/api/v1/${exactDivision}/salesinvoice/SalesInvoices(guid'${invoiceId}')?$select=InvoiceID,AmountDC,AmountDiscount,Status,StarterSalesInvoiceStatus`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
 
-      if (receivable) {
-        amountPaid = Math.round((receivable.Amount - receivable.AmountDC) * 100) / 100;
-        if (receivable.AmountDC <= 0.01) paymentStatus = "betaald";
-        else if (amountPaid > 0.01) paymentStatus = "deels_betaald";
-      } else {
+      if (!response.ok) {
+        await response.text();
         results.skipped++;
         continue;
       }
+
+      const data = await response.json();
+      const invoice = data.d;
+      if (!invoice) { results.skipped++; continue; }
+
+      // Status: 20=Open, 50=Processed — use receivables for actual payment
+      const amountDC = invoice.AmountDC || 0;
+      const totalIncl = order.total_incl_vat || 0;
+      const amountPaid = Math.max(0, totalIncl - amountDC);
+      let paymentStatus: "open" | "deels_betaald" | "betaald" = "open";
+      if (amountDC <= 0.01) paymentStatus = "betaald";
+      else if (amountPaid > 0.01) paymentStatus = "deels_betaald";
 
       if (paymentStatus !== order.payment_status || Math.abs(amountPaid - (order.amount_paid || 0)) > 0.01) {
         await supabase.from("orders").update({ payment_status: paymentStatus, amount_paid: amountPaid }).eq("id", order.id);
@@ -210,40 +236,6 @@ async function pullPaymentStatusInternal(supabase: any, accessToken: string, bas
   }
 
   return results;
-}
-
-async function fetchReceivablesList(accessToken: string, baseUrl: string, exactDivision: number) {
-  const receivablesMap = new Map<string, { AmountDC: number; Amount: number; EntryNumber: number }>();
-  let hasMore = true;
-  let skipToken = "";
-
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/read/financial/ReceivablesList?$select=EntryNumber,AmountDC,Amount&$top=1000${skipToken}`;
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
-
-    if (!response.ok) { console.error("Failed to fetch ReceivablesList:", await response.text()); break; }
-
-    const data = await response.json();
-    const items = data.d?.results || [];
-
-    for (const item of items) {
-      if (item.EntryNumber != null) {
-        const key = String(item.EntryNumber);
-        const existing = receivablesMap.get(key);
-        if (existing) { existing.AmountDC += item.AmountDC || 0; existing.Amount += item.Amount || 0; }
-        else { receivablesMap.set(key, { EntryNumber: item.EntryNumber, AmountDC: item.AmountDC || 0, Amount: item.Amount || 0 }); }
-      }
-    }
-
-    const nextUrl = data.d?.__next;
-    if (nextUrl && items.length > 0) {
-      const tokenMatch = nextUrl.match(/\$skiptoken='([^']+)'/);
-      skipToken = tokenMatch ? `&$skiptoken='${tokenMatch[1]}'` : "";
-      hasMore = !!skipToken;
-    } else { hasMore = false; }
-  }
-
-  return receivablesMap;
 }
 
 function mapVatRateToCode(vatRate: number): string {
@@ -260,50 +252,77 @@ async function getDefaultRevenueGLAccount(accessToken: string, baseUrl: string, 
     const data = await response.json();
     const accounts = data.d?.results || [];
     if (accounts.length === 0) return null;
+    // deno-lint-ignore no-explicit-any
     const preferred = accounts.find((acc: any) => acc.Code?.startsWith("80") || acc.Description?.toLowerCase().includes("omzet"));
     return (preferred || accounts[0]).ID;
   } catch { return null; }
 }
 
-async function getDefaultSalesJournal(accessToken: string, baseUrl: string, exactDivision: number): Promise<string> {
+async function getSalesInvoiceJournal(accessToken: string, baseUrl: string, exactDivision: number): Promise<string> {
   try {
-    const url = `${baseUrl}/api/v1/${exactDivision}/financial/Journals?$filter=Type eq 50 or Type eq 20&$select=Code,Description,Type&$orderby=Type,Code`;
+    // Type 70 = Sales invoice journal
+    const url = `${baseUrl}/api/v1/${exactDivision}/financial/Journals?$filter=Type eq 70&$select=Code,Description,Type&$orderby=Code`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     if (!response.ok) return "70";
     const data = await response.json();
     const journals = data.d?.results || [];
     if (journals.length === 0) return "70";
+    // deno-lint-ignore no-explicit-any
     const preferred = journals.find((j: any) => j.Description?.toLowerCase().includes("verkoop"));
     return (preferred || journals[0]).Code;
   } catch { return "70"; }
 }
 
-function mapToExactSalesEntry(order: AbitareOrder, accountId: string, glAccountId: string, journalCode: string): ExactSalesEntry {
-  const lines: ExactSalesEntryLine[] = [];
-  const orderLines = order.order_lines || (order as any).order_lines || [];
-  
+function mapToExactSalesInvoice(
+  order: AbitareOrder,
+  accountId: string,
+  glAccountId: string | null,
+  journalCode: string,
+  productItemMap: Map<string, string>
+): ExactSalesInvoice {
+  const lines: ExactSalesInvoiceLine[] = [];
+  const orderLines = order.order_lines || [];
+
   for (const line of orderLines) {
-    if ((line as any).is_group_header) continue;
-    lines.push({
-      GLAccount: glAccountId,
-      Description: line.description.substring(0, 100),
-      AmountFC: line.line_total || (line.unit_price * (line.quantity || 1)),
+    if (line.is_group_header) continue;
+
+    const exactItemId = line.product_id ? productItemMap.get(line.product_id) : undefined;
+    const invoiceLine: ExactSalesInvoiceLine = {
+      Description: (line.description || "").substring(0, 100),
+      Quantity: line.quantity || 1,
+      NetPrice: line.unit_price || 0,
       VATCode: mapVatRateToCode(line.vat_rate || 21),
-    });
+    };
+
+    // Prefer Item (Exact article) over GLAccount
+    if (exactItemId) {
+      invoiceLine.Item = exactItemId;
+    } else if (glAccountId) {
+      invoiceLine.GLAccount = glAccountId;
+    }
+
+    lines.push(invoiceLine);
   }
 
   if (lines.length === 0) {
-    lines.push({ GLAccount: glAccountId, Description: `Order #${order.order_number}`, AmountFC: order.total_excl_vat || 0, VATCode: "2" });
+    const fallbackLine: ExactSalesInvoiceLine = {
+      Description: `Order #${order.order_number}`,
+      Quantity: 1,
+      NetPrice: order.total_excl_vat || 0,
+      VATCode: "2",
+    };
+    if (glAccountId) fallbackLine.GLAccount = glAccountId;
+    lines.push(fallbackLine);
   }
 
   return {
-    Customer: accountId,
-    EntryDate: order.order_date || new Date().toISOString().split("T")[0],
     Journal: journalCode,
+    OrderedBy: accountId,
+    OrderDate: order.order_date || new Date().toISOString().split("T")[0],
     Description: `Factuur order #${order.order_number}`,
     YourRef: `ORD-${order.order_number}`,
     Currency: "EUR",
-    SalesEntryLines: lines,
+    SalesInvoiceLines: lines,
   };
 }
 

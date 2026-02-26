@@ -7,6 +7,9 @@ import { getExactTokenFromConnection } from "../_shared/exact-connect.ts";
 const WEBHOOK_TOPICS = [
   "CRM.Accounts",
   "SalesInvoice.SalesInvoices",
+  "SalesOrder.SalesOrders",
+  "Logistics.Items",
+  "CRM.Quotations",
 ];
 
 // SiteJob Connect webhook router — all webhooks go through here

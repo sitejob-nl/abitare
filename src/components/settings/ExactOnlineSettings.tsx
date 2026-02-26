@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download } from "lucide-react";
+import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download, Users, FileText, Package } from "lucide-react";
 import { useDivisions } from "@/hooks/useDivisions";
-import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers } from "@/hooks/useExactOnline";
+import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers, useSyncContacts, useSyncQuotes, useSyncItems } from "@/hooks/useExactOnline";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -17,9 +17,11 @@ export function ExactOnlineSettings() {
   const disconnectExact = useDisconnectExact();
   const manageWebhooks = useManageWebhooks();
   const syncCustomers = useSyncCustomers();
+  const syncContacts = useSyncContacts();
+  const syncQuotes = useSyncQuotes();
+  const syncItems = useSyncItems();
   const [connectingDivisionId, setConnectingDivisionId] = useState<string | null>(null);
 
-  // Listen for postMessage from the Connect popup
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "exact-connected") {
       toast.success("Exact Online succesvol gekoppeld!");
@@ -42,11 +44,8 @@ export function ExactOnlineSettings() {
   const handleConnect = async (divisionId: string) => {
     setConnectingDivisionId(divisionId);
     try {
-      // Register tenant first (idempotent)
       const result = await registerTenant.mutateAsync(divisionId);
       const tenantId = result.tenant_id;
-
-      // Open Connect popup
       window.open(
         `https://connect.sitejob.nl/exact-setup?tenant_id=${tenantId}`,
         "exact-setup",
@@ -84,7 +83,7 @@ export function ExactOnlineSettings() {
       <div>
         <h2 className="text-lg font-semibold">Exact Online Koppeling</h2>
         <p className="text-sm text-muted-foreground">
-          Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie van klanten en facturen.
+          Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie van klanten, contactpersonen, offertes, artikelen en facturen.
         </p>
       </div>
 
@@ -184,12 +183,49 @@ export function ExactOnlineSettings() {
                     </div>
 
                     {/* Customer Sync Controls */}
+                    <SyncBlock
+                      title="Klanten synchroniseren"
+                      description="Synchroniseer klanten (accounts) tussen Abitare en Exact Online"
+                      icon={<Users className="h-4 w-4 text-muted-foreground" />}
+                      divisionId={division.id}
+                      isPending={syncCustomers.isPending}
+                      onPush={() => syncCustomers.mutate({ action: "push", divisionId: division.id })}
+                      onPull={() => syncCustomers.mutate({ action: "pull", divisionId: division.id })}
+                      onSync={() => syncCustomers.mutate({ action: "sync", divisionId: division.id })}
+                    />
+
+                    {/* Contact Sync Controls */}
+                    <SyncBlock
+                      title="Contactpersonen synchroniseren"
+                      description="Synchroniseer contactpersonen gekoppeld aan klant-accounts"
+                      icon={<Users className="h-4 w-4 text-muted-foreground" />}
+                      divisionId={division.id}
+                      isPending={syncContacts.isPending}
+                      onPush={() => syncContacts.mutate({ action: "push", divisionId: division.id })}
+                      onPull={() => syncContacts.mutate({ action: "pull", divisionId: division.id })}
+                      onSync={() => syncContacts.mutate({ action: "sync", divisionId: division.id })}
+                    />
+
+                    {/* Items Sync Controls */}
+                    <SyncBlock
+                      title="Artikelen synchroniseren"
+                      description="Synchroniseer producten/artikelen met Exact Online Items"
+                      icon={<Package className="h-4 w-4 text-muted-foreground" />}
+                      divisionId={division.id}
+                      isPending={syncItems.isPending}
+                      onPush={() => syncItems.mutate({ action: "push", divisionId: division.id })}
+                      onPull={() => syncItems.mutate({ action: "pull", divisionId: division.id })}
+                      onSync={() => syncItems.mutate({ action: "sync", divisionId: division.id })}
+                    />
+
+                    {/* Quotes Sync Controls */}
                     <div className="rounded-lg border border-border p-3 space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium">Klanten synchroniseren</p>
+                          <p className="text-sm font-medium">Offertes synchroniseren</p>
                           <p className="text-xs text-muted-foreground">
-                            Synchroniseer klanten tussen Abitare en Exact Online
+                            Push offertes naar Exact Online en haal statussen op
                           </p>
                         </div>
                       </div>
@@ -197,10 +233,10 @@ export function ExactOnlineSettings() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => syncCustomers.mutate({ action: "push", divisionId: division.id })}
-                          disabled={syncCustomers.isPending}
+                          onClick={() => syncQuotes.mutate({ action: "push", divisionId: division.id })}
+                          disabled={syncQuotes.isPending}
                         >
-                          {syncCustomers.isPending ? (
+                          {syncQuotes.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           ) : (
                             <Upload className="h-4 w-4 mr-2" />
@@ -210,27 +246,15 @@ export function ExactOnlineSettings() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => syncCustomers.mutate({ action: "pull", divisionId: division.id })}
-                          disabled={syncCustomers.isPending}
+                          onClick={() => syncQuotes.mutate({ action: "pull_status", divisionId: division.id })}
+                          disabled={syncQuotes.isPending}
                         >
-                          {syncCustomers.isPending ? (
+                          {syncQuotes.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           ) : (
                             <Download className="h-4 w-4 mr-2" />
                           )}
-                          Haal uit Exact
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => syncCustomers.mutate({ action: "sync", divisionId: division.id })}
-                          disabled={syncCustomers.isPending}
-                        >
-                          {syncCustomers.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                          )}
-                          Volledige sync
+                          Status ophalen
                         </Button>
                       </div>
                     </div>
@@ -246,7 +270,7 @@ export function ExactOnlineSettings() {
                         <div>
                           <p className="text-sm font-medium">Real-time webhooks</p>
                           <p className="text-xs text-muted-foreground">
-                            Ontvang updates wanneer data in Exact wijzigt
+                            Ontvang updates wanneer data in Exact wijzigt (accounts, facturen, orders, artikelen, offertes)
                           </p>
                         </div>
                       </div>
@@ -274,6 +298,52 @@ export function ExactOnlineSettings() {
             </Card>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncBlock({
+  title,
+  description,
+  icon,
+  divisionId,
+  isPending,
+  onPush,
+  onPull,
+  onSync,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  divisionId: string;
+  isPending: boolean;
+  onPush: () => void;
+  onPull: () => void;
+  onSync: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-3">
+      <div className="flex items-center gap-3">
+        {icon}
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={onPush} disabled={isPending}>
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+          Push naar Exact
+        </Button>
+        <Button variant="outline" size="sm" onClick={onPull} disabled={isPending}>
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+          Haal uit Exact
+        </Button>
+        <Button size="sm" onClick={onSync} disabled={isPending}>
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+          Volledige sync
+        </Button>
       </div>
     </div>
   );

@@ -273,6 +273,7 @@ export type Database = {
           division_id: string | null
           email: string | null
           exact_account_id: string | null
+          exact_contact_id: string | null
           first_name: string | null
           id: string
           last_name: string
@@ -309,6 +310,7 @@ export type Database = {
           division_id?: string | null
           email?: string | null
           exact_account_id?: string | null
+          exact_contact_id?: string | null
           first_name?: string | null
           id?: string
           last_name: string
@@ -345,6 +347,7 @@ export type Database = {
           division_id?: string | null
           email?: string | null
           exact_account_id?: string | null
+          exact_contact_id?: string | null
           first_name?: string | null
           id?: string
           last_name?: string
@@ -2002,6 +2005,7 @@ export type Database = {
           ean_code: string | null
           energy_class: string | null
           energy_consumption_kwh: number | null
+          exact_item_id: string | null
           height_mm: number | null
           id: string
           image_url: string | null
@@ -2064,6 +2068,7 @@ export type Database = {
           ean_code?: string | null
           energy_class?: string | null
           energy_consumption_kwh?: number | null
+          exact_item_id?: string | null
           height_mm?: number | null
           id?: string
           image_url?: string | null
@@ -2126,6 +2131,7 @@ export type Database = {
           ean_code?: string | null
           energy_class?: string | null
           energy_consumption_kwh?: number | null
+          exact_item_id?: string | null
           height_mm?: number | null
           id?: string
           image_url?: string | null
@@ -2602,6 +2608,8 @@ export type Database = {
           discount_description: string | null
           discount_percentage: number | null
           division_id: string | null
+          exact_quotation_id: string | null
+          exact_quotation_number: string | null
           id: string
           internal_notes: string | null
           introduction_text: string | null
@@ -2645,6 +2653,8 @@ export type Database = {
           discount_description?: string | null
           discount_percentage?: number | null
           division_id?: string | null
+          exact_quotation_id?: string | null
+          exact_quotation_number?: string | null
           id?: string
           internal_notes?: string | null
           introduction_text?: string | null
@@ -2688,6 +2698,8 @@ export type Database = {
           discount_description?: string | null
           discount_percentage?: number | null
           division_id?: string | null
+          exact_quotation_id?: string | null
+          exact_quotation_number?: string | null
           id?: string
           internal_notes?: string | null
           introduction_text?: string | null

@@ -301,3 +301,120 @@ export function useSyncInvoices() {
     },
   });
 }
+
+export function useSyncContacts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+    }: {
+      action: "push" | "pull" | "sync";
+      divisionId: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-contacts", {
+        body: { action, divisionId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      
+      if (variables.action === "push") {
+        const msg = `Contacten gepusht: ${data.created} nieuw, ${data.updated} bijgewerkt`;
+        if (data.failed > 0) toast.warning(`${msg}, ${data.failed} mislukt`);
+        else toast.success(msg);
+      } else if (variables.action === "pull") {
+        toast.success(`Contacten opgehaald: ${data.updated} bijgewerkt`);
+      } else {
+        toast.success("Contactpersonen synchronisatie voltooid");
+      }
+    },
+    onError: (error) => {
+      toast.error(`Contacten sync fout: ${error.message}`);
+    },
+  });
+}
+
+export function useSyncQuotes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+      quoteId,
+    }: {
+      action: "push" | "pull_status";
+      divisionId: string;
+      quoteId?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-quotes", {
+        body: { action, divisionId, quoteId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      
+      if (variables.action === "push") {
+        const msg = `Offertes gepusht: ${data.created} aangemaakt`;
+        if (data.failed > 0) toast.warning(`${msg}, ${data.failed} mislukt`);
+        else toast.success(msg);
+      } else {
+        toast.success(`Offerte-statussen bijgewerkt: ${data.updated} gewijzigd`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Offerte sync fout: ${error.message}`);
+    },
+  });
+}
+
+export function useSyncItems() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      action,
+      divisionId,
+    }: {
+      action: "push" | "pull" | "sync";
+      divisionId: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("exact-sync-items", {
+        body: { action, divisionId },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      
+      if (variables.action === "push") {
+        const msg = `Artikelen gepusht: ${data.created} aangemaakt`;
+        if (data.failed > 0) toast.warning(`${msg}, ${data.failed} mislukt`);
+        else toast.success(msg);
+      } else if (variables.action === "pull") {
+        toast.success(`Artikelen gematcht: ${data.matched} gekoppeld`);
+      } else {
+        toast.success("Artikelen synchronisatie voltooid");
+      }
+    },
+    onError: (error) => {
+      toast.error(`Artikelen sync fout: ${error.message}`);
+    },
+  });
+}
