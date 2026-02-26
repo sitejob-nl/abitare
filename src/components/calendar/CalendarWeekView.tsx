@@ -1,16 +1,19 @@
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, isSameDay } from "date-fns";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { CalendarEventCard, type CalendarEventData } from "./CalendarEventCard";
 import { CalendarEventPopover } from "./CalendarEventPopover";
+import { MicrosoftEventCard } from "./MicrosoftEventCard";
 import { ConflictBadge } from "./ConflictBadge";
 import type { ConflictInfo } from "@/hooks/useCalendarConflicts";
+import type { MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 interface CalendarWeekViewProps {
   currentDate: Date;
   events: CalendarEventData[];
   conflicts: ConflictInfo[];
+  microsoftEvents?: MicrosoftCalendarEvent[];
   onDayClick?: (date: Date) => void;
 }
 
@@ -42,11 +45,13 @@ function DroppableDay({
   date, 
   events, 
   conflicts,
+  microsoftEvents = [],
   onDayClick,
 }: { 
   date: Date; 
   events: CalendarEventData[];
   conflicts: ConflictInfo[];
+  microsoftEvents?: MicrosoftCalendarEvent[];
   onDayClick?: (date: Date) => void;
 }) {
   const dateStr = format(date, "yyyy-MM-dd");
@@ -57,6 +62,10 @@ function DroppableDay({
 
   const dayEvents = events.filter((e) => e.date === dateStr);
   const dayConflict = conflicts.find((c) => c.date === dateStr);
+  const dayMsEvents = microsoftEvents.filter((e) => {
+    const eventDate = format(parseISO(e.start.dateTime), "yyyy-MM-dd");
+    return eventDate === dateStr;
+  });
 
   return (
     <div
@@ -86,6 +95,9 @@ function DroppableDay({
         {dayEvents.map((event) => (
           <DraggableEvent key={event.id} event={event} />
         ))}
+        {dayMsEvents.map((event) => (
+          <MicrosoftEventCard key={event.id} event={event} compact />
+        ))}
       </div>
     </div>
   );
@@ -95,6 +107,7 @@ export function CalendarWeekView({
   currentDate, 
   events, 
   conflicts,
+  microsoftEvents = [],
   onDayClick,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -136,6 +149,7 @@ export function CalendarWeekView({
             date={day}
             events={events}
             conflicts={conflicts}
+            microsoftEvents={microsoftEvents}
             onDayClick={onDayClick}
           />
         ))}

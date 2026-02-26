@@ -1,7 +1,7 @@
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link } from "react-router-dom";
-import { Truck, Wrench, User, MapPin, Phone, ExternalLink, AlertTriangle } from "lucide-react";
+import { Truck, Wrench, Headphones, User, MapPin, Phone, ExternalLink, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,24 +16,29 @@ import { useAssignInstaller } from "@/hooks/useAssignInstaller";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { ConflictInfo } from "@/hooks/useCalendarConflicts";
+import { MicrosoftEventCard } from "./MicrosoftEventCard";
+import type { MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
 
 interface DayEvent {
   id: string;
   orderId: string;
   orderNumber: number;
-  type: "delivery" | "installation";
+  type: "delivery" | "installation" | "service";
   customerName: string;
   customerPhone?: string | null;
   customerAddress?: string | null;
   installerId?: string | null;
   installerName?: string | null;
   hasConflict?: boolean;
+  ticketId?: string | null;
+  ticketSubject?: string | null;
 }
 
 interface CalendarDayViewProps {
   currentDate: Date;
   events: DayEvent[];
   conflicts: ConflictInfo[];
+  microsoftEvents?: MicrosoftCalendarEvent[];
 }
 
 function DayEventCard({ event }: { event: DayEvent }) {
@@ -61,6 +66,27 @@ function DayEventCard({ event }: { event: DayEvent }) {
     }
   };
 
+  const isService = event.type === "service";
+  const linkTo = isService ? `/service/${event.ticketId}` : `/orders/${event.orderId}`;
+
+  const getIcon = () => {
+    if (event.type === "delivery") return <Truck className="h-5 w-5 text-cyan-600" />;
+    if (event.type === "service") return <Headphones className="h-5 w-5 text-violet-600" />;
+    return <Wrench className="h-5 w-5 text-emerald-600" />;
+  };
+
+  const getIconBg = () => {
+    if (event.type === "delivery") return "bg-cyan-100";
+    if (event.type === "service") return "bg-violet-100";
+    return "bg-emerald-100";
+  };
+
+  const getLabel = () => {
+    if (event.type === "delivery") return "Levering";
+    if (event.type === "service") return "Serviceticket";
+    return "Montage";
+  };
+
   return (
     <Card className={cn(
       "relative",
@@ -69,23 +95,19 @@ function DayEventCard({ event }: { event: DayEvent }) {
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            {event.type === "delivery" ? (
-              <div className="rounded-full bg-cyan-100 p-2">
-                <Truck className="h-5 w-5 text-cyan-600" />
-              </div>
-            ) : (
-              <div className="rounded-full bg-emerald-100 p-2">
-                <Wrench className="h-5 w-5 text-emerald-600" />
-              </div>
-            )}
+            <div className={`rounded-full ${getIconBg()} p-2`}>
+              {getIcon()}
+            </div>
             <div>
               <CardTitle className="text-base">
-                {event.type === "delivery" ? "Levering" : "Montage"} #{event.orderNumber}
+                {getLabel()} {isService ? "" : `#${event.orderNumber}`}
               </CardTitle>
-              <p className="text-sm text-muted-foreground">{event.customerName}</p>
+              <p className="text-sm text-muted-foreground">
+                {isService ? (event.ticketSubject || event.customerName) : event.customerName}
+              </p>
             </div>
           </div>
-          <Link to={`/orders/${event.orderId}`}>
+          <Link to={linkTo}>
             <Button variant="outline" size="sm">
               <ExternalLink className="h-4 w-4 mr-1" />
               Bekijk
@@ -152,12 +174,19 @@ function DayEventCard({ event }: { event: DayEvent }) {
   );
 }
 
-export function CalendarDayView({ currentDate, events, conflicts }: CalendarDayViewProps) {
+export function CalendarDayView({ currentDate, events, conflicts, microsoftEvents = [] }: CalendarDayViewProps) {
   const dateStr = format(currentDate, "yyyy-MM-dd");
   const dayConflicts = conflicts.filter((c) => c.date === dateStr);
 
   const deliveries = events.filter((e) => e.type === "delivery");
   const installations = events.filter((e) => e.type === "installation");
+  const serviceTickets = events.filter((e) => e.type === "service");
+
+  // Filter MS events for this day
+  const dayMsEvents = microsoftEvents.filter((e) => {
+    const eventDate = format(parseISO(e.start.dateTime), "yyyy-MM-dd");
+    return eventDate === dateStr;
+  });
 
   // Mark events that have conflicts
   const eventsWithConflicts = events.map((event) => ({
@@ -168,6 +197,7 @@ export function CalendarDayView({ currentDate, events, conflicts }: CalendarDayV
 
   const deliveriesWithConflicts = eventsWithConflicts.filter((e) => e.type === "delivery");
   const installationsWithConflicts = eventsWithConflicts.filter((e) => e.type === "installation");
+  const serviceWithConflicts = eventsWithConflicts.filter((e) => e.type === "service");
 
   return (
     <div className="space-y-6">
@@ -183,10 +213,22 @@ export function CalendarDayView({ currentDate, events, conflicts }: CalendarDayV
           <span>{deliveries.length} leveringen</span>
           <span>•</span>
           <span>{installations.length} montages</span>
+          {serviceTickets.length > 0 && (
+            <>
+              <span>•</span>
+              <span>{serviceTickets.length} service</span>
+            </>
+          )}
+          {dayMsEvents.length > 0 && (
+            <>
+              <span>•</span>
+              <span>{dayMsEvents.length} Outlook</span>
+            </>
+          )}
         </div>
       </div>
 
-      {events.length === 0 ? (
+      {events.length === 0 && dayMsEvents.length === 0 ? (
         <div className="text-center py-12 rounded-xl border border-dashed border-border">
           <p className="text-muted-foreground">Geen afspraken op deze dag</p>
         </div>
@@ -217,6 +259,35 @@ export function CalendarDayView({ currentDate, events, conflicts }: CalendarDayV
               <div className="space-y-3">
                 {installationsWithConflicts.map((event) => (
                   <DayEventCard key={event.id} event={event} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Service tickets */}
+          {serviceWithConflicts.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                <Headphones className="h-4 w-4" />
+                Servicetickets ({serviceWithConflicts.length})
+              </h3>
+              <div className="space-y-3">
+                {serviceWithConflicts.map((event) => (
+                  <DayEventCard key={event.id} event={event} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Microsoft events */}
+          {dayMsEvents.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                📅 Outlook ({dayMsEvents.length})
+              </h3>
+              <div className="space-y-3">
+                {dayMsEvents.map((event) => (
+                  <MicrosoftEventCard key={event.id} event={event} />
                 ))}
               </div>
             </div>

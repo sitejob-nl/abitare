@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ServiceTicketSidebar } from "@/components/calendar/ServiceTicketSidebar";
 import { useScheduleServiceTicket } from "@/hooks/useServiceTicketMutations";
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Loader2, Truck, Wrench } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Truck, Wrench, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,7 @@ import { useCalendarConflicts, type ConflictInfo } from "@/hooks/useCalendarConf
 import { useUpdateEventDate } from "@/hooks/useUpdateEventDate";
 import { useMicrosoftCalendarEvents, type MicrosoftCalendarEvent } from "@/hooks/useMicrosoftCalendar";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
+import { useInstallers } from "@/hooks/useInstallers";
 import { toast } from "@/hooks/use-toast";
 
 function useCalendarEvents(month: Date) {
@@ -84,6 +85,8 @@ function useCalendarEvents(month: Date) {
             orderNumber: order.order_number,
             installerId: order.installer_id,
             installerName: installer?.full_name,
+            customerPhone: customer?.mobile || customer?.phone,
+            customerAddress: customer?.street_address ? `${customer.street_address}, ${customer.city || ""}`.trim() : null,
           });
         });
       }
@@ -117,6 +120,41 @@ function useCalendarEvents(month: Date) {
             orderNumber: order.order_number,
             installerId: order.installer_id,
             installerName: installer?.full_name,
+            customerPhone: customer?.mobile || customer?.phone,
+            customerAddress: customer?.street_address ? `${customer.street_address}, ${customer.city || ""}`.trim() : null,
+          });
+        });
+      }
+
+      // Get scheduled service tickets
+      const { data: tickets } = await supabase
+        .from("service_tickets")
+        .select(`
+          id, ticket_number, subject, planned_date,
+          customer:customers(first_name, last_name, company_name, phone, mobile, street_address, city)
+        `)
+        .eq("status", "ingepland")
+        .gte("planned_date", format(start, "yyyy-MM-dd"))
+        .lte("planned_date", format(end, "yyyy-MM-dd"))
+        .not("planned_date", "is", null);
+
+      if (tickets) {
+        tickets.forEach((ticket) => {
+          const customer = ticket.customer as { first_name?: string; last_name?: string; company_name?: string; phone?: string; mobile?: string; street_address?: string; city?: string } | null;
+          const customerName = customer?.company_name || 
+            [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
+          
+          events.push({
+            id: `service-${ticket.id}`,
+            orderId: ticket.id, // needed for drag compatibility
+            date: ticket.planned_date!,
+            type: "service",
+            customerName,
+            orderNumber: ticket.ticket_number,
+            ticketId: ticket.id,
+            ticketSubject: ticket.subject,
+            customerPhone: customer?.mobile || customer?.phone,
+            customerAddress: customer?.street_address ? `${customer.street_address}, ${customer.city || ""}`.trim() : null,
           });
         });
       }
@@ -124,6 +162,42 @@ function useCalendarEvents(month: Date) {
       return events;
     },
   });
+}
+
+// Forecast week query
+function useForecastWeekOrders(month: Date) {
+  return useQuery({
+    queryKey: ["forecast-week-orders", format(month, "yyyy-MM")],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select("id, order_number, forecast_week, customer:customers(first_name, last_name, company_name)")
+        .not("forecast_week", "is", null)
+        .is("expected_installation_date", null)
+        .is("expected_delivery_date", null);
+
+      return (data || []).map((order) => {
+        const customer = order.customer as { first_name?: string; last_name?: string; company_name?: string } | null;
+        const customerName = customer?.company_name || 
+          [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Onbekend";
+        return { ...order, customerName };
+      });
+    },
+  });
+}
+
+function parseForecastWeekToMonday(forecastWeek: string): string | null {
+  // Format: YYYY-Wnn
+  const match = forecastWeek.match(/^(\d{4})-W(\d{1,2})$/);
+  if (!match) return null;
+  const year = parseInt(match[1]);
+  const week = parseInt(match[2]);
+  // ISO week: Jan 4 is always in week 1
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7; // Mon=1..Sun=7
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+  return format(monday, "yyyy-MM-dd");
 }
 
 // Draggable event component for month view
@@ -157,6 +231,7 @@ function DroppableMonthDay({
   day, 
   dayEvents,
   microsoftEvents,
+  forecastOrders,
   isCurrentMonth,
   isTodayDate,
   dayConflict,
@@ -165,6 +240,7 @@ function DroppableMonthDay({
   day: Date; 
   dayEvents: CalendarEventData[];
   microsoftEvents: MicrosoftCalendarEvent[];
+  forecastOrders: { id: string; order_number: number; customerName: string }[];
   isCurrentMonth: boolean;
   isTodayDate: boolean;
   dayConflict?: ConflictInfo;
@@ -209,6 +285,12 @@ function DroppableMonthDay({
         {dayConflict && <ConflictBadge conflict={dayConflict} />}
       </div>
       <div className="space-y-0.5 sm:space-y-1">
+        {/* Forecast week badge */}
+        {forecastOrders.length > 0 && (
+          <div className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] sm:text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            📋 {forecastOrders.length} forecast
+          </div>
+        )}
         {visibleOrderEvents.map((event) => (
           <DraggableMonthEvent key={event.id} event={event} />
         ))}
@@ -229,6 +311,7 @@ const CalendarPage = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>("month");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [installerFilter, setInstallerFilter] = useState<string>("all");
   const [draggingEvent, setDraggingEvent] = useState<CalendarEventData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -236,6 +319,8 @@ const CalendarPage = () => {
   const { data: conflicts } = useCalendarConflicts(currentDate);
   const { data: microsoftEvents } = useMicrosoftCalendarEvents(currentDate);
   const { data: msConnection } = useMicrosoftConnection();
+  const { data: forecastOrders } = useForecastWeekOrders(currentDate);
+  const { data: installers } = useInstallers();
   const updateEventDate = useUpdateEventDate();
   const scheduleTicket = useScheduleServiceTicket();
 
@@ -247,9 +332,25 @@ const CalendarPage = () => {
     })
   );
 
+  // Build forecast map: dateStr -> orders[]
+  const forecastMap = useMemo(() => {
+    const map: Record<string, { id: string; order_number: number; customerName: string }[]> = {};
+    forecastOrders?.forEach((order) => {
+      if (!order.forecast_week) return;
+      const monday = parseForecastWeekToMonday(order.forecast_week);
+      if (!monday) return;
+      if (!map[monday]) map[monday] = [];
+      map[monday].push({ id: order.id, order_number: order.order_number, customerName: order.customerName });
+    });
+    return map;
+  }, [forecastOrders]);
+
   const filteredEvents = events?.filter((event) => {
-    if (typeFilter === "all" || typeFilter === "microsoft") return true;
-    return event.type === typeFilter;
+    // Type filter
+    if (typeFilter !== "all" && typeFilter !== "microsoft" && event.type !== typeFilter) return false;
+    // Installer filter
+    if (installerFilter !== "all" && event.installerId !== installerFilter) return false;
+    return true;
   }) || [];
 
   // Filter Microsoft events based on filter
@@ -335,6 +436,9 @@ const CalendarPage = () => {
     const draggedEvent = active.data.current?.event as CalendarEventData;
     if (draggedEvent.date === newDate) return;
 
+    // Don't allow dragging service events (they don't have order fields)
+    if (draggedEvent.type === "service") return;
+
     try {
       await updateEventDate.mutateAsync({
         orderId: draggedEvent.orderId,
@@ -383,7 +487,7 @@ const CalendarPage = () => {
         <h1 className="font-display text-xl sm:text-[28px] font-semibold text-foreground">
           Agenda
         </h1>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <CalendarViewToggle view={view} onViewChange={setView} />
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="h-9 w-[120px] sm:w-[160px] text-[13px]">
@@ -393,9 +497,23 @@ const CalendarPage = () => {
               <SelectItem value="all">Alles tonen</SelectItem>
               <SelectItem value="delivery">Leveringen</SelectItem>
               <SelectItem value="installation">Montages</SelectItem>
+              <SelectItem value="service">Servicetickets</SelectItem>
               {msConnection?.is_active && (
                 <SelectItem value="microsoft">Microsoft</SelectItem>
               )}
+            </SelectContent>
+          </Select>
+          <Select value={installerFilter} onValueChange={setInstallerFilter}>
+            <SelectTrigger className="h-9 w-[120px] sm:w-[170px] text-[13px]">
+              <SelectValue placeholder="Alle monteurs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle monteurs</SelectItem>
+              {installers?.map((inst) => (
+                <SelectItem key={inst.id} value={inst.id}>
+                  {inst.full_name || inst.email}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -467,6 +585,7 @@ const CalendarPage = () => {
                     const isTodayDate = isToday(day);
                     const dateStr = format(day, "yyyy-MM-dd");
                     const dayConflict = conflicts?.find((c) => c.date === dateStr);
+                    const dayForecast = forecastMap[dateStr] || [];
 
                     return (
                       <DroppableMonthDay
@@ -474,6 +593,7 @@ const CalendarPage = () => {
                         day={day}
                         dayEvents={dayEvents}
                         microsoftEvents={dayMsEvents}
+                        forecastOrders={dayForecast}
                         isCurrentMonth={isCurrentMonth}
                         isTodayDate={isTodayDate}
                         dayConflict={dayConflict}
@@ -488,6 +608,7 @@ const CalendarPage = () => {
                 currentDate={currentDate}
                 events={eventsWithConflicts}
                 conflicts={conflicts || []}
+                microsoftEvents={filteredMsEvents}
                 onDayClick={handleDayClick}
               />
             ) : (
@@ -495,10 +616,11 @@ const CalendarPage = () => {
                 currentDate={currentDate}
                 events={eventsWithConflicts.filter((e) => e.date === format(currentDate, "yyyy-MM-dd")).map((e) => ({
                   ...e,
-                  customerPhone: undefined,
-                  customerAddress: undefined,
+                  customerPhone: e.customerPhone,
+                  customerAddress: e.customerAddress,
                 }))}
                 conflicts={conflicts || []}
+                microsoftEvents={filteredMsEvents}
               />
             )}
           </div>
