@@ -25,6 +25,7 @@ interface ScheduleOutlookEventProps {
   customerName: string;
   installationAddress?: string;
   outlookEventId?: string | null;
+  expectedInstallationDate?: string | null;
 }
 
 export function ScheduleOutlookEvent({
@@ -33,6 +34,7 @@ export function ScheduleOutlookEvent({
   customerName,
   installationAddress,
   outlookEventId,
+  expectedInstallationDate,
 }: ScheduleOutlookEventProps) {
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
