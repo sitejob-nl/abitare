@@ -34,12 +34,83 @@ export function useQuoteLines(quoteId: string | undefined, sectionId?: string) {
   });
 }
 
+async function recalculateQuoteTotals(quoteId: string) {
+  // Fetch all sections with lines
+  const { data: sections } = await supabase
+    .from("quote_sections")
+    .select("*, quote_lines(*)")
+    .eq("quote_id", quoteId)
+    .order("sort_order", { ascending: true });
+
+  if (!sections) return;
+
+  let subtotalProducts = 0;
+  let subtotalMontage = 0;
+  const vatByRate = new Map<number, number>();
+
+  sections.forEach((section) => {
+    const sectionTotal = section.quote_lines?.reduce(
+      (sum: number, line: any) => sum + (line.line_total || 0),
+      0
+    ) || 0;
+
+    const discountAmt = section.discount_percentage
+      ? (sectionTotal * (section.discount_percentage || 0)) / 100
+      : (section.discount_amount || 0);
+    const sectionNet = sectionTotal - discountAmt;
+    const discFraction = sectionTotal > 0 ? sectionNet / sectionTotal : 1;
+
+    section.quote_lines?.forEach((line: any) => {
+      const rate = line.vat_rate ?? 21;
+      const lineNet = (line.line_total || 0) * discFraction;
+      vatByRate.set(rate, (vatByRate.get(rate) || 0) + lineNet);
+    });
+
+    // Update section subtotal
+    supabase
+      .from("quote_sections")
+      .update({ subtotal: sectionNet })
+      .eq("id", section.id)
+      .then(() => {});
+
+    if (section.section_type === "montage") {
+      subtotalMontage += sectionNet;
+    } else {
+      subtotalProducts += sectionNet;
+    }
+  });
+
+  // Fetch quote-level discount
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select("discount_amount")
+    .eq("id", quoteId)
+    .single();
+
+  const discountAmount = quote?.discount_amount || 0;
+  const totalExclVat = subtotalProducts + subtotalMontage - discountAmount;
+  const subBefore = subtotalProducts + subtotalMontage;
+  const qFraction = subBefore > 0 ? totalExclVat / subBefore : 1;
+  let totalVat = 0;
+  vatByRate.forEach((base, rate) => {
+    totalVat += base * qFraction * (rate / 100);
+  });
+  const totalInclVat = totalExclVat + totalVat;
+
+  await supabase.from("quotes").update({
+    subtotal_products: subtotalProducts,
+    subtotal_montage: subtotalMontage,
+    total_excl_vat: totalExclVat,
+    total_vat: totalVat,
+    total_incl_vat: totalInclVat,
+  }).eq("id", quoteId);
+}
+
 export function useCreateQuoteLine() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (line: QuoteLineInsert) => {
-      // Calculate line_total if not provided
       const lineTotal = line.line_total ?? calculateLineTotal(
         line.quantity ?? 1,
         line.unit_price,
@@ -55,7 +126,8 @@ export function useCreateQuoteLine() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      await recalculateQuoteTotals(data.quote_id);
       queryClient.invalidateQueries({ queryKey: ["quote-lines", data.quote_id] });
       queryClient.invalidateQueries({ queryKey: ["quote-sections", data.quote_id] });
       queryClient.invalidateQueries({ queryKey: ["quote", data.quote_id] });
@@ -97,7 +169,8 @@ export function useUpdateQuoteLine() {
       if (error) throw error;
       return { ...data, quoteId };
     },
-    onSuccess: ({ quoteId }) => {
+    onSuccess: async ({ quoteId }) => {
+      await recalculateQuoteTotals(quoteId);
       queryClient.invalidateQueries({ queryKey: ["quote-lines", quoteId] });
       queryClient.invalidateQueries({ queryKey: ["quote-sections", quoteId] });
       queryClient.invalidateQueries({ queryKey: ["quote", quoteId] });
@@ -118,7 +191,8 @@ export function useDeleteQuoteLine() {
       if (error) throw error;
       return { quoteId };
     },
-    onSuccess: ({ quoteId }) => {
+    onSuccess: async ({ quoteId }) => {
+      await recalculateQuoteTotals(quoteId);
       queryClient.invalidateQueries({ queryKey: ["quote-lines", quoteId] });
       queryClient.invalidateQueries({ queryKey: ["quote-sections", quoteId] });
       queryClient.invalidateQueries({ queryKey: ["quote", quoteId] });
