@@ -39,8 +39,8 @@ export function StosaConfigPanel({
   const { data: pgFrontColors = [] } = usePriceGroupColors(priceGroupId || undefined, "front");
   const { data: pgCorpusColors = [] } = useSupplierColors(supplierId, "corpus");
 
-  // Prefer price_group_colors over stosa_colors when available
-  const activeFrontColors = pgFrontColors.length > 0 ? pgFrontColors : frontColors;
+  // When a price group is selected, only show its colors (no fallback to all stosa_colors)
+  const activeFrontColors = priceGroupId ? pgFrontColors : frontColors;
   const activeCorpusColors = pgCorpusColors.length > 0 ? pgCorpusColors : corpusColors;
 
   const update = (partial: Partial<StosaConfig>) => {
