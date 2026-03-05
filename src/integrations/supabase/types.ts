@@ -2930,6 +2930,27 @@ export type Database = {
           },
         ]
       }
+      role_menu_permissions: {
+        Row: {
+          id: string
+          menu_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          visible: boolean
+        }
+        Insert: {
+          id?: string
+          menu_key: string
+          role: Database["public"]["Enums"]["app_role"]
+          visible?: boolean
+        }
+        Update: {
+          id?: string
+          menu_key?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          visible?: boolean
+        }
+        Relationships: []
+      }
       service_budgets: {
         Row: {
           bonus_percentage: number | null

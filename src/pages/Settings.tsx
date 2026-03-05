@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Link2, Pencil, User, Percent } from "lucide-react";
+import { Loader2, Building2, Users, Link2, Pencil, User, Percent, Shield } from "lucide-react";
 import { CalendarColorPicker } from "@/components/calendar/CalendarColorPicker";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
@@ -13,6 +13,7 @@ import { DivisionFormDialog } from "@/components/settings/DivisionFormDialog";
 import { UserFormDialog } from "@/components/settings/UserFormDialog";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { SupplierDiscountsSettings } from "@/components/settings/SupplierDiscountsSettings";
+import { MenuPermissionsSettings } from "@/components/settings/MenuPermissionsSettings";
 import { useAllDivisions, type Division } from "@/hooks/useDivisions";
 import { useProfiles, type ProfileWithRoles } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -98,6 +99,11 @@ const Settings = () => {
                   <Percent className="h-4 w-4" />
                   <span className="hidden sm:inline">Kortingen</span>
                   <span className="sm:hidden">Kort.</span>
+                </TabsTrigger>
+                <TabsTrigger value="menu-permissions" className="gap-2 text-xs sm:text-sm">
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline">Menu-rechten</span>
+                  <span className="sm:hidden">Menu</span>
                 </TabsTrigger>
               </>
             )}
@@ -309,6 +315,13 @@ const Settings = () => {
           {isAdmin && (
             <TabsContent value="discounts" className="space-y-6">
               <SupplierDiscountsSettings />
+            </TabsContent>
+          )}
+
+          {/* Menu Permissions Tab - Admin only */}
+          {isAdmin && (
+            <TabsContent value="menu-permissions" className="space-y-6">
+              <MenuPermissionsSettings />
             </TabsContent>
           )}
         </Tabs>

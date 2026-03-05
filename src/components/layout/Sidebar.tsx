@@ -1,6 +1,7 @@
 import { useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDivisions } from "@/hooks/useDivisions";
+import { useVisibleMenuKeys } from "@/hooks/useMenuPermissions";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.svg";
 import {
@@ -35,6 +36,7 @@ interface NavItem {
   label: string;
   href: string;
   badge?: number;
+  menuKey: string;
 }
 
 interface NavSection {
@@ -46,39 +48,39 @@ const navSections: NavSection[] = [
   {
     title: "Overzicht",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+      { icon: LayoutDashboard, label: "Dashboard", href: "/", menuKey: "dashboard" },
     ],
   },
   {
     title: "Verkoop",
     items: [
-      { icon: Users, label: "Klanten", href: "/customers", badge: 3 },
-      { icon: FileText, label: "Offertes", href: "/quotes", badge: 8 },
-      { icon: Package, label: "Orders", href: "/orders" },
-      { icon: Receipt, label: "Facturen", href: "/invoices" },
+      { icon: Users, label: "Klanten", href: "/customers", badge: 3, menuKey: "customers" },
+      { icon: FileText, label: "Offertes", href: "/quotes", badge: 8, menuKey: "quotes" },
+      { icon: Package, label: "Orders", href: "/orders", menuKey: "orders" },
+      { icon: Receipt, label: "Facturen", href: "/invoices", menuKey: "invoices" },
     ],
   },
   {
     title: "Planning",
     items: [
-      { icon: Calendar, label: "Agenda", href: "/calendar" },
-      { icon: CalendarDays, label: "Verlof", href: "/leave" },
-      { icon: Wrench, label: "Montage", href: "/installation" },
-      { icon: Ticket, label: "Service", href: "/service" },
+      { icon: Calendar, label: "Agenda", href: "/calendar", menuKey: "calendar" },
+      { icon: CalendarDays, label: "Verlof", href: "/leave", menuKey: "leave" },
+      { icon: Wrench, label: "Montage", href: "/installation", menuKey: "installation" },
+      { icon: Ticket, label: "Service", href: "/service", menuKey: "service" },
     ],
   },
   {
     title: "Communicatie",
     items: [
-      { icon: MessageSquare, label: "Inbox", href: "/inbox", badge: 12 },
+      { icon: MessageSquare, label: "Inbox", href: "/inbox", badge: 12, menuKey: "inbox" },
     ],
   },
   {
     title: "Beheer",
     items: [
-      { icon: FolderOpen, label: "Producten", href: "/products" },
-      { icon: BarChart3, label: "Rapportages", href: "/reports" },
-      { icon: Settings, label: "Instellingen", href: "/settings" },
+      { icon: FolderOpen, label: "Producten", href: "/products", menuKey: "products" },
+      { icon: BarChart3, label: "Rapportages", href: "/reports", menuKey: "reports" },
+      { icon: Settings, label: "Instellingen", href: "/settings", menuKey: "settings" },
     ],
   },
 ];
@@ -93,6 +95,7 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
   const location = useLocation();
   const { profile, roles, signOut, isAdmin, activeDivisionId, setActiveDivisionId } = useAuth();
   const { data: divisions } = useDivisions();
+  const { visibleKeys } = useVisibleMenuKeys();
 
   const displayName = profile?.full_name || profile?.email || "Gebruiker";
   const initials = displayName
@@ -199,12 +202,17 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 scrollbar-thin">
-        {navSections.map((section) => (
+        {navSections.map((section) => {
+          const filteredItems = visibleKeys
+            ? section.items.filter((item) => visibleKeys.has(item.menuKey))
+            : section.items;
+          if (filteredItems.length === 0) return null;
+          return (
           <div key={section.title} className="mb-2 px-3">
             <div className="px-3 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[1.2px] text-sidebar-muted">
               {section.title}
             </div>
-            {section.items.map((item) => {
+            {filteredItems.map((item) => {
               const isActive = location.pathname === item.href || 
                 (item.href !== "/" && location.pathname.startsWith(item.href));
               const Icon = item.icon;
@@ -235,7 +243,8 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* User Card */}
