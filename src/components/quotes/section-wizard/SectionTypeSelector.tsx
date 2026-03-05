@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { SectionType } from "@/types/quote-sections";
 import { WIZARD_SECTION_TYPES } from "@/types/quote-sections";
-import { LayoutGrid, Refrigerator, Square, Droplet, Package } from "lucide-react";
+import { LayoutGrid, Refrigerator, Square, Droplet, Package, Wrench } from "lucide-react";
 
 interface SectionTypeSelectorProps {
   value: SectionType | null;
@@ -14,6 +14,7 @@ const ICONS: Record<SectionType, React.ReactNode> = {
   werkbladen: <Square className="h-8 w-8" />,
   sanitair: <Droplet className="h-8 w-8" />,
   diversen: <Package className="h-8 w-8" />,
+  montage: <Wrench className="h-8 w-8" />,
 };
 
 export function SectionTypeSelector({ value, onChange }: SectionTypeSelectorProps) {

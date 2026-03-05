@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateQuoteSection, SECTION_TYPES } from "@/hooks/useQuoteSections";
+import { useCreateQuoteLine } from "@/hooks/useQuoteLines";
+import { useInstallationRates } from "@/hooks/useInstallationRates";
 import { useSupplier } from "@/hooks/useSuppliers";
 import { isStosaSupplier } from "@/hooks/useStosaData";
 import { toast } from "@/hooks/use-toast";
