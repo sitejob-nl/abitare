@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, MapPin, Calendar, Phone, Mail, Building2, Pencil } from "lucide-react";
+import { User, MapPin, Calendar, Phone, Mail, Building2, Pencil, Wrench } from "lucide-react";
 import { format, getISOWeek, getISOWeekYear } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface Customer {
@@ -40,9 +47,12 @@ interface OrderInfoCardProps {
   expectedDeliveryDate: string | null;
   expectedInstallationDate: string | null;
   forecastWeek?: string | null;
+  installerId?: string | null;
+  installers?: { id: string; full_name: string | null }[];
   onUpdateDeliveryDate?: (date: Date | null) => void;
   onUpdateInstallationDate?: (date: Date | null) => void;
   onUpdateForecastWeek?: (week: string | null) => void;
+  onAssignInstaller?: (installerId: string | null) => void;
   isUpdating?: boolean;
 }
 
@@ -203,9 +213,12 @@ export function OrderInfoCard({
   expectedDeliveryDate,
   expectedInstallationDate,
   forecastWeek,
+  installerId,
+  installers,
   onUpdateDeliveryDate,
   onUpdateInstallationDate,
   onUpdateForecastWeek,
+  onAssignInstaller,
   isUpdating,
 }: OrderInfoCardProps) {
   return (
@@ -315,6 +328,31 @@ export function OrderInfoCard({
               onUpdate={onUpdateForecastWeek}
               isUpdating={isUpdating}
             />
+          )}
+
+          {onAssignInstaller && installers && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Wrench className="h-3.5 w-3.5 flex-shrink-0" />
+              <div className="flex-1">
+                <Select
+                  value={installerId || "__none__"}
+                  onValueChange={(val) => onAssignInstaller(val === "__none__" ? null : val)}
+                  disabled={isUpdating}
+                >
+                  <SelectTrigger className="h-7 text-sm border-none shadow-none px-0 hover:bg-accent/50 -ml-0.5 pl-0.5">
+                    <SelectValue placeholder="Monteur toewijzen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Geen monteur</SelectItem>
+                    {installers.map((inst) => (
+                      <SelectItem key={inst.id} value={inst.id}>
+                        {inst.full_name || inst.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           )}
         </div>
       </div>
