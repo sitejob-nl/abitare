@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, useCreateQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
 import { fetchProductPrice } from "@/hooks/useProductPrices";
+import { toast } from "@/hooks/use-toast";
 import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { useSortable } from "@dnd-kit/sortable";
