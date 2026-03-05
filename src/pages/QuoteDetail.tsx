@@ -13,6 +13,7 @@ import { QuoteDiscountEditor } from "@/components/quotes/QuoteDiscountEditor";
 import { QuoteActions } from "@/components/quotes/QuoteActions";
 import { AddSectionDialog } from "@/components/quotes/AddSectionDialog";
 import { QuoteConfigDialog } from "@/components/quotes/QuoteConfigDialog";
+import { SendQuoteDialog } from "@/components/quotes/SendQuoteDialog";
 import { generateQuotePdf } from "@/lib/generateQuotePdf";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -41,6 +42,7 @@ const QuoteDetail = () => {
   const navigate = useNavigate();
   const [showAddSection, setShowAddSection] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showSendDialog, setShowSendDialog] = useState(false);
 
   const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuote(id);
   const { data: sections, isLoading: sectionsLoading } = useQuoteSections(id);
@@ -205,10 +207,7 @@ const QuoteDetail = () => {
   };
 
   const handleSend = () => {
-    toast({
-      title: "Binnenkort beschikbaar",
-      description: "De verzend functionaliteit wordt later toegevoegd.",
-    });
+    setShowSendDialog(true);
   };
 
   // Calculate subtotal for discount editor
@@ -419,8 +418,26 @@ const QuoteDetail = () => {
         currentShowLinePrices={(quote as any).show_line_prices ?? true}
         currentShowArticleCodes={(quote as any).show_article_codes ?? true}
       />
-    </AppLayout>
-  );
+
+      {quote && sections && (
+        <SendQuoteDialog
+          open={showSendDialog}
+          onOpenChange={setShowSendDialog}
+          quote={{
+            id: quote.id,
+            quote_number: quote.quote_number,
+            quote_date: quote.quote_date,
+            valid_until: quote.valid_until,
+            payment_terms_description: quote.payment_terms_description,
+            discount_amount: quote.discount_amount,
+            customer: quote.customer,
+            division: quote.division as any,
+            show_line_prices: (quote as any).show_line_prices,
+            show_article_codes: (quote as any).show_article_codes,
+          }}
+          sections={sections}
+        />
+      )}
 };
 
 export default QuoteDetail;

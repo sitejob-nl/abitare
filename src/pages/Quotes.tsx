@@ -58,7 +58,7 @@ const Quotes = () => {
   const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebounce(searchQuery);
   const [showNewDialog, setShowNewDialog] = useState(false);
 
   // Local division filter synced with global state
@@ -69,7 +69,6 @@ const Quotes = () => {
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-    setTimeout(() => setDebouncedSearch(value), 300);
   };
 
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();

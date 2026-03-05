@@ -23,6 +23,7 @@ const TABLE_QUERY_MAP: Record<string, string[]> = {
   calendar_subscriptions: ["calendar-subscriptions"],
   user_mentions: ["user-mentions", "action-items", "notifications"],
   communication_log: ["communication-log", "customer-emails"],
+  work_reports: ["work-reports", "work-report", "installer-orders"],
 };
 
 const SUBSCRIBED_TABLES = Object.keys(TABLE_QUERY_MAP);

@@ -50,7 +50,7 @@ const Customers = () => {
   const navigate = useNavigate();
   const { activeDivisionId, setActiveDivisionId, isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebounce(searchQuery);
   const [showNewDialog, setShowNewDialog] = useState(false);
 
   // Local division filter synced with global state
@@ -59,11 +59,8 @@ const Customers = () => {
     setActiveDivisionId(value === "all" ? null : value);
   };
 
-  // Debounce search
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-    // Simple debounce
-    setTimeout(() => setDebouncedSearch(value), 300);
   };
 
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();
