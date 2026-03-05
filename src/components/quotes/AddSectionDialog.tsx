@@ -45,8 +45,8 @@ export function AddSectionDialog({
   quoteDefaultPriceGroupId,
 }: AddSectionDialogProps) {
   const createSection = useCreateQuoteSection();
-
-  // Wizard state
+  const createLine = useCreateQuoteLine();
+  const { data: installationRates } = useInstallationRates(true);
   const [step, setStep] = useState<SectionWizardStep>("type");
   const [sectionType, setSectionType] = useState<SectionType | null>(null);
   const [supplierId, setSupplierId] = useState<string | null>(null);
@@ -63,8 +63,15 @@ export function AddSectionDialog({
   const isStosa = isStosaSupplier(supplierCode);
   const hasPriceGroups = selectedSupplier?.has_price_groups === true;
 
+  const isMontage = sectionType === "montage";
+
   // Determine wizard steps based on selections
   const wizardSteps = useMemo<SectionWizardStep[]>(() => {
+    // Montage skips supplier/model/pricegroup/config - just type selection then done
+    if (isMontage) {
+      return ["type"];
+    }
+
     const steps: SectionWizardStep[] = ["type", "supplier"];
 
     if (isStosa) {
@@ -78,7 +85,7 @@ export function AddSectionDialog({
     }
 
     return steps;
-  }, [isStosa, hasPriceGroups]);
+  }, [isMontage, isStosa, hasPriceGroups]);
 
   const currentStepIndex = wizardSteps.indexOf(step);
   const isLastStep = currentStepIndex === wizardSteps.length - 1;
@@ -186,7 +193,6 @@ export function AddSectionDialog({
     const sectionTitle = generateTitle();
 
     // Map the new section_type values to existing DB values for backward compat
-    // Current DB uses: meubelen, apparatuur, werkbladen, montage, transport, overig
     const sectionTypeMap: Record<SectionType, string> = {
       keukenmeubelen: "meubelen",
       apparatuur: "apparatuur",
@@ -197,7 +203,7 @@ export function AddSectionDialog({
     };
 
     try {
-      await createSection.mutateAsync({
+      const section = await createSection.mutateAsync({
         quote_id: quoteId,
         section_type: sectionTypeMap[sectionType] || sectionType,
         title: sectionTitle,
@@ -216,9 +222,29 @@ export function AddSectionDialog({
         configuration: Object.keys(config).length > 0 ? JSON.parse(JSON.stringify(config)) : null,
       });
 
+      // For montage sections: auto-insert installation_rates as quote lines
+      if (isMontage && installationRates && installationRates.length > 0) {
+        const lineInserts = installationRates.map((rate, index) => 
+          createLine.mutateAsync({
+            quote_id: quoteId,
+            section_id: section.id,
+            description: rate.name,
+            article_code: rate.code,
+            unit_price: rate.default_price ?? 0,
+            quantity: 1,
+            unit: rate.unit || "stuk",
+            vat_rate: rate.vat_rate ?? 21,
+            sort_order: index,
+          })
+        );
+        await Promise.all(lineInserts);
+      }
+
       toast({
         title: "Sectie toegevoegd",
-        description: `De sectie "${sectionTitle}" is aangemaakt.`,
+        description: isMontage 
+          ? `De sectie "${sectionTitle}" is aangemaakt met ${installationRates?.length || 0} montageregels.`
+          : `De sectie "${sectionTitle}" is aangemaakt.`,
       });
 
       onOpenChange(false);
