@@ -668,6 +668,59 @@ export type Database = {
         }
         Relationships: []
       }
+      leave_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          division_id: string | null
+          end_date: string
+          id: string
+          leave_type: string
+          notes: string | null
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          division_id?: string | null
+          end_date: string
+          id?: string
+          leave_type?: string
+          notes?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          division_id?: string | null
+          end_date?: string
+          id?: string
+          leave_type?: string
+          notes?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       microsoft_connections: {
         Row: {
           access_token: string
@@ -2472,6 +2525,7 @@ export type Database = {
           quote_id: string | null
           range_id: string | null
           section_type: string
+          show_prices: boolean | null
           sort_order: number | null
           subtotal: number | null
           supplier_id: string | null
@@ -2505,6 +2559,7 @@ export type Database = {
           quote_id?: string | null
           range_id?: string | null
           section_type: string
+          show_prices?: boolean | null
           sort_order?: number | null
           subtotal?: number | null
           supplier_id?: string | null
@@ -2538,6 +2593,7 @@ export type Database = {
           quote_id?: string | null
           range_id?: string | null
           section_type?: string
+          show_prices?: boolean | null
           sort_order?: number | null
           subtotal?: number | null
           supplier_id?: string | null
