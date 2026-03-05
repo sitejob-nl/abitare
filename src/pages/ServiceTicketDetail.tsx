@@ -66,6 +66,8 @@ import { useQuotes } from "@/hooks/useQuotes";
 import { useOrders } from "@/hooks/useOrders";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateQuote } from "@/hooks/useQuotes";
+import { useNavigate } from "react-router-dom";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   nieuw: { label: "Nieuw", className: "bg-blue-100 text-blue-700" },
