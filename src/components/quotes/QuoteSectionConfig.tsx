@@ -53,6 +53,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     workbench_material: section.workbench_material || "",
     workbench_edge: section.workbench_edge || "",
     workbench_color: section.workbench_color || "",
+    show_prices: (section as any).show_prices !== false,
   });
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
@@ -102,6 +103,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
       workbench_material: section.workbench_material || "",
       workbench_edge: section.workbench_edge || "",
       workbench_color: section.workbench_color || "",
+      show_prices: (section as any).show_prices !== false,
     });
 
     if (section.range_id) {
@@ -215,6 +217,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
         workbench_material: formData.workbench_material || null,
         workbench_edge: formData.workbench_edge || null,
         workbench_color: formData.workbench_color || null,
+        show_prices: formData.show_prices,
       });
 
       toast({
