@@ -8,7 +8,8 @@ export type SectionType =
   | "apparatuur"
   | "werkbladen"
   | "sanitair"
-  | "diversen";
+  | "diversen"
+  | "montage";
 
 export const WIZARD_SECTION_TYPES: {
   value: SectionType;
@@ -20,6 +21,7 @@ export const WIZARD_SECTION_TYPES: {
   { value: "werkbladen", label: "Werkbladen", description: "Composiet, natuursteen, hout" },
   { value: "sanitair", label: "Sanitair", description: "Spoelbakken, kranen" },
   { value: "diversen", label: "Diversen & Accessoires", description: "Verlichting, accessoires" },
+  { value: "montage", label: "Montage & Diensten", description: "Montage, transport, aansluiting" },
 ];
 
 // STOSA Configuratie
