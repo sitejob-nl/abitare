@@ -1,0 +1,1 @@
+ALTER TABLE public.price_group_colors ADD COLUMN model_code text;

@@ -1589,6 +1589,7 @@ export type Database = {
           id: string
           is_available: boolean | null
           material_type: string | null
+          model_code: string | null
           price_group_id: string | null
           sort_order: number | null
           supplier_id: string | null
@@ -1603,6 +1604,7 @@ export type Database = {
           id?: string
           is_available?: boolean | null
           material_type?: string | null
+          model_code?: string | null
           price_group_id?: string | null
           sort_order?: number | null
           supplier_id?: string | null
@@ -1617,6 +1619,7 @@ export type Database = {
           id?: string
           is_available?: boolean | null
           material_type?: string | null
+          model_code?: string | null
           price_group_id?: string | null
           sort_order?: number | null
           supplier_id?: string | null
