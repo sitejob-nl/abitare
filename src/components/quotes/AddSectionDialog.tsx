@@ -193,6 +193,7 @@ export function AddSectionDialog({
       werkbladen: "werkbladen",
       sanitair: "overig",
       diversen: "overig",
+      montage: "montage",
     };
 
     try {
