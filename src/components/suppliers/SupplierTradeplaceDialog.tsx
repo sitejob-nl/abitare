@@ -145,7 +145,7 @@ export function SupplierTradeplaceDialog({
                   </FormDescription>
                   {form.formState.errors.tradeplace_gln && (
                     <p className="text-xs text-destructive mt-1">
-                      {form.formState.errors.traceplace_gln?.message || "GLN moet exact 13 cijfers zijn"}
+                      {form.formState.errors.tradeplace_gln?.message || "GLN moet exact 13 cijfers zijn"}
                     </p>
                   )}
                 </FormItem>
