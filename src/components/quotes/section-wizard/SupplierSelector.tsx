@@ -19,6 +19,7 @@ const SUPPLIER_FILTERS: Record<SectionType, string[]> = {
   werkbladen: ["dekker", "kemie", "cosentino", "neolith"],
   sanitair: ["franke", "blanco", "quooker", "grohe"],
   diversen: [],
+  montage: [],
 };
 
 export function SupplierSelector({ sectionType, value, onChange }: SupplierSelectorProps) {
