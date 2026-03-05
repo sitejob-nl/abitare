@@ -25,9 +25,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import type { Supplier } from "@/hooks/useSuppliers";
 
+const glnSchema = z.string()
+  .optional()
+  .nullable()
+  .refine(
+    (val) => !val || /^\d{13}$/.test(val),
+    { message: "GLN moet exact 13 cijfers zijn" }
+  );
+
 const formSchema = z.object({
   tradeplace_enabled: z.boolean(),
-  tradeplace_gln: z.string().optional().nullable(),
+  tradeplace_gln: glnSchema,
   tradeplace_tp_id: z.string().optional().nullable(),
   tradeplace_endpoint: z.string().url().optional().nullable().or(z.literal("")),
 });
@@ -133,8 +141,13 @@ export function SupplierTradeplaceDialog({
                     />
                   </FormControl>
                   <FormDescription>
-                    Het Global Location Number van de fabrikant
+                    Het Global Location Number van de fabrikant (13 cijfers)
                   </FormDescription>
+                  {form.formState.errors.tradeplace_gln && (
+                    <p className="text-xs text-destructive mt-1">
+                      {form.formState.errors.tradeplace_gln?.message || "GLN moet exact 13 cijfers zijn"}
+                    </p>
+                  )}
                 </FormItem>
               )}
             />

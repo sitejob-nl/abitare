@@ -299,14 +299,14 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
 
                 {filteredRanges.length > 0 && (
                   <div className="space-y-2">
-                    <Label>{hasPriceGroups ? "Model / Collectie" : "Prijsgroep"}</Label>
+                    <Label>{hasPriceGroups ? "Model / Collectie" : "Assortiment"}</Label>
                     <Select
                       value={formData.range_id}
                       onValueChange={handleRangeChange}
                       disabled={!selectedSupplierId}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer prijsgroep"} />
+                        <SelectValue placeholder={hasPriceGroups ? "Selecteer model" : "Selecteer assortiment"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">Geen</SelectItem>

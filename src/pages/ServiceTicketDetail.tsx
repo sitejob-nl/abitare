@@ -66,6 +66,8 @@ import { useQuotes } from "@/hooks/useQuotes";
 import { useOrders } from "@/hooks/useOrders";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateQuote } from "@/hooks/useQuotes";
+import { useNavigate } from "react-router-dom";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   nieuw: { label: "Nieuw", className: "bg-blue-100 text-blue-700" },
@@ -96,6 +98,7 @@ type TicketPriority = "laag" | "normaal" | "hoog" | "urgent";
 
 export default function ServiceTicketDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: ticket, isLoading } = useServiceTicket(id);
   const { data: users = [] } = useProfiles();
   const { data: customers = [] } = useCustomers({ limit: 200 });
@@ -106,6 +109,7 @@ export default function ServiceTicketDetail() {
   const addNote = useAddTicketNote();
   const assignUser = useAssignUser();
   const unassignUser = useUnassignUser();
+  const createQuote = useCreateQuote();
   const { toast } = useToast();
 
   const [noteContent, setNoteContent] = useState("");
@@ -640,6 +644,53 @@ export default function ServiceTicketDetail() {
                     >
                       Bekijk offerte <ExternalLink className="h-3 w-3" />
                     </Link>
+                  )}
+                  {!ticket.quote_id && ticket.customer_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-1"
+                      disabled={createQuote.isPending}
+                      onClick={() => {
+                        const customer = customers.find(c => c.id === ticket.customer_id);
+                        const customerName = customer
+                          ? [customer.first_name, customer.last_name].filter(Boolean).join(" ")
+                          : "Onbekend";
+                        createQuote.mutate(
+                          {
+                            customer_id: ticket.customer_id!,
+                            division_id: ticket.division_id,
+                            category: "Meerwerk",
+                            reference: `Meerwerk - ${customerName} - Ticket #${ticket.ticket_number}`,
+                            status: "concept",
+                          },
+                          {
+                            onSuccess: (newQuote) => {
+                              // Link quote to ticket
+                              updateTicket.mutate({
+                                id: ticket.id,
+                                quote_id: newQuote.id,
+                              } as any);
+                              toast({
+                                title: "Meerwerk-offerte aangemaakt",
+                                description: `Offerte #${newQuote.quote_number} is gekoppeld aan dit ticket`,
+                              });
+                              navigate(`/quotes/${newQuote.id}`);
+                            },
+                            onError: () => {
+                              toast({
+                                title: "Fout",
+                                description: "Kon geen offerte aanmaken",
+                                variant: "destructive",
+                              });
+                            },
+                          }
+                        );
+                      }}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Meerwerk-offerte aanmaken
+                    </Button>
                   )}
                 </div>
 
