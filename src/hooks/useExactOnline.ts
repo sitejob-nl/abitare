@@ -2,6 +2,62 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Hook to get sync queue status
+export function useExactSyncQueueStatus() {
+  return useQuery({
+    queryKey: ["exact-sync-queue-status"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("exact_sync_queue")
+        .select("status")
+        .in("status", ["pending", "processing"]);
+
+      if (error) throw error;
+      return {
+        pending: data?.filter((r) => r.status === "pending").length || 0,
+        processing: data?.filter((r) => r.status === "processing").length || 0,
+      };
+    },
+    refetchInterval: 30000, // Poll every 30s
+  });
+}
+
+// Hook to test Exact connection
+export function useTestExactConnection() {
+  return useMutation({
+    mutationFn: async (divisionId: string) => {
+      const { data, error } = await supabase.functions.invoke("exact-api", {
+        body: { divisionId, endpoint: "/current/Me", method: "GET" },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success("Verbinding actief", {
+        description: data?.d?.FullName ? `Ingelogd als: ${data.d.FullName}` : "Token is geldig.",
+      });
+    },
+    onError: (error) => {
+      toast.error("Verbinding mislukt", { description: error.message });
+    },
+  });
+}
+
+// Hook to check webhook status
+export function useCheckWebhookStatus() {
+  return useMutation({
+    mutationFn: async (divisionId: string) => {
+      const { data, error } = await supabase.functions.invoke("exact-webhooks-manage", {
+        body: { action: "status", divisionId },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+  });
+}
+
 interface ExactOnlineConnection {
   id: string;
   division_id: string;

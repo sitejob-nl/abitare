@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.exact-sync-items]
 verify_jwt = false
+
+[functions.exact-process-queue]
+verify_jwt = false
