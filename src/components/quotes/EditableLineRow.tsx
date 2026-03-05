@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Trash2, GripVertical, Check, X, Palette } from "lucide-react";
+import { Trash2, GripVertical, Check, X, Palette, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -16,8 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
+import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, useCreateQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
 import { fetchProductPrice } from "@/hooks/useProductPrices";
+import { toast } from "@/hooks/use-toast";
 import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { useSortable } from "@dnd-kit/sortable";
@@ -57,6 +58,7 @@ function parseDimension(value: string): number | null {
 export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sectionRangeId, quoteDefaultRangeId, sectionPriceGroupId, sectionSupplierId }: EditableLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
+  const createLine = useCreateQuoteLine();
   
   // Edit states
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -167,6 +169,14 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
     } else if (e.key === "Escape") {
       handleCancel(field);
     }
+  };
+
+  const handleDuplicate = () => {
+    const { id, created_at, product, ...rest } = line as any;
+    createLine.mutate(
+      { ...rest, quote_id: quoteId, sort_order: (line.sort_order || 0) + 1 },
+      { onSuccess: () => toast({ title: "Regel gedupliceerd" }) }
+    );
   };
 
   const handleDelete = () => {
@@ -529,16 +539,28 @@ export function EditableLineRow({ line, quoteId, lineNumber, subLines = [], sect
             </span>
           )}
         </TableCell>
-        <TableCell className="w-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-            onClick={handleDelete}
-            disabled={deleteLine.isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+        <TableCell className="w-16">
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+              onClick={handleDuplicate}
+              disabled={createLine.isPending}
+              title="Dupliceren"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+              onClick={handleDelete}
+              disabled={deleteLine.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
 
