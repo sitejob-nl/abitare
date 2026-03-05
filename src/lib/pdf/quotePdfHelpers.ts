@@ -483,6 +483,7 @@ export function calculateTotals(
   subtotalExclVat: number;
   totalVat: number;
   totalInclVat: number;
+  vatBreakdown: { rate: number; base: number; vat: number }[];
 } {
   let subtotalProducts = 0;
   let subtotalMontage = 0;
