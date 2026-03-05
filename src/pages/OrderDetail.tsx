@@ -5,6 +5,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
 import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates, useUpdateOrderAddresses } from "@/hooks/useOrderMutations";
+import { useInstallers } from "@/hooks/useInstallers";
+import { useAssignInstaller } from "@/hooks/useAssignInstaller";
 import { OrderStatusSelect } from "@/components/orders/OrderStatusSelect";
 import { PaymentCard } from "@/components/orders/PaymentCard";
 import { DocumentsCard } from "@/components/orders/DocumentsCard";
@@ -54,7 +56,8 @@ const OrderDetail = () => {
   const updateDates = useUpdateOrderDates();
   const updateAddresses = useUpdateOrderAddresses();
   const { allChecked: checklistComplete } = useOrderChecklist(id);
-
+  const { data: installers } = useInstallers();
+  const assignInstaller = useAssignInstaller();
   useEffect(() => {
     if (error) {
       toast({
@@ -393,6 +396,17 @@ const OrderDetail = () => {
               }
             }}
             isUpdating={updateDates.isPending}
+            installerId={(order as any).installer_id}
+            installers={installers}
+            onAssignInstaller={async (instId) => {
+              if (!id) return;
+              try {
+                await assignInstaller.mutateAsync({ orderId: id, installerId: instId });
+                toast({ title: "Monteur bijgewerkt", description: instId ? "Monteur toegewezen." : "Monteur verwijderd." });
+              } catch {
+                toast({ title: "Fout bij toewijzen", description: "De monteur kon niet worden bijgewerkt.", variant: "destructive" });
+              }
+            }}
           />
 
           <OrderAddressesCard
