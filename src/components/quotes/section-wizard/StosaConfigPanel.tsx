@@ -133,11 +133,14 @@ export function StosaConfigPanel({
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
                       {c.color_code || c.code} - {c.color_name || c.name}
+                      {c.material_type && <span className="text-xs text-muted-foreground ml-1">({c.material_type})</span>}
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          ) : priceGroupId ? (
+            <p className="text-sm text-muted-foreground italic">Geen kleuren gevonden voor deze prijsgroep</p>
           ) : (
             <Input
               placeholder="Bijv. Noce Eucalipto"
