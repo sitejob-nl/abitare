@@ -39,8 +39,8 @@ export function StosaConfigPanel({
   const { data: pgFrontColors = [] } = usePriceGroupColors(priceGroupId || undefined, "front");
   const { data: pgCorpusColors = [] } = useSupplierColors(supplierId, "corpus");
 
-  // Prefer price_group_colors over stosa_colors when available
-  const activeFrontColors = pgFrontColors.length > 0 ? pgFrontColors : frontColors;
+  // When a price group is selected, only show its colors (no fallback to all stosa_colors)
+  const activeFrontColors = priceGroupId ? pgFrontColors : frontColors;
   const activeCorpusColors = pgCorpusColors.length > 0 ? pgCorpusColors : corpusColors;
 
   const update = (partial: Partial<StosaConfig>) => {
@@ -133,11 +133,14 @@ export function StosaConfigPanel({
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full border border-border shrink-0" style={{ backgroundColor: c.hex_color || '#ccc' }} />
                       {c.color_code || c.code} - {c.color_name || c.name}
+                      {c.material_type && <span className="text-xs text-muted-foreground ml-1">({c.material_type})</span>}
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          ) : priceGroupId ? (
+            <p className="text-sm text-muted-foreground italic">Geen kleuren gevonden voor deze prijsgroep</p>
           ) : (
             <Input
               placeholder="Bijv. Noce Eucalipto"
