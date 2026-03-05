@@ -84,21 +84,28 @@ export function ExactOnlineSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Exact Online Koppeling</h2>
-        <p className="text-sm text-muted-foreground">
-          Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie van klanten, contactpersonen, offertes, artikelen en facturen.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Exact Online Koppeling</h2>
+          <p className="text-sm text-muted-foreground">
+            Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie.
+          </p>
+        </div>
+        {queueStatus && (queueStatus.pending > 0 || queueStatus.processing > 0) && (
+          <Badge variant="secondary" className="gap-1">
+            <Activity className="h-3 w-3" />
+            {queueStatus.pending + queueStatus.processing} in queue
+          </Badge>
+        )}
       </div>
 
-      <Card className="border-blue-200 bg-blue-50/50">
+      <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex items-start gap-3 pt-4">
-          <ExternalLink className="h-5 w-5 text-blue-600 mt-0.5" />
+          <Zap className="h-5 w-5 text-primary mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium text-blue-900">Hoe werkt het?</p>
-            <p className="text-blue-700 mt-1">
-              Klik op "Koppelen" bij een vestiging om in te loggen bij Exact Online.
-              Na autorisatie wordt de verbinding automatisch opgeslagen en kun je klanten en facturen synchroniseren.
+            <p className="font-medium">Automatische synchronisatie actief</p>
+            <p className="text-muted-foreground mt-1">
+              Wijzigingen aan klanten, orders en offertes worden automatisch gesynchroniseerd met Exact Online.
             </p>
           </div>
         </CardContent>
