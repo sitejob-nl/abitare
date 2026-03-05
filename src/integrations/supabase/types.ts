@@ -1079,6 +1079,8 @@ export type Database = {
           handle_number: string | null
           hinge_color: string | null
           id: string
+          model_code: string | null
+          model_name: string | null
           order_id: string
           plinth_color: string | null
           price_group_id: string | null
@@ -1087,6 +1089,7 @@ export type Database = {
           section_type: string
           sort_order: number | null
           subtotal: number | null
+          supplier_id: string | null
           title: string | null
           workbench_color: string | null
           workbench_edge: string | null
@@ -1110,6 +1113,8 @@ export type Database = {
           handle_number?: string | null
           hinge_color?: string | null
           id?: string
+          model_code?: string | null
+          model_name?: string | null
           order_id: string
           plinth_color?: string | null
           price_group_id?: string | null
@@ -1118,6 +1123,7 @@ export type Database = {
           section_type: string
           sort_order?: number | null
           subtotal?: number | null
+          supplier_id?: string | null
           title?: string | null
           workbench_color?: string | null
           workbench_edge?: string | null
@@ -1141,6 +1147,8 @@ export type Database = {
           handle_number?: string | null
           hinge_color?: string | null
           id?: string
+          model_code?: string | null
+          model_name?: string | null
           order_id?: string
           plinth_color?: string | null
           price_group_id?: string | null
@@ -1149,6 +1157,7 @@ export type Database = {
           section_type?: string
           sort_order?: number | null
           subtotal?: number | null
+          supplier_id?: string | null
           title?: string | null
           workbench_color?: string | null
           workbench_edge?: string | null
@@ -1202,6 +1211,13 @@ export type Database = {
             columns: ["range_id"]
             isOneToOne: false
             referencedRelation: "product_ranges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_sections_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
