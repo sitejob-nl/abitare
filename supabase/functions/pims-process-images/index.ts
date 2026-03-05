@@ -58,6 +58,14 @@ Deno.serve(async (req) => {
 
       const results = await Promise.allSettled(
         batch.map(async (item: any) => {
+          // Skip items that exceeded max retries
+          if ((item.retry_count || 0) >= 3) {
+            await supabase.from('pims_image_queue')
+              .update({ status: 'failed', error_message: 'Max retries exceeded', processed_at: new Date().toISOString() })
+              .eq('id', item.id)
+            return false
+          }
+
           const mediaType = item.media_type || 'photo'
           const sourceUrl = normalizeUrl(item.image_url)
           const storagePath = `url-ref/${item.supplier_id}/${item.article_code}/${mediaType}-${item.image_index}`

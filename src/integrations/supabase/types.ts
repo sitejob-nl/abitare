@@ -1535,6 +1535,7 @@ export type Database = {
           media_type: string | null
           processed_at: string | null
           product_id: string
+          retry_count: number
           status: string
           supplier_id: string
         }
@@ -1549,6 +1550,7 @@ export type Database = {
           media_type?: string | null
           processed_at?: string | null
           product_id: string
+          retry_count?: number
           status?: string
           supplier_id: string
         }
@@ -1563,6 +1565,7 @@ export type Database = {
           media_type?: string | null
           processed_at?: string | null
           product_id?: string
+          retry_count?: number
           status?: string
           supplier_id?: string
         }
@@ -4050,6 +4053,33 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_auto_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          order_status: string
+          template_language: string
+          template_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          order_status: string
+          template_language?: string
+          template_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          order_status?: string
+          template_language?: string
+          template_name?: string
+        }
+        Relationships: []
+      }
       whatsapp_config: {
         Row: {
           access_token: string
@@ -4076,6 +4106,76 @@ export type Database = {
           waba_id?: string | null
         }
         Relationships: []
+      }
+      whatsapp_send_queue: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          error_message: string | null
+          external_message_id: string | null
+          id: string
+          order_id: string | null
+          phone_number: string
+          processed_at: string | null
+          status: string
+          template_language: string
+          template_name: string
+          template_params: Json | null
+          trigger_status: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          order_id?: string | null
+          phone_number: string
+          processed_at?: string | null
+          status?: string
+          template_language?: string
+          template_name: string
+          template_params?: Json | null
+          trigger_status?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          order_id?: string | null
+          phone_number?: string
+          processed_at?: string | null
+          status?: string
+          template_language?: string
+          template_name?: string
+          template_params?: Json | null
+          trigger_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_send_queue_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_send_queue_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_send_queue_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       work_report_damages: {
         Row: {
