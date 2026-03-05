@@ -516,6 +516,53 @@ export type Database = {
           },
         ]
       }
+      exact_sync_queue: {
+        Row: {
+          action: string
+          attempts: number
+          created_at: string
+          division_id: string | null
+          error_message: string | null
+          id: string
+          processed_at: string | null
+          record_id: string
+          status: string
+          table_name: string
+        }
+        Insert: {
+          action?: string
+          attempts?: number
+          created_at?: string
+          division_id?: string | null
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          record_id: string
+          status?: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          attempts?: number
+          created_at?: string
+          division_id?: string | null
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          record_id?: string
+          status?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exact_sync_queue_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exact_webhook_logs: {
         Row: {
           action: string

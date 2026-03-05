@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download, Users, FileText, Package } from "lucide-react";
+import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download, Users, FileText, Package, Zap, ShieldCheck, Activity } from "lucide-react";
 import { useDivisions } from "@/hooks/useDivisions";
-import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers, useSyncContacts, useSyncQuotes, useSyncItems } from "@/hooks/useExactOnline";
+import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers, useSyncContacts, useSyncQuotes, useSyncItems, useExactSyncQueueStatus, useTestExactConnection, useCheckWebhookStatus } from "@/hooks/useExactOnline";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ export function ExactOnlineSettings() {
   const queryClient = useQueryClient();
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();
   const { data: connections, isLoading: connectionsLoading } = useExactOnlineConnections();
+  const { data: queueStatus } = useExactSyncQueueStatus();
   const registerTenant = useRegisterExactTenant();
   const disconnectExact = useDisconnectExact();
   const manageWebhooks = useManageWebhooks();
@@ -20,7 +21,10 @@ export function ExactOnlineSettings() {
   const syncContacts = useSyncContacts();
   const syncQuotes = useSyncQuotes();
   const syncItems = useSyncItems();
+  const testConnection = useTestExactConnection();
+  const checkWebhooks = useCheckWebhookStatus();
   const [connectingDivisionId, setConnectingDivisionId] = useState<string | null>(null);
+  const [webhookResults, setWebhookResults] = useState<Record<string, any>>({});
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "exact-connected") {
@@ -80,21 +84,28 @@ export function ExactOnlineSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Exact Online Koppeling</h2>
-        <p className="text-sm text-muted-foreground">
-          Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie van klanten, contactpersonen, offertes, artikelen en facturen.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Exact Online Koppeling</h2>
+          <p className="text-sm text-muted-foreground">
+            Koppel je Abitare vestigingen aan Exact Online administraties voor automatische synchronisatie.
+          </p>
+        </div>
+        {queueStatus && (queueStatus.pending > 0 || queueStatus.processing > 0) && (
+          <Badge variant="secondary" className="gap-1">
+            <Activity className="h-3 w-3" />
+            {queueStatus.pending + queueStatus.processing} in queue
+          </Badge>
+        )}
       </div>
 
-      <Card className="border-blue-200 bg-blue-50/50">
+      <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex items-start gap-3 pt-4">
-          <ExternalLink className="h-5 w-5 text-blue-600 mt-0.5" />
+          <Zap className="h-5 w-5 text-primary mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium text-blue-900">Hoe werkt het?</p>
-            <p className="text-blue-700 mt-1">
-              Klik op "Koppelen" bij een vestiging om in te loggen bij Exact Online.
-              Na autorisatie wordt de verbinding automatisch opgeslagen en kun je klanten en facturen synchroniseren.
+            <p className="font-medium">Automatische synchronisatie actief</p>
+            <p className="text-muted-foreground mt-1">
+              Wijzigingen aan klanten, orders en offertes worden automatisch gesynchroniseerd met Exact Online.
             </p>
           </div>
         </CardContent>
@@ -181,6 +192,62 @@ export function ExactOnlineSettings() {
                         </span>
                       )}
                     </div>
+
+                    {/* Test Connection & Webhook Status */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testConnection.mutate(division.id)}
+                        disabled={testConnection.isPending}
+                      >
+                        {testConnection.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <ShieldCheck className="h-4 w-4 mr-2" />
+                        )}
+                        Test verbinding
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const result = await checkWebhooks.mutateAsync(division.id);
+                            setWebhookResults((prev) => ({ ...prev, [division.id]: result }));
+                            const count = result.subscriptions?.length || 0;
+                            if (count > 0) {
+                              toast.success(`${count} webhook subscriptions actief`);
+                            } else {
+                              toast.warning("Geen webhook subscriptions gevonden. Registreer opnieuw.");
+                            }
+                          } catch (err: any) {
+                            toast.error(`Webhook check mislukt: ${err.message}`);
+                          }
+                        }}
+                        disabled={checkWebhooks.isPending}
+                      >
+                        {checkWebhooks.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Bell className="h-4 w-4 mr-2" />
+                        )}
+                        Controleer webhooks
+                      </Button>
+                    </div>
+
+                    {webhookResults[division.id] && (
+                      <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                        {webhookResults[division.id].subscriptions?.length > 0 ? (
+                          <div>
+                            <span className="font-medium text-foreground">Actieve topics: </span>
+                            {webhookResults[division.id].subscriptions.map((s: any) => s.Topic).join(", ")}
+                          </div>
+                        ) : (
+                          <span>Geen actieve webhook subscriptions</span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Customer Sync Controls */}
                     <SyncBlock
