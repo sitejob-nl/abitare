@@ -28,13 +28,23 @@ const LEAVE_TYPES = [
 export { LEAVE_TYPES };
 
 export function useLeaveRequests() {
+  const { user, roles } = useAuth();
+  const isManager = roles.includes("admin") || roles.includes("manager");
+
   return useQuery({
-    queryKey: ["leave-requests"],
+    queryKey: ["leave-requests", user?.id, isManager],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("leave_requests")
         .select("*")
         .order("start_date", { ascending: false });
+
+      // Non-managers only see their own requests
+      if (!isManager && user) {
+        query = query.eq("user_id", user.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
