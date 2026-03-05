@@ -136,11 +136,90 @@ export function ScheduleOutlookEvent({
     }
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
+
+  const checkOutlookSync = async () => {
+    if (!outlookEventId) return;
+    setIsSyncing(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+
+      const { data: eventData, error } = await supabase.functions.invoke("microsoft-api", {
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        body: {
+          endpoint: `/me/events/${outlookEventId}?$select=start,end`,
+          method: "GET",
+        },
+      });
+
+      if (error || !eventData?.start?.dateTime) {
+        setSyncWarning("Outlook event niet gevonden. Mogelijk verwijderd.");
+        return;
+      }
+
+      const outlookDate = eventData.start.dateTime.split("T")[0];
+      if (expectedInstallationDate && outlookDate !== expectedInstallationDate) {
+        setSyncWarning(`Outlook datum (${new Date(outlookDate).toLocaleDateString("nl-NL")}) wijkt af van de montagedatum.`);
+      } else {
+        setSyncWarning(null);
+        toast({ title: "Kalender in sync", description: "Outlook event komt overeen met de montagedatum." });
+      }
+    } catch (err) {
+      console.error("Sync check error:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const syncFromOutlook = async () => {
+    if (!outlookEventId || !orderId) return;
+    setIsSyncing(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+
+      const { data: eventData } = await supabase.functions.invoke("microsoft-api", {
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        body: {
+          endpoint: `/me/events/${outlookEventId}?$select=start`,
+          method: "GET",
+        },
+      });
+
+      if (eventData?.start?.dateTime) {
+        const outlookDate = eventData.start.dateTime.split("T")[0];
+        await supabase.from("orders").update({ expected_installation_date: outlookDate }).eq("id", orderId);
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+        setSyncWarning(null);
+        toast({ title: "Datum gesynchroniseerd", description: `Montagedatum bijgewerkt naar ${new Date(outlookDate).toLocaleDateString("nl-NL")}.` });
+      }
+    } catch (err) {
+      toast({ title: "Sync mislukt", description: "Kon datum niet ophalen uit Outlook.", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (outlookEventId) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Calendar className="h-4 w-4 text-primary" />
-        <span>Ingepland in Outlook</span>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Calendar className="h-4 w-4 text-primary" />
+          <span>Ingepland in Outlook</span>
+          <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={checkOutlookSync} disabled={isSyncing}>
+            {isSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Controleer sync"}
+          </Button>
+        </div>
+        {syncWarning && (
+          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 px-2 py-1 rounded">
+            <span>{syncWarning}</span>
+            <Button variant="ghost" size="sm" className="h-5 text-xs px-1" onClick={syncFromOutlook} disabled={isSyncing}>
+              Overnemen
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
