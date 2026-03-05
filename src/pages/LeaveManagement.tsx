@@ -186,7 +186,7 @@ export default function LeaveManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                             onClick={() => handleApprove(req.id)}
                             title="Goedkeuren"
                           >
@@ -195,7 +195,7 @@ export default function LeaveManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                             onClick={() => handleReject(req.id)}
                             title="Afkeuren"
                           >
