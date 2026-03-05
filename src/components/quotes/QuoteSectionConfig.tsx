@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
 import { Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
     workbench_material: section.workbench_material || "",
     workbench_edge: section.workbench_edge || "",
     workbench_color: section.workbench_color || "",
+    show_prices: (section as any).show_prices !== false,
   });
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
@@ -102,6 +104,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
       workbench_material: section.workbench_material || "",
       workbench_edge: section.workbench_edge || "",
       workbench_color: section.workbench_color || "",
+      show_prices: (section as any).show_prices !== false,
     });
 
     if (section.range_id) {
@@ -215,6 +218,7 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
         workbench_material: formData.workbench_material || null,
         workbench_edge: formData.workbench_edge || null,
         workbench_color: formData.workbench_color || null,
+        show_prices: formData.show_prices,
       });
 
       toast({
@@ -254,6 +258,18 @@ export function QuoteSectionConfig({ section, open, onOpenChange }: QuoteSection
               value={formData.description}
               onChange={(e) => handleChange("description", e.target.value)}
               rows={2}
+            />
+          </div>
+
+          {/* PDF price visibility per section */}
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+            <Label htmlFor="sectionShowPrices" className="text-sm font-normal">
+              Prijzen tonen in PDF voor deze sectie
+            </Label>
+            <Switch
+              id="sectionShowPrices"
+              checked={formData.show_prices}
+              onCheckedChange={(v) => setFormData(prev => ({ ...prev, show_prices: v }))}
             />
           </div>
 

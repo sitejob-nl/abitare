@@ -10,6 +10,7 @@ import {
   Package,
   Receipt,
   Calendar,
+  CalendarDays,
   Wrench,
   MessageSquare,
   FolderOpen,
@@ -61,6 +62,7 @@ const navSections: NavSection[] = [
     title: "Planning",
     items: [
       { icon: Calendar, label: "Agenda", href: "/calendar" },
+      { icon: CalendarDays, label: "Verlof", href: "/leave" },
       { icon: Wrench, label: "Montage", href: "/installation" },
       { icon: Ticket, label: "Service", href: "/service" },
     ],

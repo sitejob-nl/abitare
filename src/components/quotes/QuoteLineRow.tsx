@@ -1,10 +1,11 @@
 import { useState, Fragment } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
+import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, useCreateQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface QuoteLineRowProps {
   line: QuoteLine;
@@ -30,6 +31,7 @@ function formatDimension(value: number | null | undefined): string {
 export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: QuoteLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
+  const createLine = useCreateQuoteLine();
   
   const [quantity, setQuantity] = useState(line.quantity?.toString() || "1");
   const [unitPrice, setUnitPrice] = useState(line.unit_price?.toString() || "0");
@@ -42,6 +44,20 @@ export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: Quote
     } else if (field === "unit_price" && numValue !== line.unit_price) {
       updateLine.mutate({ id: line.id, quoteId, unit_price: numValue });
     }
+  };
+
+  const handleDuplicate = () => {
+    const { id, created_at, product, ...rest } = line as any;
+    createLine.mutate(
+      {
+        ...rest,
+        quote_id: quoteId,
+        sort_order: (line.sort_order || 0) + 1,
+      },
+      {
+        onSuccess: () => toast({ title: "Regel gedupliceerd" }),
+      }
+    );
   };
 
   const handleDelete = () => {
@@ -123,15 +139,27 @@ export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: Quote
           {formatCurrency(displayTotal)}
         </TableCell>
         <TableCell className="w-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-            onClick={handleDelete}
-            disabled={deleteLine.isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+              onClick={handleDuplicate}
+              disabled={createLine.isPending}
+              title="Dupliceren (F7)"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+              onClick={handleDelete}
+              disabled={deleteLine.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
 
