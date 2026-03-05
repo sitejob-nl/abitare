@@ -98,6 +98,7 @@ type TicketPriority = "laag" | "normaal" | "hoog" | "urgent";
 
 export default function ServiceTicketDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: ticket, isLoading } = useServiceTicket(id);
   const { data: users = [] } = useProfiles();
   const { data: customers = [] } = useCustomers({ limit: 200 });
@@ -108,6 +109,7 @@ export default function ServiceTicketDetail() {
   const addNote = useAddTicketNote();
   const assignUser = useAssignUser();
   const unassignUser = useUnassignUser();
+  const createQuote = useCreateQuote();
   const { toast } = useToast();
 
   const [noteContent, setNoteContent] = useState("");
