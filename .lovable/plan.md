@@ -1,145 +1,65 @@
 
 
-## Plan: Alle 5 Exact Online API-verbeterpunten implementeren
+## Plan: 13 Evolution prijsgroepen + kleuren importeren + filter fix
 
-### Overzicht
+### Model-koppeling: per kleur-record (niet per prijsgroep)
 
-5 verbeterpunten in scope:
-1. **SalesInvoices API** i.p.v. SalesEntries
-2. **Contactpersonen** synchronisatie via `/crm/Contacts`
-3. **Offertes** synchronisatie via `/crm/Quotations`
-4. **Artikelen** synchronisatie via `/logistics/Items`
-5. **Webhook topics** uitbreiden + daadwerkelijke data-sync bij events
+Goed punt over E7/E9. De simpelste en meest correcte oplossing: **model_code op `price_group_colors` level**, niet op `price_groups`. Redenen:
 
-### Database migratie
+- E7 heeft kleuren die bij Natural horen EN kleuren die bij Palio horen — per kleur-record is dat eenduidig
+- E2 Rovere Nodato (Metropolis) vs E5 Rovere Nodato (Palio) worden zo ook correct onderscheiden
+- Geen array-kolom nodig, gewoon een simpele `text` per kleur-record
+- Filteren in de wizard werkt direct: `WHERE price_group_id = X AND model_code = Y`
 
-Nieuwe kolommen toevoegen:
+### Database wijzigingen
 
-```sql
--- Customers: Exact contact ID voor contactpersonen-sync
-ALTER TABLE customers ADD COLUMN exact_contact_id text;
+**Migratie 1**: Kolom `model_code text` toevoegen aan `price_group_colors`
 
--- Quotes: Exact quotation ID + nummer
-ALTER TABLE quotes ADD COLUMN exact_quotation_id text;
-ALTER TABLE quotes ADD COLUMN exact_quotation_number text;
+**Data insert**: 
+- 13 `price_groups` records (E1-E10 + A + B + C, collection = "Evolution")
+- ~250+ `price_group_colors` records met per record: kleurcode, kleurnaam, material_type, model_code
 
--- Products: Exact item ID voor artikelen-sync
-ALTER TABLE products ADD COLUMN exact_item_id text;
+### Data overzicht
+
+| Prijsgroep | Material | Model(len) in kleur-records | is_glass |
+|---|---|---|---|
+| E1 | Termo Strutturato | Metropolis | false |
+| E2 | Termo Strutt / Laminato / PET | Metropolis | false |
+| E3 | PET Millerighe / Laccato | Metropolis | false |
+| E4 | Fenix | Metropolis | false |
+| E5 | Legno Frassino / Rovere | Palio | false |
+| E6 | Laccato Opaco | Color Trend | false |
+| E7 | Impiallacciato / Laccato Poro Chiuso | **Natural** of **Palio** (per kleur) | false |
+| E8 | Laccato Lucido Spazzolato | Color Trend | false |
+| E9 | Laccato Opaco Deluxe / Impiallacciato | **Color Trend** of **Natural** (per kleur) | false |
+| E10 | Impiallacciato Cannettato / Doghe | Natural | false |
+| A | Vetro / HPL / Neolith | Aliant | true |
+| B | Vetro / HPL / Neolith | Aliant | true |
+| C | Vetro / HPL / Neolith | Aliant | true |
+
+E8 = zelfde kleurnamen als E6, maar `material_type = "Laccato Lucido Spazzolato"`.
+A/B/C = identieke kleurenlijst, elk als eigen records.
+
+### Code fix: StosaConfigPanel.tsx (regel 43)
+
+Huidige code:
+```ts
+const activeFrontColors = pgFrontColors.length > 0 ? pgFrontColors : frontColors;
 ```
 
-Geen `invoices` tabel gevonden — facturen worden via `orders.exact_invoice_id` bijgehouden. Dit blijft zo, maar de waarde wordt nu een Exact `InvoiceID` GUID i.p.v. een `EntryNumber`.
+Wordt:
+```ts
+const activeFrontColors = priceGroupId ? pgFrontColors : frontColors;
+```
 
-### Stap 1: Factuur-sync naar SalesInvoices API
+Als `priceGroupId` is geselecteerd maar er zijn geen kleuren, toon een melding "Geen kleuren gevonden voor deze prijsgroep" in plaats van alle kleuren als fallback. Zelfde voor corpus.
 
-**Bestand:** `supabase/functions/exact-sync-invoices/index.ts`
-
-Wijzigingen:
-- Vervang `SalesEntries` + `SalesEntryLines` interfaces door `SalesInvoices` + `SalesInvoiceLines`
-- POST endpoint wordt `/salesinvoice/SalesInvoices` met geneste `SalesInvoiceLines`
-- Regels krijgen `Item` (Exact item GUID als beschikbaar), `Quantity`, `NetPrice`, `Description`, `VATCode`
-- Fallback naar `GLAccount` als er geen `exact_item_id` gekoppeld is aan het product
-- Na succesvolle POST: sla `InvoiceID` op in `orders.exact_invoice_id` en `InvoiceNumber` als referentie
-- Verwijder `mapToExactSalesEntry` functie, vervang door `mapToExactSalesInvoice`
-- Journal code selectie: zoek Journal met Type 70 (verkoopfactuurjournaal) i.p.v. Type 50/20
-
-### Stap 2: Contactpersonen synchronisatie
-
-**Nieuw bestand:** `supabase/functions/exact-sync-contacts/index.ts`
-
-Acties: `push`, `pull`, `sync`
-
-**Push** (klant → Exact):
-- Per customer met `exact_account_id`: POST/PUT naar `/crm/Contacts`
-- Map: `first_name` → `FirstName`, `last_name` → `LastName`, `email` → `Email`, `phone` → `BusinessPhone`, `mobile` → `BusinessMobile`, `city` → `City`, `postal_code` → `Postcode`
-- Sla `exact_contact_id` op na POST
-
-**Pull** (Exact → klant):
-- GET `/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact`
-- Match op `Account` GUID → lokale customer via `exact_account_id`
-- Update contactgegevens als `IsMainContact = true`
-
-**Config:** Voeg `exact-sync-contacts` toe aan `supabase/config.toml` met `verify_jwt = false`
-
-### Stap 3: Offertes synchronisatie
-
-**Nieuw bestand:** `supabase/functions/exact-sync-quotes/index.ts`
-
-Acties: `push`, `pull_status`
-
-**Push:**
-- Per quote zonder `exact_quotation_id`: POST naar `/crm/Quotations`
-- Map: `customer.exact_account_id` → `OrderAccount`, `quote_date` → `QuotationDate`, `valid_until` → `ClosingDate`, `reference` → `Description`
-- Geneste `QuotationLines` uit `quote_lines` (filter `is_group_header`): `Description`, `Quantity`, `UnitPrice`, optioneel `Item` (via `product.exact_item_id`)
-- Sla `QuotationID` en `QuotationNumber` op
-
-**Pull status:**
-- GET bestaande quotations, update lokale status bij accept/reject in Exact
-
-**Config:** Voeg `exact-sync-quotes` toe aan `supabase/config.toml`
-
-### Stap 4: Artikelen synchronisatie
-
-**Nieuw bestand:** `supabase/functions/exact-sync-items/index.ts`
-
-Acties: `push`, `pull`, `sync`
-
-**Push:**
-- Per product zonder `exact_item_id`: POST naar `/logistics/Items`
-- Map: `article_code` → `Code`, `name` → `Description`, `base_price` als `CostPriceStandard`, `IsSalesItem: true`
-- Sla `exact_item_id` op
-
-**Pull:**
-- Bulk GET `/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem`
-- Match op `Code` ↔ `article_code`, update of insert
-
-**Config:** Voeg `exact-sync-items` toe aan `supabase/config.toml`
-
-### Stap 5: Webhook topics uitbreiden + processing
-
-**Bestand:** `supabase/functions/exact-webhooks-manage/index.ts`
-- Voeg topics toe: `"SalesOrder.SalesOrders"`, `"Logistics.Items"`, `"CRM.Quotations"`
-
-**Bestand:** `supabase/functions/exact-webhook/index.ts`
-- Voeg cases toe in de switch:
-  - `SalesOrder.SalesOrders`: bij Create/Update → fetch order data van Exact, update lokale `orders` tabel (`exact_sales_order_id`, status)
-  - `Logistics.Items`: bij Create/Update → fetch item, upsert product met matching `article_code`
-  - `CRM.Quotations`: bij Update → fetch quotation status, update lokale quote status
-  - `CRM.Accounts` Create/Update → fetch account data, upsert customer (nu alleen logging)
-  - `SalesInvoice.SalesInvoices` Create/Update → fetch invoice, update betaalstatus
-
-Per webhook processing: haal het record op via GET `{ExactOnlineEndpoint}` met de access token en sync de data.
-
-### Stap 6: Frontend hooks
-
-**Bestand:** `src/hooks/useExactOnline.ts`
-
-Toevoegen:
-- `useSyncContacts` — mutation voor `exact-sync-contacts`
-- `useSyncQuotes` — mutation voor `exact-sync-quotes`
-- `useSyncItems` — mutation voor `exact-sync-items`
-
-### Stap 7: Frontend settings UI
-
-**Bestand:** `src/components/settings/ExactOnlineSettings.tsx`
-
-Sync-blokken uitbreiden met:
-- **Contactpersonen sync** (push/pull/sync buttons)
-- **Offertes sync** (push naar Exact / status ophalen)
-- **Artikelen sync** (push/pull/sync buttons)
-- Bestaand klanten-blok en webhooks behouden
-
-### Bestanden overzicht
+### Bestanden
 
 | Actie | Bestand |
 |---|---|
-| Migratie | Kolommen: `customers.exact_contact_id`, `quotes.exact_quotation_id/number`, `products.exact_item_id` |
-| Refactor | `supabase/functions/exact-sync-invoices/index.ts` (SalesEntries → SalesInvoices) |
-| Nieuw | `supabase/functions/exact-sync-contacts/index.ts` |
-| Nieuw | `supabase/functions/exact-sync-quotes/index.ts` |
-| Nieuw | `supabase/functions/exact-sync-items/index.ts` |
-| Refactor | `supabase/functions/exact-webhooks-manage/index.ts` (3 extra topics) |
-| Refactor | `supabase/functions/exact-webhook/index.ts` (daadwerkelijke data-sync) |
-| Refactor | `src/hooks/useExactOnline.ts` (3 nieuwe mutations) |
-| Refactor | `src/components/settings/ExactOnlineSettings.tsx` (3 nieuwe sync-blokken) |
-| Config | `supabase/config.toml` (3 nieuwe functies) |
+| Migratie | `price_group_colors`: kolom `model_code text` toevoegen |
+| Data insert | 13 `price_groups` records |
+| Data insert | ~250+ `price_group_colors` records met model_code per kleur |
+| Code fix | `StosaConfigPanel.tsx` — geen fallback bij geselecteerde prijsgroep |
 
