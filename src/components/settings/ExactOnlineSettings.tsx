@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download, Users, FileText, Package } from "lucide-react";
+import { Loader2, Link2, Unlink, ExternalLink, CheckCircle2, AlertCircle, Bell, BellOff, RefreshCw, Upload, Download, Users, FileText, Package, Zap, ShieldCheck, Activity } from "lucide-react";
 import { useDivisions } from "@/hooks/useDivisions";
-import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers, useSyncContacts, useSyncQuotes, useSyncItems } from "@/hooks/useExactOnline";
+import { useExactOnlineConnections, useRegisterExactTenant, useDisconnectExact, useManageWebhooks, useSyncCustomers, useSyncContacts, useSyncQuotes, useSyncItems, useExactSyncQueueStatus, useTestExactConnection, useCheckWebhookStatus } from "@/hooks/useExactOnline";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ export function ExactOnlineSettings() {
   const queryClient = useQueryClient();
   const { data: divisions, isLoading: divisionsLoading } = useDivisions();
   const { data: connections, isLoading: connectionsLoading } = useExactOnlineConnections();
+  const { data: queueStatus } = useExactSyncQueueStatus();
   const registerTenant = useRegisterExactTenant();
   const disconnectExact = useDisconnectExact();
   const manageWebhooks = useManageWebhooks();
@@ -20,7 +21,10 @@ export function ExactOnlineSettings() {
   const syncContacts = useSyncContacts();
   const syncQuotes = useSyncQuotes();
   const syncItems = useSyncItems();
+  const testConnection = useTestExactConnection();
+  const checkWebhooks = useCheckWebhookStatus();
   const [connectingDivisionId, setConnectingDivisionId] = useState<string | null>(null);
+  const [webhookResults, setWebhookResults] = useState<Record<string, any>>({});
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "exact-connected") {
