@@ -111,6 +111,7 @@ const QuoteDetail = () => {
     // Calculate totals from sections
     let subtotalProducts = 0;
     let subtotalMontage = 0;
+    const vatByRate = new Map<number, number>();
 
     sections.forEach((section) => {
       const sectionTotal = section.quote_lines?.reduce(
@@ -118,16 +119,33 @@ const QuoteDetail = () => {
         0
       ) || 0;
 
+      const discountAmt = section.discount_percentage 
+        ? (sectionTotal * (section.discount_percentage || 0)) / 100
+        : (section.discount_amount || 0);
+      const sectionNet = sectionTotal - discountAmt;
+      const discFraction = sectionTotal > 0 ? sectionNet / sectionTotal : 1;
+
+      section.quote_lines?.forEach((line) => {
+        const rate = line.vat_rate ?? 21;
+        const lineNet = (line.line_total || 0) * discFraction;
+        vatByRate.set(rate, (vatByRate.get(rate) || 0) + lineNet);
+      });
+
       if (section.section_type === "montage") {
-        subtotalMontage += sectionTotal;
+        subtotalMontage += sectionNet;
       } else {
-        subtotalProducts += sectionTotal;
+        subtotalProducts += sectionNet;
       }
     });
 
     const discountAmount = quote?.discount_amount || 0;
     const totalExclVat = subtotalProducts + subtotalMontage - discountAmount;
-    const totalVat = totalExclVat * 0.21;
+    const subBefore = subtotalProducts + subtotalMontage;
+    const qFraction = subBefore > 0 ? totalExclVat / subBefore : 1;
+    let totalVat = 0;
+    vatByRate.forEach((base, rate) => {
+      totalVat += base * qFraction * (rate / 100);
+    });
     const totalInclVat = totalExclVat + totalVat;
 
     try {

@@ -486,6 +486,7 @@ export function calculateTotals(
 } {
   let subtotalProducts = 0;
   let subtotalMontage = 0;
+  const vatByRate = new Map<number, number>();
 
   sections.forEach((section) => {
     const sectionTotal = section.quote_lines?.reduce(
@@ -495,6 +496,14 @@ export function calculateTotals(
 
     const sectionDiscount = section.discount_amount || 0;
     const sectionNet = sectionTotal - sectionDiscount;
+    const discountFraction = sectionTotal > 0 ? sectionNet / sectionTotal : 1;
+
+    // Accumulate VAT per rate
+    section.quote_lines?.forEach((line) => {
+      const rate = line.vat_rate ?? 21;
+      const lineNetContribution = (line.line_total || 0) * discountFraction;
+      vatByRate.set(rate, (vatByRate.get(rate) || 0) + lineNetContribution);
+    });
 
     if (section.section_type === "montage") {
       subtotalMontage += sectionNet;
@@ -505,7 +514,17 @@ export function calculateTotals(
 
   const discountAmount = quoteDiscount;
   const subtotalExclVat = subtotalProducts + subtotalMontage - discountAmount;
-  const totalVat = subtotalExclVat * 0.21;
+  const subtotalBeforeDiscount = subtotalProducts + subtotalMontage;
+  const quoteFraction = subtotalBeforeDiscount > 0 ? subtotalExclVat / subtotalBeforeDiscount : 1;
+  
+  let totalVat = 0;
+  const vatBreakdown: { rate: number; base: number; vat: number }[] = [];
+  vatByRate.forEach((base, rate) => {
+    const adjustedBase = base * quoteFraction;
+    const vat = adjustedBase * (rate / 100);
+    totalVat += vat;
+    vatBreakdown.push({ rate, base: adjustedBase, vat });
+  });
   const totalInclVat = subtotalExclVat + totalVat;
 
   return {
@@ -515,6 +534,7 @@ export function calculateTotals(
     subtotalExclVat,
     totalVat,
     totalInclVat,
+    vatBreakdown,
   };
 }
 
@@ -567,9 +587,12 @@ export function drawTotalsSection(
   doc.text(formatCurrency(totals.subtotalExclVat), valueX, yPos, { align: "right" });
   yPos += 5;
 
-  doc.text("BTW 21%:", labelX, yPos);
-  doc.text(formatCurrency(totals.totalVat), valueX, yPos, { align: "right" });
-  yPos += 6;
+  const vatBreakdown = totals.vatBreakdown || [{ rate: 21, vat: totals.totalVat }];
+  vatBreakdown.forEach(({ rate, vat }) => {
+    doc.text(`BTW ${rate}%:`, labelX, yPos);
+    doc.text(formatCurrency(vat), valueX, yPos, { align: "right" });
+    yPos += 5;
+  });
 
   // Double line before total
   doc.setLineWidth(0.3);

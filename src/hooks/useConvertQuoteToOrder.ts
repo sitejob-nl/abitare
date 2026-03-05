@@ -99,6 +99,7 @@ export function useConvertQuoteToOrder() {
               discount_description: quoteSection.discount_description,
               range_id: quoteSection.range_id,
               color_id: quoteSection.color_id,
+              price_group_id: quoteSection.price_group_id,
               front_number: quoteSection.front_number,
               front_color: quoteSection.front_color,
               corpus_color: quoteSection.corpus_color,
@@ -114,6 +115,9 @@ export function useConvertQuoteToOrder() {
               workbench_color: quoteSection.workbench_color,
               configuration: quoteSection.configuration,
               description: quoteSection.description,
+              model_code: (quoteSection as any).model_code || null,
+              model_name: (quoteSection as any).model_name || null,
+              supplier_id: (quoteSection as any).supplier_id || null,
             })
             .select()
             .single();
@@ -155,6 +159,7 @@ export function useConvertQuoteToOrder() {
             discount_percentage: line.discount_percentage,
             vat_rate: line.vat_rate,
             line_total: line.line_total,
+            supplier_id: line._section?.supplier_id || null,
             configuration: {
               ...(typeof line.configuration === 'object' && line.configuration !== null ? line.configuration : {}),
               range_override_id: line.range_override_id || null,
