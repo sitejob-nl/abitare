@@ -16,6 +16,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoftConnection";
+import { useCustomerEmails } from "@/hooks/useCustomerEmails";
 import { ComposeEmailDialog } from "@/components/customers/ComposeEmailDialog";
 import { ComposeWhatsAppDialog } from "@/components/customers/ComposeWhatsAppDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +46,16 @@ function useCommunicationLog(orderId: string) {
   });
 }
 
+type TimelineItem = {
+  id: string;
+  type: "email" | "whatsapp" | "note";
+  direction: "inbound" | "outbound";
+  subject: string;
+  preview: string;
+  date: Date;
+  source: "log" | "graph";
+};
+
 function getTypeIcon(type: string, direction: string) {
   if (type === "whatsapp") {
     return direction === "outbound" ? (
@@ -69,11 +80,59 @@ export function OrderCommunicationTab({
 }: OrderCommunicationTabProps) {
   const { data: connection, isLoading: connectionLoading } = useMicrosoftConnection();
   const { data: logs, isLoading: logsLoading } = useCommunicationLog(orderId);
+  const { data: graphEmails, isLoading: emailsLoading } = useCustomerEmails(customerEmail);
   const [showCompose, setShowCompose] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
 
-  const canSendEmail = !connectionLoading && connection?.is_active && customerEmail;
+  const microsoftConnected = !connectionLoading && connection?.is_active;
+  const canSendEmail = microsoftConnected && customerEmail;
   const canSendWhatsApp = !!customerPhone;
+
+  // Build merged timeline from communication_log + live Graph emails
+  const timeline: TimelineItem[] = [];
+
+  // Add communication_log entries
+  if (logs) {
+    for (const log of logs) {
+      timeline.push({
+        id: `log-${log.id}`,
+        type: log.type as "email" | "whatsapp",
+        direction: log.direction as "inbound" | "outbound",
+        subject: log.subject || "(geen onderwerp)",
+        preview: log.body_preview || "",
+        date: new Date(log.sent_at),
+        source: "log",
+      });
+    }
+  }
+
+  // Add live Microsoft Graph emails (filtered to avoid duplicates with logged ones)
+  if (microsoftConnected && graphEmails) {
+    const loggedMessageIds = new Set(
+      logs?.filter((l) => l.external_message_id).map((l) => l.external_message_id) || []
+    );
+
+    for (const email of graphEmails) {
+      if (!loggedMessageIds.has(email.id)) {
+        const isFromCustomer =
+          email.from?.emailAddress?.address?.toLowerCase() === customerEmail?.toLowerCase();
+        timeline.push({
+          id: `graph-${email.id}`,
+          type: "email",
+          direction: isFromCustomer ? "inbound" : "outbound",
+          subject: email.subject || "(geen onderwerp)",
+          preview: email.bodyPreview || "",
+          date: new Date(email.receivedDateTime),
+          source: "graph",
+        });
+      }
+    }
+  }
+
+  // Sort by date descending
+  timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const isLoading = logsLoading || (microsoftConnected && emailsLoading);
 
   return (
     <>
@@ -83,8 +142,8 @@ export function OrderCommunicationTab({
             <CardTitle className="text-base flex items-center gap-2">
               <Mail className="h-4 w-4" />
               Communicatie
-              {logs && logs.length > 0 && (
-                <Badge variant="secondary">{logs.length}</Badge>
+              {timeline.length > 0 && (
+                <Badge variant="secondary">{timeline.length}</Badge>
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -104,40 +163,45 @@ export function OrderCommunicationTab({
           </div>
         </CardHeader>
         <CardContent>
-          {logsLoading ? (
+          {isLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
-          ) : logs && logs.length > 0 ? (
+          ) : timeline.length > 0 ? (
             <ScrollArea className="max-h-[400px]">
               <div className="space-y-2">
-                {logs.map((log) => (
+                {timeline.map((item) => (
                   <div
-                    key={log.id}
+                    key={item.id}
                     className="flex items-start gap-3 rounded-lg bg-muted/50 p-3"
                   >
                     <div className="mt-0.5">
-                      {getTypeIcon(log.type, log.direction)}
+                      {getTypeIcon(item.type, item.direction)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">
-                          {log.subject || "(geen onderwerp)"}
+                          {item.subject}
                         </span>
-                        {log.type === "whatsapp" && (
+                        {item.type === "whatsapp" && (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-[#25D366] border-[#25D366]/30">
                             WhatsApp
                           </Badge>
                         )}
+                        {item.source === "graph" && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            Outlook
+                          </Badge>
+                        )}
                       </div>
-                      {log.body_preview && (
+                      {item.preview && (
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {log.body_preview}
+                          {item.preview}
                         </p>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {format(new Date(log.sent_at), "d MMM yyyy HH:mm", { locale: nl })}
+                        {format(item.date, "d MMM yyyy HH:mm", { locale: nl })}
                       </span>
                     </div>
                   </div>

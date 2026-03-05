@@ -193,6 +193,62 @@ export function ExactOnlineSettings() {
                       )}
                     </div>
 
+                    {/* Test Connection & Webhook Status */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testConnection.mutate(division.id)}
+                        disabled={testConnection.isPending}
+                      >
+                        {testConnection.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <ShieldCheck className="h-4 w-4 mr-2" />
+                        )}
+                        Test verbinding
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const result = await checkWebhooks.mutateAsync(division.id);
+                            setWebhookResults((prev) => ({ ...prev, [division.id]: result }));
+                            const count = result.subscriptions?.length || 0;
+                            if (count > 0) {
+                              toast.success(`${count} webhook subscriptions actief`);
+                            } else {
+                              toast.warning("Geen webhook subscriptions gevonden. Registreer opnieuw.");
+                            }
+                          } catch (err: any) {
+                            toast.error(`Webhook check mislukt: ${err.message}`);
+                          }
+                        }}
+                        disabled={checkWebhooks.isPending}
+                      >
+                        {checkWebhooks.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Bell className="h-4 w-4 mr-2" />
+                        )}
+                        Controleer webhooks
+                      </Button>
+                    </div>
+
+                    {webhookResults[division.id] && (
+                      <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                        {webhookResults[division.id].subscriptions?.length > 0 ? (
+                          <div>
+                            <span className="font-medium text-foreground">Actieve topics: </span>
+                            {webhookResults[division.id].subscriptions.map((s: any) => s.Topic).join(", ")}
+                          </div>
+                        ) : (
+                          <span>Geen actieve webhook subscriptions</span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Customer Sync Controls */}
                     <SyncBlock
                       title="Klanten synchroniseren"
