@@ -440,5 +440,6 @@ const QuoteDetail = () => {
       )}
     </AppLayout>
   );
+};
 
 export default QuoteDetail;
