@@ -33,23 +33,32 @@ export function useLeaveRequests() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("leave_requests")
-        .select(`
-          *,
-          profile:profiles!leave_requests_user_id_fkey(full_name, email),
-          approver:profiles!leave_requests_approved_by_fkey(full_name)
-        `)
+        .select("*")
         .order("start_date", { ascending: false });
 
-      if (error) {
-        // Fallback without joins if FK names don't match
-        const { data: fallback, error: err2 } = await supabase
-          .from("leave_requests")
-          .select("*")
-          .order("start_date", { ascending: false });
-        if (err2) throw err2;
-        return (fallback || []) as LeaveRequest[];
-      }
-      return (data || []) as LeaveRequest[];
+      if (error) throw error;
+
+      // Fetch profile names for all unique user_ids and approved_by
+      const userIds = new Set<string>();
+      (data || []).forEach((r) => {
+        userIds.add(r.user_id);
+        if (r.approved_by) userIds.add(r.approved_by);
+      });
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", Array.from(userIds));
+
+      const profileMap = new Map(
+        (profiles || []).map((p) => [p.id, p])
+      );
+
+      return (data || []).map((r) => ({
+        ...r,
+        profile: profileMap.get(r.user_id) || null,
+        approver: r.approved_by ? profileMap.get(r.approved_by) || null : null,
+      })) as LeaveRequest[];
     },
   });
 }

@@ -39,6 +39,7 @@ const ServiceTicketPublicForm = lazy(() => import("./pages/ServiceTicketPublicFo
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SetPassword = lazy(() => import("./pages/SetPassword"));
 const TradeplaceMessages = lazy(() => import("./pages/TradeplaceMessages"));
+const LeaveManagement = lazy(() => import("./pages/LeaveManagement"));
 const InstallerDashboard = lazy(() => import("./pages/installer/InstallerDashboard"));
 const InstallerOrderDetail = lazy(() => import("./pages/installer/InstallerOrderDetail"));
 const WorkReportForm = lazy(() => import("./pages/installer/WorkReportForm"));
@@ -122,6 +123,7 @@ const App = () => (
               <Route path="/settings/tradeplace-messages" element={<ProtectedRoute><TradeplaceMessages /></ProtectedRoute>} />
               <Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
               <Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
+              <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
               
               {/* Installer routes */}
               <Route path="/monteur" element={<InstallerRoute><InstallerDashboard /></InstallerRoute>} />
