@@ -23,6 +23,9 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
     let subtotalMontage = 0;
     let totalSectionDiscounts = 0;
 
+    // Group VAT amounts by rate
+    const vatByRate = new Map<number, number>();
+
     sections.forEach((section) => {
       const sectionBruto = section.quote_lines?.reduce(
         (sum, line) => sum + (line.line_total || 0),
@@ -36,6 +39,14 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
       
       totalSectionDiscounts += sectionDiscountAmount;
       const sectionNetto = sectionBruto - sectionDiscountAmount;
+      const discountFraction = sectionBruto > 0 ? sectionNetto / sectionBruto : 1;
+
+      // Accumulate VAT per rate from individual lines
+      section.quote_lines?.forEach((line) => {
+        const rate = line.vat_rate ?? 21;
+        const lineNetContribution = (line.line_total || 0) * discountFraction;
+        vatByRate.set(rate, (vatByRate.get(rate) || 0) + lineNetContribution);
+      });
 
       if (section.section_type === "montage") {
         subtotalMontage += sectionNetto;
@@ -47,7 +58,17 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
     // After section discounts, apply quote-level discount
     const subtotalAfterSections = subtotalProducts + subtotalMontage;
     const subtotalExclVat = subtotalAfterSections - discountAmount;
-    const totalVat = subtotalExclVat * 0.21;
+    
+    // Calculate VAT per rate, applying quote-level discount proportionally
+    const quoteLevelFraction = subtotalAfterSections > 0 ? subtotalExclVat / subtotalAfterSections : 1;
+    let totalVat = 0;
+    const vatBreakdown: { rate: number; base: number; vat: number }[] = [];
+    vatByRate.forEach((base, rate) => {
+      const adjustedBase = base * quoteLevelFraction;
+      const vat = adjustedBase * (rate / 100);
+      totalVat += vat;
+      vatBreakdown.push({ rate, base: adjustedBase, vat });
+    });
     const totalInclVat = subtotalExclVat + totalVat;
 
     return {
@@ -58,6 +79,7 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
       subtotalExclVat,
       totalVat,
       totalInclVat,
+      vatBreakdown,
     };
   }, [sections, discountAmount]);
 
@@ -100,10 +122,12 @@ export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: Quot
             <span className="font-medium">{formatCurrency(totals.subtotalExclVat)}</span>
           </div>
 
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">BTW 21%</span>
-            <span>{formatCurrency(totals.totalVat)}</span>
-          </div>
+          {totals.vatBreakdown.map(({ rate, vat }) => (
+            <div key={rate} className="flex justify-between text-sm">
+              <span className="text-muted-foreground">BTW {rate}%</span>
+              <span>{formatCurrency(vat)}</span>
+            </div>
+          ))}
 
           <Separator />
 
