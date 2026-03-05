@@ -139,15 +139,27 @@ export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: Quote
           {formatCurrency(displayTotal)}
         </TableCell>
         <TableCell className="w-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-            onClick={handleDelete}
-            disabled={deleteLine.isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+              onClick={handleDuplicate}
+              disabled={createLine.isPending}
+              title="Dupliceren (F7)"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+              onClick={handleDelete}
+              disabled={deleteLine.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
 
