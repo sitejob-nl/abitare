@@ -438,6 +438,7 @@ const QuoteDetail = () => {
           sections={sections}
         />
       )}
-};
+    </AppLayout>
+  );
 
 export default QuoteDetail;
