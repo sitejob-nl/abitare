@@ -1,10 +1,11 @@
 import { useState, Fragment } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
+import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, useCreateQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface QuoteLineRowProps {
   line: QuoteLine;
@@ -30,6 +31,7 @@ function formatDimension(value: number | null | undefined): string {
 export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: QuoteLineRowProps) {
   const updateLine = useUpdateQuoteLine();
   const deleteLine = useDeleteQuoteLine();
+  const createLine = useCreateQuoteLine();
   
   const [quantity, setQuantity] = useState(line.quantity?.toString() || "1");
   const [unitPrice, setUnitPrice] = useState(line.unit_price?.toString() || "0");
@@ -42,6 +44,20 @@ export function QuoteLineRow({ line, quoteId, lineNumber, subLines = [] }: Quote
     } else if (field === "unit_price" && numValue !== line.unit_price) {
       updateLine.mutate({ id: line.id, quoteId, unit_price: numValue });
     }
+  };
+
+  const handleDuplicate = () => {
+    const { id, created_at, product, ...rest } = line as any;
+    createLine.mutate(
+      {
+        ...rest,
+        quote_id: quoteId,
+        sort_order: (line.sort_order || 0) + 1,
+      },
+      {
+        onSuccess: () => toast({ title: "Regel gedupliceerd" }),
+      }
+    );
   };
 
   const handleDelete = () => {
