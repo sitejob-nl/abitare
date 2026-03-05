@@ -332,6 +332,7 @@ const OrderDetail = () => {
                   .join(", ") || undefined
               }
               outlookEventId={(order as any).outlook_event_id}
+              expectedInstallationDate={order.expected_installation_date}
             />
           </div>
           <div className="text-left sm:text-right">
