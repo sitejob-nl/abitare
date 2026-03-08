@@ -61,6 +61,9 @@ const invoiceTypeLabels: Record<InvoiceType, string> = {
 interface CreateInvoiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  parentOrderId?: string;
+  defaultInvoiceType?: InvoiceType;
+  defaultCustomerId?: string;
 }
 
 export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogProps) {
