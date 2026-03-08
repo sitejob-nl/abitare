@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
