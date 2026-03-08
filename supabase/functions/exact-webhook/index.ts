@@ -21,7 +21,9 @@ serve(async (req) => {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const content = await req.json();
+    const rawContent = await req.json();
+    // Defensive: Exact sends { Content: {...}, HashCode: "..." }, but Connect may unwrap
+    const content = rawContent.Content || rawContent;
     const { Topic, Division, Key, ExactOnlineEndpoint, EventAction } = content;
 
     console.log(`Received webhook: ${EventAction} on ${Topic} - Key: ${Key}`);

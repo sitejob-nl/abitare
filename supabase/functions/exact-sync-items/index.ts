@@ -130,10 +130,11 @@ async function pullItems(supabase: any, accessToken: string, baseUrl: string, ex
   const results = { success: true, matched: 0, skipped: 0, errors: [] as string[] };
 
   let hasMore = true;
-  let skipToken = "";
+  let nextPageUrl: string | null = `${baseUrl}/api/v1/${exactDivision}/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem&$top=1000`;
 
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem&$top=1000${skipToken}`;
+  while (hasMore && nextPageUrl) {
+    const url = nextPageUrl;
+    nextPageUrl = null;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
 
     if (!response.ok) { console.error("Failed to fetch items:", await response.text()); break; }

@@ -124,6 +124,7 @@ async function pushQuotes(supabase: any, accessToken: string, baseUrl: string, e
       const quotation: any = {
         OrderAccount: customer.exact_account_id,
         Description: (quote.reference || `Offerte #${quote.quote_number}`).substring(0, 100),
+        Currency: "EUR",
         QuotationLines: quotationLines,
       };
       if (quote.quote_date) quotation.QuotationDate = quote.quote_date;

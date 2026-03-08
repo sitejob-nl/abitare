@@ -45,6 +45,7 @@ serve(async (req) => {
   }
 
   try {
+    await requireAuthOrService(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 

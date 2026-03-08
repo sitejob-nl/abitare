@@ -142,10 +142,11 @@ async function pullContacts(supabase: any, accessToken: string, baseUrl: string,
 
   // Fetch contacts from Exact (paginated)
   let hasMore = true;
-  let skipToken = "";
+  let nextPageUrl: string | null = `${baseUrl}/api/v1/${exactDivision}/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact&$filter=IsMainContact eq true&$top=1000`;
 
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact&$filter=IsMainContact eq true&$top=1000${skipToken}`;
+  while (hasMore && nextPageUrl) {
+    const url = nextPageUrl;
+    nextPageUrl = null;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
 
     if (!response.ok) { console.error("Failed to fetch contacts:", await response.text()); break; }

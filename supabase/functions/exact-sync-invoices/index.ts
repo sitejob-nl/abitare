@@ -320,7 +320,7 @@ function mapToExactSalesInvoice(
   return {
     Journal: journalCode,
     OrderedBy: accountId,
-    OrderDate: order.order_date || new Date().toISOString().split("T")[0],
+    InvoiceDate: order.order_date || new Date().toISOString().split("T")[0],
     Description: `Factuur order #${order.order_number}`,
     YourRef: `ORD-${order.order_number}`,
     Currency: "EUR",
