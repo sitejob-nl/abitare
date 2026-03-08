@@ -9,15 +9,21 @@ interface ToastOptions {
 
 function toast(opts: ToastOptions) {
   const { title, description, variant } = opts;
+
   if (variant === "destructive") {
     sonnerToast.error(title ?? "Fout", { description });
-  } else {
-    sonnerToast.success(title ?? "", { description });
+    return;
   }
+
+  sonnerToast.success(title ?? "", { description });
 }
 
 function useToast() {
-  return { toast, toasts: [] as never[], dismiss: () => {} };
+  return {
+    toast,
+    toasts: [] as never[],
+    dismiss: () => {},
+  };
 }
 
 export { useToast, toast };
