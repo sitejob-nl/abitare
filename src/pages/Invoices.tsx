@@ -35,6 +35,14 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link, useNavigate } from "react-router-dom";
 
+const invoiceTypeLabels: Record<string, string> = {
+  standaard: "Standaard",
+  aanbetaling: "Aanbetaling",
+  restbetaling: "Restbetaling",
+  meerwerk: "Meerwerk",
+  creditnota: "Creditnota",
+};
+
 function formatCurrency(amount: number | null): string {
   if (amount === null) return "€ 0";
   return new Intl.NumberFormat("nl-NL", {
@@ -285,6 +293,7 @@ const Invoices = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order #</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Datum</TableHead>
                       <TableHead>Klant</TableHead>
                       <TableHead>Vestiging</TableHead>
@@ -316,6 +325,13 @@ const Invoices = () => {
                             >
                               #{invoice.order_number}
                             </Link>
+                          </TableCell>
+                          <TableCell>
+                            {invoice.invoice_type ? (
+                              <Badge variant="outline" className="text-xs">
+                                {invoiceTypeLabels[invoice.invoice_type] || invoice.invoice_type}
+                              </Badge>
+                            ) : "-"}
                           </TableCell>
                           <TableCell>
                             {invoice.order_date

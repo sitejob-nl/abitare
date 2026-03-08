@@ -1356,6 +1356,7 @@ export type Database = {
           invoice_city: string | null
           invoice_postal_code: string | null
           invoice_street_address: string | null
+          invoice_type: Database["public"]["Enums"]["invoice_type"] | null
           is_standalone_invoice: boolean | null
           margin_amount: number | null
           margin_percentage: number | null
@@ -1363,6 +1364,7 @@ export type Database = {
           order_date: string | null
           order_number: number
           outlook_event_id: string | null
+          parent_order_id: string | null
           payment_condition: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           project_id: string | null
@@ -1413,6 +1415,7 @@ export type Database = {
           invoice_city?: string | null
           invoice_postal_code?: string | null
           invoice_street_address?: string | null
+          invoice_type?: Database["public"]["Enums"]["invoice_type"] | null
           is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null
@@ -1420,6 +1423,7 @@ export type Database = {
           order_date?: string | null
           order_number?: number
           outlook_event_id?: string | null
+          parent_order_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           project_id?: string | null
@@ -1470,6 +1474,7 @@ export type Database = {
           invoice_city?: string | null
           invoice_postal_code?: string | null
           invoice_street_address?: string | null
+          invoice_type?: Database["public"]["Enums"]["invoice_type"] | null
           is_standalone_invoice?: boolean | null
           margin_amount?: number | null
           margin_percentage?: number | null
@@ -1477,6 +1482,7 @@ export type Database = {
           order_date?: string | null
           order_number?: number
           outlook_event_id?: string | null
+          parent_order_id?: string | null
           payment_condition?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           project_id?: string | null
@@ -1505,6 +1511,20 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_parent_order_id_fkey"
+            columns: ["parent_order_id"]
+            isOneToOne: false
+            referencedRelation: "installer_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_parent_order_id_fkey"
+            columns: ["parent_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
           {
@@ -5165,6 +5185,12 @@ export type Database = {
       communication_direction: "inbound" | "outbound"
       communication_type: "email" | "whatsapp" | "note"
       customer_type: "particulier" | "zakelijk"
+      invoice_type:
+        | "standaard"
+        | "aanbetaling"
+        | "restbetaling"
+        | "meerwerk"
+        | "creditnota"
       order_status:
         | "nieuw"
         | "bestel_klaar"
@@ -5337,6 +5363,13 @@ export const Constants = {
       communication_direction: ["inbound", "outbound"],
       communication_type: ["email", "whatsapp", "note"],
       customer_type: ["particulier", "zakelijk"],
+      invoice_type: [
+        "standaard",
+        "aanbetaling",
+        "restbetaling",
+        "meerwerk",
+        "creditnota",
+      ],
       order_status: [
         "nieuw",
         "bestel_klaar",

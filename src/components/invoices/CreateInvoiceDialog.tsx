@@ -48,21 +48,35 @@ interface InvoiceLine {
   vatRate: number;
 }
 
+type InvoiceType = "standaard" | "aanbetaling" | "restbetaling" | "meerwerk" | "creditnota";
+
+const invoiceTypeLabels: Record<InvoiceType, string> = {
+  standaard: "Standaard factuur",
+  aanbetaling: "Aanbetalingsfactuur",
+  restbetaling: "Restbetaling",
+  meerwerk: "Meerwerk",
+  creditnota: "Creditnota",
+};
+
 interface CreateInvoiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  parentOrderId?: string;
+  defaultInvoiceType?: InvoiceType;
+  defaultCustomerId?: string;
 }
 
-export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogProps) {
+export function CreateInvoiceDialog({ open, onOpenChange, parentOrderId, defaultInvoiceType, defaultCustomerId }: CreateInvoiceDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { activeDivisionId, user } = useAuth();
   const { data: customers } = useCustomers();
   
-  const [customerId, setCustomerId] = useState<string>("");
+  const [customerId, setCustomerId] = useState<string>(defaultCustomerId || "");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [paymentCondition, setPaymentCondition] = useState("14 dagen");
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(defaultInvoiceType || "standaard");
   const [internalNotes, setInternalNotes] = useState("");
   const [lines, setLines] = useState<InvoiceLine[]>([
     { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0, vatRate: 21 },
@@ -107,6 +121,8 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
           total_incl_vat: totalInclVat,
           amount_paid: 0,
           is_standalone_invoice: true,
+          invoice_type: invoiceType as any,
+          parent_order_id: parentOrderId || null,
           created_by: user?.id,
         })
         .select("id")
@@ -245,6 +261,21 @@ export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogP
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* Invoice Type */}
+          <div className="space-y-2">
+            <Label>Factuurtype</Label>
+            <Select value={invoiceType} onValueChange={(v) => setInvoiceType(v as InvoiceType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(invoiceTypeLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Date and Payment Condition */}

@@ -6,6 +6,7 @@ import { ClipboardList, FileCheck, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { OfflineQueueIndicator } from "@/components/pwa/OfflineQueueIndicator";
 
 interface InstallerLayoutProps {
   children: React.ReactNode;
@@ -36,14 +37,17 @@ export function InstallerLayout({ children }: InstallerLayoutProps) {
       {/* Mobile Header */}
       <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b bg-sidebar px-4 lg:hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <img src={logo} alt="Abitare" className="h-5" />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-white hover:bg-white/10"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          <OfflineQueueIndicator />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </Button>
+        </div>
       </header>
 
       {/* Mobile Menu */}

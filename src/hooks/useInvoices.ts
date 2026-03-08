@@ -82,6 +82,8 @@ export interface Invoice {
   exact_invoice_id: string | null;
   division_id: string | null;
   division_name: string | null;
+  invoice_type: string | null;
+  parent_order_id: string | null;
 }
 
 interface UseInvoicesOptions {
@@ -108,6 +110,8 @@ export function useInvoices(options: UseInvoicesOptions = {}) {
           payment_status,
           amount_paid,
           exact_invoice_id,
+          invoice_type,
+          parent_order_id,
           customers!inner(first_name, last_name, company_name),
           divisions(name)
         `)
@@ -142,6 +146,8 @@ export function useInvoices(options: UseInvoicesOptions = {}) {
           exact_invoice_id: order.exact_invoice_id,
           division_id: order.division_id,
           division_name: division?.name || null,
+          invoice_type: (order as any).invoice_type || null,
+          parent_order_id: (order as any).parent_order_id || null,
         };
       });
     },
