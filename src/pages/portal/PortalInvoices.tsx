@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import type { PortalData } from "@/hooks/usePortalData";
+import { formatCurrency } from "@/lib/utils";
 
 interface PortalContext {
   portalData: PortalData;
