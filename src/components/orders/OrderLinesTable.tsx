@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Package, Percent } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 interface OrderLine {
   id: string;
