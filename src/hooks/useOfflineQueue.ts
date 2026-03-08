@@ -85,6 +85,7 @@ export function useOfflineQueue() {
       if (error) throw error;
     } else if (operation === "update" && matchColumn && matchValue) {
       // Check for conflicts: fetch server version
+      // Check for conflicts: fetch server version
       const { data: serverData, error: fetchErr } = await supabase
         .from(table as any)
         .select("*")
@@ -94,11 +95,12 @@ export function useOfflineQueue() {
       if (fetchErr) throw fetchErr;
 
       // If server has updated_at newer than our mutation, it's a conflict
-      if (serverData?.updated_at && mutation.createdAt) {
-        const serverUpdated = new Date(serverData.updated_at).getTime();
+      const serverRecord = serverData as Record<string, unknown> | null;
+      if (serverRecord?.updated_at && mutation.createdAt) {
+        const serverUpdated = new Date(serverRecord.updated_at as string).getTime();
         const mutationCreated = new Date(mutation.createdAt).getTime();
         if (serverUpdated > mutationCreated) {
-          throw { conflict: true, serverVersion: serverData };
+          throw { conflict: true, serverVersion: serverRecord };
         }
       }
 
