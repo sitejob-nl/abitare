@@ -95,7 +95,7 @@ export function useOfflineQueue() {
       if (fetchErr) throw fetchErr;
 
       // If server has updated_at newer than our mutation, it's a conflict
-      const serverRecord = serverData as Record<string, unknown> | null;
+      const serverRecord = serverData as unknown as Record<string, unknown> | null;
       if (serverRecord?.updated_at && mutation.createdAt) {
         const serverUpdated = new Date(serverRecord.updated_at as string).getTime();
         const mutationCreated = new Date(mutation.createdAt).getTime();
