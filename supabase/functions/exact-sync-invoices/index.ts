@@ -37,7 +37,7 @@ interface ExactSalesInvoice {
   Description?: string;
   YourRef?: string;
   Currency: string;
-  OrderDate?: string;
+  InvoiceDate?: string;
   PaymentCondition?: string;
   SalesInvoiceLines: ExactSalesInvoiceLine[];
 }
