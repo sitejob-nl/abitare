@@ -48,6 +48,16 @@ interface InvoiceLine {
   vatRate: number;
 }
 
+type InvoiceType = "standaard" | "aanbetaling" | "restbetaling" | "meerwerk" | "creditnota";
+
+const invoiceTypeLabels: Record<InvoiceType, string> = {
+  standaard: "Standaard factuur",
+  aanbetaling: "Aanbetalingsfactuur",
+  restbetaling: "Restbetaling",
+  meerwerk: "Meerwerk",
+  creditnota: "Creditnota",
+};
+
 interface CreateInvoiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
