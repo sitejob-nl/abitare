@@ -40,6 +40,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SetPassword = lazy(() => import("./pages/SetPassword"));
 const TradeplaceMessages = lazy(() => import("./pages/TradeplaceMessages"));
 const LeaveManagement = lazy(() => import("./pages/LeaveManagement"));
+const Guide = lazy(() => import("./pages/Guide"));
 const InstallerDashboard = lazy(() => import("./pages/installer/InstallerDashboard"));
 const InstallerOrderDetail = lazy(() => import("./pages/installer/InstallerOrderDetail"));
 const WorkReportForm = lazy(() => import("./pages/installer/WorkReportForm"));
