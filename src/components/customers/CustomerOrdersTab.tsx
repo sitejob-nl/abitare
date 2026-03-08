@@ -4,6 +4,7 @@ import { nl } from "date-fns/locale";
 import { Package, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCustomerOrders } from "@/hooks/useCustomerOrders";
+import { formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 
 interface CustomerOrdersTabProps {
   customerId: string;
