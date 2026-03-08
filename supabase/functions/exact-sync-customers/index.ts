@@ -198,10 +198,11 @@ async function pullCustomersInternal(
   const results = { success: true, imported: 0, updated: 0, skipped: 0, errors: [] as string[] };
 
   let hasMore = true;
-  let skipToken = "";
+  let nextPageUrl: string | null = `${baseUrl}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000`;
   
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000${skipToken}`;
+  while (hasMore && nextPageUrl) {
+    const url = nextPageUrl;
+    nextPageUrl = null;
     
     const fetchResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
@@ -253,10 +254,8 @@ async function pullCustomersInternal(
     }
 
     const nextLink = responseData.d?.__next;
-    if (nextLink) {
-      const skipMatch = nextLink.match(/\$skiptoken=([^&]+)/);
-      skipToken = skipMatch ? `&$skiptoken=${skipMatch[1]}` : "";
-      hasMore = !!skipToken;
+    if (nextLink && accounts.length > 0) {
+      nextPageUrl = nextLink;
     } else {
       hasMore = false;
     }
