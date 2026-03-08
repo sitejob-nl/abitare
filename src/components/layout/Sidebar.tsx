@@ -35,7 +35,6 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   href: string;
-  badge?: number;
   menuKey: string;
 }
 
@@ -54,8 +53,8 @@ const navSections: NavSection[] = [
   {
     title: "Verkoop",
     items: [
-      { icon: Users, label: "Klanten", href: "/customers", badge: 3, menuKey: "customers" },
-      { icon: FileText, label: "Offertes", href: "/quotes", badge: 8, menuKey: "quotes" },
+      { icon: Users, label: "Klanten", href: "/customers", menuKey: "customers" },
+      { icon: FileText, label: "Offertes", href: "/quotes", menuKey: "quotes" },
       { icon: Package, label: "Orders", href: "/orders", menuKey: "orders" },
       { icon: Receipt, label: "Facturen", href: "/invoices", menuKey: "invoices" },
     ],
@@ -72,7 +71,7 @@ const navSections: NavSection[] = [
   {
     title: "Communicatie",
     items: [
-      { icon: MessageSquare, label: "Inbox", href: "/inbox", badge: 12, menuKey: "inbox" },
+      { icon: MessageSquare, label: "Inbox", href: "/inbox", menuKey: "inbox" },
     ],
   },
   {
@@ -234,11 +233,6 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
                   )}
                   <Icon className="h-5 w-5" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className="min-w-[20px] rounded-full bg-danger px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
-                      {item.badge}
-                    </span>
-                  )}
                 </Link>
               );
             })}
