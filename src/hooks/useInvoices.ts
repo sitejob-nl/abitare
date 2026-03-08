@@ -146,6 +146,8 @@ export function useInvoices(options: UseInvoicesOptions = {}) {
           exact_invoice_id: order.exact_invoice_id,
           division_id: order.division_id,
           division_name: division?.name || null,
+          invoice_type: (order as any).invoice_type || null,
+          parent_order_id: (order as any).parent_order_id || null,
         };
       });
     },
