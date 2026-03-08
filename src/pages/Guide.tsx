@@ -14,7 +14,6 @@ import {
   Receipt,
   Calendar,
   Wrench,
-  Ticket,
   Settings,
   ArrowRight,
   CheckCircle2,
