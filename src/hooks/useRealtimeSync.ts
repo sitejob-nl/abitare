@@ -32,22 +32,25 @@ export function useRealtimeSync() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const channel = supabase
-      .channel("realtime-sync")
-      .on(
+    const channel = supabase.channel("realtime-sync");
+
+    // Subscribe per table instead of schema-wide to reduce traffic
+    SUBSCRIBED_TABLES.forEach((table) => {
+      channel.on(
         "postgres_changes",
-        { event: "*", schema: "public" },
+        { event: "*", schema: "public", table },
         (payload) => {
-          const table = payload.table;
-          const queryKeys = TABLE_QUERY_MAP[table];
+          const queryKeys = TABLE_QUERY_MAP[payload.table];
           if (queryKeys) {
             queryKeys.forEach((key) => {
               queryClient.invalidateQueries({ queryKey: [key] });
             });
           }
         }
-      )
-      .subscribe();
+      );
+    });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
