@@ -1,179 +1,145 @@
 
 
-## Exact Online Integratie — Volledige Audit
+## Plan: Alle 5 Exact Online API-verbeterpunten implementeren
 
-Na grondige analyse van alle 11 Edge Functions, de frontend hooks, de database-schema en de API-referentie volgt hier het testrapport met bevindingen.
+### Overzicht
 
-### Architectuur Overzicht
+5 verbeterpunten in scope:
+1. **SalesInvoices API** i.p.v. SalesEntries
+2. **Contactpersonen** synchronisatie via `/crm/Contacts`
+3. **Offertes** synchronisatie via `/crm/Quotations`
+4. **Artikelen** synchronisatie via `/logistics/Items`
+5. **Webhook topics** uitbreiden + daadwerkelijke data-sync bij events
 
-De integratie bestaat uit:
+### Database migratie
 
-```text
-Frontend (useExactOnline.ts)
-    ↓ supabase.functions.invoke()
-Edge Functions (11 functies)
-    ↓ getExactTokenFromConnection()
-SiteJob Connect (token broker)
-    ↓ access_token
-Exact Online REST API (OData v3)
+Nieuwe kolommen toevoegen:
+
+```sql
+-- Customers: Exact contact ID voor contactpersonen-sync
+ALTER TABLE customers ADD COLUMN exact_contact_id text;
+
+-- Quotes: Exact quotation ID + nummer
+ALTER TABLE quotes ADD COLUMN exact_quotation_id text;
+ALTER TABLE quotes ADD COLUMN exact_quotation_number text;
+
+-- Products: Exact item ID voor artikelen-sync
+ALTER TABLE products ADD COLUMN exact_item_id text;
 ```
 
-Alle database-kolommen zijn aanwezig: `exact_account_id`, `exact_contact_id`, `exact_item_id`, `exact_quotation_id/number`, `exact_invoice_id`, `exact_sales_order_id/number`.
+Geen `invoices` tabel gevonden — facturen worden via `orders.exact_invoice_id` bijgehouden. Dit blijft zo, maar de waarde wordt nu een Exact `InvoiceID` GUID i.p.v. een `EntryNumber`.
 
----
+### Stap 1: Factuur-sync naar SalesInvoices API
 
-### Bevinding 1: Factuur-sync (SalesInvoices) — API-fout
+**Bestand:** `supabase/functions/exact-sync-invoices/index.ts`
 
-**Bestand:** `exact-sync-invoices/index.ts` regel 318-326
+Wijzigingen:
+- Vervang `SalesEntries` + `SalesEntryLines` interfaces door `SalesInvoices` + `SalesInvoiceLines`
+- POST endpoint wordt `/salesinvoice/SalesInvoices` met geneste `SalesInvoiceLines`
+- Regels krijgen `Item` (Exact item GUID als beschikbaar), `Quantity`, `NetPrice`, `Description`, `VATCode`
+- Fallback naar `GLAccount` als er geen `exact_item_id` gekoppeld is aan het product
+- Na succesvolle POST: sla `InvoiceID` op in `orders.exact_invoice_id` en `InvoiceNumber` als referentie
+- Verwijder `mapToExactSalesEntry` functie, vervang door `mapToExactSalesInvoice`
+- Journal code selectie: zoek Journal met Type 70 (verkoopfactuurjournaal) i.p.v. Type 50/20
 
-Het veld `OrderDate` wordt meegestuurd in de SalesInvoice POST, maar de Exact Online SalesInvoices API gebruikt `InvoiceDate` (niet `OrderDate`). `OrderDate` is geen geldig veld op SalesInvoices en zal genegeerd worden of een fout geven.
+### Stap 2: Contactpersonen synchronisatie
 
-Daarnaast: `OrderedBy` is correct voor SalesOrders maar voor SalesInvoices heet het verplichte klant-veld ook `OrderedBy` — dat klopt wel.
+**Nieuw bestand:** `supabase/functions/exact-sync-contacts/index.ts`
 
-**Fix:** Wijzig `OrderDate` → `InvoiceDate` in de `mapToExactSalesInvoice` functie.
+Acties: `push`, `pull`, `sync`
 
----
+**Push** (klant → Exact):
+- Per customer met `exact_account_id`: POST/PUT naar `/crm/Contacts`
+- Map: `first_name` → `FirstName`, `last_name` → `LastName`, `email` → `Email`, `phone` → `BusinessPhone`, `mobile` → `BusinessMobile`, `city` → `City`, `postal_code` → `Postcode`
+- Sla `exact_contact_id` op na POST
 
-### Bevinding 2: Factuur-sync — Ontbrekende `AmountFC` logica bij betaalstatus
+**Pull** (Exact → klant):
+- GET `/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact`
+- Match op `Account` GUID → lokale customer via `exact_account_id`
+- Update contactgegevens als `IsMainContact = true`
 
-**Bestand:** `exact-sync-invoices/index.ts` regel 206, 220-225
+**Config:** Voeg `exact-sync-contacts` toe aan `supabase/config.toml` met `verify_jwt = false`
 
-Bij `pullPaymentStatus` wordt `AmountDC` (openstaand bedrag in eigen valuta) gebruikt om betaalstatus te berekenen. De logica `amountPaid = totalIncl - amountDC` is correct — `AmountDC` bevat het openstaande saldo.
+### Stap 3: Offertes synchronisatie
 
-Maar de `$select` bevat `StarterSalesInvoiceStatus` wat niet bestaat op het SalesInvoices endpoint. Dit veroorzaakt geen fout (Exact negeert onbekende select-velden) maar is ruis.
+**Nieuw bestand:** `supabase/functions/exact-sync-quotes/index.ts`
 
-**Fix:** Verwijder `StarterSalesInvoiceStatus` uit de `$select`.
+Acties: `push`, `pull_status`
 
----
+**Push:**
+- Per quote zonder `exact_quotation_id`: POST naar `/crm/Quotations`
+- Map: `customer.exact_account_id` → `OrderAccount`, `quote_date` → `QuotationDate`, `valid_until` → `ClosingDate`, `reference` → `Description`
+- Geneste `QuotationLines` uit `quote_lines` (filter `is_group_header`): `Description`, `Quantity`, `UnitPrice`, optioneel `Item` (via `product.exact_item_id`)
+- Sla `QuotationID` en `QuotationNumber` op
 
-### Bevinding 3: Contacten-sync — `AddressStreet` is geen geldig veld
+**Pull status:**
+- GET bestaande quotations, update lokale status bij accept/reject in Exact
 
-**Bestand:** `exact-sync-contacts/index.ts` regel 79
+**Config:** Voeg `exact-sync-quotes` toe aan `supabase/config.toml`
 
-Het veld `AddressStreet` wordt gebruikt maar bestaat niet op de Contacts entity. Contacten erven hun adres van het Account. Het correcte veld voor een straatadres op een contact is er niet — adresgegevens op contactniveau worden niet ondersteund in Exact.
+### Stap 4: Artikelen synchronisatie
 
-**Fix:** Verwijder de `AddressStreet`-mapping. Adresgegevens worden alleen op Account-niveau gesynchroniseerd (wat al werkt via `exact-sync-customers`).
+**Nieuw bestand:** `supabase/functions/exact-sync-items/index.ts`
 
----
+Acties: `push`, `pull`, `sync`
 
-### Bevinding 4: Offertes — Ontbrekende valuta
+**Push:**
+- Per product zonder `exact_item_id`: POST naar `/logistics/Items`
+- Map: `article_code` → `Code`, `name` → `Description`, `base_price` als `CostPriceStandard`, `IsSalesItem: true`
+- Sla `exact_item_id` op
 
-**Bestand:** `exact-sync-quotes/index.ts` regel 122-128
+**Pull:**
+- Bulk GET `/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem`
+- Match op `Code` ↔ `article_code`, update of insert
 
-De Quotations POST mist het `Currency` veld. Hoewel Exact standaard de administratievaluta gebruikt, is het veiliger om deze expliciet mee te sturen.
+**Config:** Voeg `exact-sync-items` toe aan `supabase/config.toml`
 
-**Fix:** Voeg `Currency: "EUR"` toe aan het quotation-object.
+### Stap 5: Webhook topics uitbreiden + processing
 
----
+**Bestand:** `supabase/functions/exact-webhooks-manage/index.ts`
+- Voeg topics toe: `"SalesOrder.SalesOrders"`, `"Logistics.Items"`, `"CRM.Quotations"`
 
-### Bevinding 5: Artikelen — `Code` lengte-restrictie
+**Bestand:** `supabase/functions/exact-webhook/index.ts`
+- Voeg cases toe in de switch:
+  - `SalesOrder.SalesOrders`: bij Create/Update → fetch order data van Exact, update lokale `orders` tabel (`exact_sales_order_id`, status)
+  - `Logistics.Items`: bij Create/Update → fetch item, upsert product met matching `article_code`
+  - `CRM.Quotations`: bij Update → fetch quotation status, update lokale quote status
+  - `CRM.Accounts` Create/Update → fetch account data, upsert customer (nu alleen logging)
+  - `SalesInvoice.SalesInvoices` Create/Update → fetch invoice, update betaalstatus
 
-**Bestand:** `exact-sync-items/index.ts` regel 84
+Per webhook processing: haal het record op via GET `{ExactOnlineEndpoint}` met de access token en sync de data.
 
-Artikelcodes worden afgekort op 30 tekens (`substring(0, 30)`). Exact Online staat maximaal **30 tekens** toe voor `Code`, dus dit is correct. Maar de `Description` wordt afgekort op 100 tekens — Exact staat **100 tekens** toe, dus ook correct.
+### Stap 6: Frontend hooks
 
-Geen fix nodig.
+**Bestand:** `src/hooks/useExactOnline.ts`
 
----
+Toevoegen:
+- `useSyncContacts` — mutation voor `exact-sync-contacts`
+- `useSyncQuotes` — mutation voor `exact-sync-quotes`
+- `useSyncItems` — mutation voor `exact-sync-items`
 
-### Bevinding 6: Webhook processing — Ontbrekende `Content` wrapper
+### Stap 7: Frontend settings UI
 
-**Bestand:** `exact-webhook/index.ts` regel 24
+**Bestand:** `src/components/settings/ExactOnlineSettings.tsx`
 
-De webhook handler destructureert `Topic, Division, Key, ExactOnlineEndpoint, EventAction` direct uit `content = await req.json()`. Maar volgens de API-referentie zit de data in een `Content` wrapper:
+Sync-blokken uitbreiden met:
+- **Contactpersonen sync** (push/pull/sync buttons)
+- **Offertes sync** (push naar Exact / status ophalen)
+- **Artikelen sync** (push/pull/sync buttons)
+- Bestaand klanten-blok en webhooks behouden
 
-```json
-{
-  "Content": {
-    "Topic": "...",
-    "Division": 123,
-    "Key": "...",
-    "ExactOnlineEndpoint": "...",
-    "EventAction": "Update"
-  },
-  "HashCode": "..."
-}
-```
-
-Als de webhook via de SiteJob Connect router gaat, kan deze al unwrapped zijn. Dit hangt af van de Connect-architectuur. Als Connect de `Content` doorgeeft zonder wrapper, is de huidige code correct.
-
-**Risico:** Als Exact de webhook direct verstuurt (niet via Connect), crasht de verwerking. Verificatie nodig of Connect de payload unwrapt.
-
-**Fix:** Defensieve check toevoegen: `const payload = content.Content || content;`
-
----
-
-### Bevinding 7: Webhook HMAC-validatie ontbreekt
-
-**Bestand:** `exact-webhook/index.ts` regel 18-50
-
-De webhook valideert via `X-Webhook-Secret` header-vergelijking met de opgeslagen `webhook_secret`. Maar de Exact Online API stuurt een `HashCode` in de body (HMAC-SHA256 van de Content). De huidige validatie is een custom mechanisme via SiteJob Connect, niet de standaard Exact HMAC-validatie.
-
-Dit is correct als Connect de `X-Webhook-Secret` header toevoegt als proxy — dan is de validatie veilig. De architectuur-memory bevestigt dit.
-
-Geen fix nodig — de Connect-proxy handelt de HMAC-validatie af.
-
----
-
-### Bevinding 8: Sync-functies missen authenticatie
-
-**Bestanden:** Alle sync-functies behalve `exact-api`
-
-Alleen `exact-api/index.ts` gebruikt `requireAuth(req)`. Alle sync-functies (`exact-sync-customers`, `exact-sync-contacts`, `exact-sync-quotes`, `exact-sync-items`, `exact-sync-invoices`, `exact-sync-sales-orders`, `exact-sync-purchase-orders`) valideren GEEN gebruiker-authenticatie. Ze accepteren elke request met een `divisionId`.
-
-Dit is deels bewust: `exact-process-queue` roept ze intern aan met de anon key. Maar ze zijn ook rechtstreeks via de frontend bereikbaar zonder auth-check.
-
-**Fix:** Voeg `requireAuth(req)` toe aan alle sync-functies, met een uitzondering voor interne calls (bijv. via een service-role header check).
-
----
-
-### Bevinding 9: `exact-process-queue` — verkeerde URL-constructie
-
-**Bestand:** `exact-process-queue/index.ts` regel 83-84
-
-De queue processor roept sync-functies aan via:
-```
-fetch(`${SUPABASE_URL}/functions/v1/${syncConfig.functionName}`, ...)
-```
-Met de `SUPABASE_ANON_KEY` als Bearer token. Als we auth toevoegen aan de sync-functies (Bevinding 8), zal de queue processor falen omdat de anon key geen geldige user-sessie bevat.
-
-**Fix bij auth-toevoeging:** Gebruik `SUPABASE_SERVICE_ROLE_KEY` in de queue processor, of voeg een bypass-header toe die sync-functies herkennen als interne call.
-
----
-
-### Bevinding 10: Pull-paginering contacten — mogelijke infinite loop
-
-**Bestand:** `exact-sync-contacts/index.ts` regel 146
-
-De filter `$filter=IsMainContact eq true` gecombineerd met `$top=1000` zou moeten werken. Maar de pagineringslogica op regel 172-176 parst de `$skiptoken` met een regex. Als Exact de `__next` URL anders formatteert (bijv. URL-encoded quotes), zou de regex falen en de loop stoppen.
-
-**Risico:** Laag. Standaard Exact paginering werkt met `__next` URLs die direct bruikbaar zijn. De huidige logica parst de token onnodig — beter is om de volledige `__next` URL direct te gebruiken.
-
-**Fix:** Vervang de skiptoken-extractie door directe gebruik van `data.d.__next` als volledige URL.
-
----
-
-### Samenvatting: Fixes nodig
-
-| # | Bevinding | Ernst | Fix |
-|---|---|---|---|
-| 1 | `OrderDate` → `InvoiceDate` in factuur-sync | Hoog | Veldnaam wijzigen |
-| 2 | `StarterSalesInvoiceStatus` in $select | Laag | Verwijderen |
-| 3 | `AddressStreet` op Contacts | Medium | Verwijderen |
-| 4 | Ontbrekende `Currency` op Quotations | Laag | Toevoegen |
-| 6 | Webhook Content wrapper | Medium | Defensieve check |
-| 8 | Ontbrekende auth op sync-functies | Hoog | Auth toevoegen |
-| 9 | Queue processor auth-conflict | Hoog | Service-role bypass |
-| 10 | Paginering __next URL | Laag | Direct URL gebruiken |
-
-### Plan van aanpak
-
-1. **exact-sync-invoices** — `OrderDate` → `InvoiceDate`, verwijder `StarterSalesInvoiceStatus`
-2. **exact-sync-contacts** — Verwijder `AddressStreet`, fix paginering naar directe `__next` URL
-3. **exact-sync-quotes** — Voeg `Currency: "EUR"` toe
-4. **exact-webhook** — Defensieve `Content` wrapper check
-5. **Auth toevoegen** — `requireAuth` in alle sync-functies + service-role bypass voor `exact-process-queue`
-6. **exact-sync-items** en overige — Paginering naar directe `__next` URL
-
-Totaal: 7 bestanden wijzigen, 0 nieuwe bestanden.
+### Bestanden overzicht
+
+| Actie | Bestand |
+|---|---|
+| Migratie | Kolommen: `customers.exact_contact_id`, `quotes.exact_quotation_id/number`, `products.exact_item_id` |
+| Refactor | `supabase/functions/exact-sync-invoices/index.ts` (SalesEntries → SalesInvoices) |
+| Nieuw | `supabase/functions/exact-sync-contacts/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-quotes/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-items/index.ts` |
+| Refactor | `supabase/functions/exact-webhooks-manage/index.ts` (3 extra topics) |
+| Refactor | `supabase/functions/exact-webhook/index.ts` (daadwerkelijke data-sync) |
+| Refactor | `src/hooks/useExactOnline.ts` (3 nieuwe mutations) |
+| Refactor | `src/components/settings/ExactOnlineSettings.tsx` (3 nieuwe sync-blokken) |
+| Config | `supabase/config.toml` (3 nieuwe functies) |
 

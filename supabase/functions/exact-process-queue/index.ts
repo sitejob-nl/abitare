@@ -4,7 +4,6 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // Map table names to their sync edge function names
 const SYNC_FUNCTION_MAP: Record<string, { functionName: string; actionField: string }> = {
@@ -84,7 +83,7 @@ serve(async (req) => {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
               },
               body: JSON.stringify(body),
             });

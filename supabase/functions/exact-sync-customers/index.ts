@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { getExactTokenFromConnection } from "../_shared/exact-connect.ts";
+import { requireAuthOrService } from "../_shared/require-auth-or-service.ts";
 
 interface AbitareCustomer {
   id: string;
@@ -44,6 +45,7 @@ serve(async (req) => {
   }
 
   try {
+    await requireAuthOrService(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -196,10 +198,11 @@ async function pullCustomersInternal(
   const results = { success: true, imported: 0, updated: 0, skipped: 0, errors: [] as string[] };
 
   let hasMore = true;
-  let skipToken = "";
+  let nextPageUrl: string | null = `${baseUrl}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000`;
   
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/sync/CRM/Accounts?$select=ID,Code,Name,Email,Phone,AddressLine1,City,Postcode,Country,VATNumber,ChamberOfCommerce,Status&$top=1000${skipToken}`;
+  while (hasMore && nextPageUrl) {
+    const url = nextPageUrl;
+    nextPageUrl = null;
     
     const fetchResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
@@ -251,10 +254,8 @@ async function pullCustomersInternal(
     }
 
     const nextLink = responseData.d?.__next;
-    if (nextLink) {
-      const skipMatch = nextLink.match(/\$skiptoken=([^&]+)/);
-      skipToken = skipMatch ? `&$skiptoken=${skipMatch[1]}` : "";
-      hasMore = !!skipToken;
+    if (nextLink && accounts.length > 0) {
+      nextPageUrl = nextLink;
     } else {
       hasMore = false;
     }

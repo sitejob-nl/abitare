@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { getExactTokenFromConnection } from "../_shared/exact-connect.ts";
+import { requireAuthOrService } from "../_shared/require-auth-or-service.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -9,6 +10,7 @@ serve(async (req) => {
   }
 
   try {
+    await requireAuthOrService(req);
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Missing Supabase configuration");
@@ -128,10 +130,11 @@ async function pullItems(supabase: any, accessToken: string, baseUrl: string, ex
   const results = { success: true, matched: 0, skipped: 0, errors: [] as string[] };
 
   let hasMore = true;
-  let skipToken = "";
+  let nextPageUrl: string | null = `${baseUrl}/api/v1/${exactDivision}/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem&$top=1000`;
 
-  while (hasMore) {
-    const url = `${baseUrl}/api/v1/${exactDivision}/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem&$top=1000${skipToken}`;
+  while (hasMore && nextPageUrl) {
+    const url = nextPageUrl;
+    nextPageUrl = null;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
 
     if (!response.ok) { console.error("Failed to fetch items:", await response.text()); break; }
@@ -160,9 +163,7 @@ async function pullItems(supabase: any, accessToken: string, baseUrl: string, ex
 
     const nextUrl = data.d?.__next;
     if (nextUrl && items.length > 0) {
-      const tokenMatch = nextUrl.match(/\$skiptoken='([^']+)'/);
-      skipToken = tokenMatch ? `&$skiptoken='${tokenMatch[1]}'` : "";
-      hasMore = !!skipToken;
+      nextPageUrl = nextUrl;
     } else { hasMore = false; }
   }
 
