@@ -5,6 +5,12 @@ import { QuoteSection } from "@/hooks/useQuoteSections";
 import { QuoteLine } from "@/hooks/useQuoteLines";
 import { formatCurrency } from "@/lib/utils";
 
+interface QuoteTotalsProps {
+  sections: (QuoteSection & { quote_lines: QuoteLine[] })[];
+  discountAmount?: number;
+  paymentTerms?: string;
+}
+
 export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: QuoteTotalsProps) {
   const totals = useMemo(() => {
     let subtotalProducts = 0;

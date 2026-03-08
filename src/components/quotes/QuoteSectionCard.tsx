@@ -16,6 +16,7 @@ import { AddProductDialog } from "./AddProductDialog";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 import { SectionDiscountEditor } from "./SectionDiscountEditor";
 import { useProductRange } from "@/hooks/useProductRanges";
+import { formatCurrency } from "@/lib/utils";
 
 interface QuoteSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
