@@ -20,12 +20,6 @@ interface QuoteDiscountEditorProps {
   subtotalExclVat: number;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 export function QuoteDiscountEditor({
   quoteId,

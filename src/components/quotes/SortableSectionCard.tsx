@@ -42,13 +42,6 @@ interface SortableSectionCardProps {
   onEdit?: () => void;
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 const sectionHeaderColors: Record<string, string> = {
   meubelen: "bg-sky-50 dark:bg-sky-950/30 border-b-sky-200 dark:border-b-sky-800",

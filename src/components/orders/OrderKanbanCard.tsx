@@ -37,15 +37,7 @@ const paymentStatusConfig: Record<string, { label: string; color: string }> = {
   betaald: { label: "Betaald", color: "bg-green-100 text-green-800" },
 };
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+const formatCurrency = formatCurrencyCompact;
 
 function getCustomerName(customer: OrderKanbanCardProps["order"]["customer"]): string {
   if (!customer) return "Onbekend";

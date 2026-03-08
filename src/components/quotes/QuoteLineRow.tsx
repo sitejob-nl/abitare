@@ -14,13 +14,6 @@ interface QuoteLineRowProps {
   subLines?: QuoteLine[];
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 function formatDimension(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";

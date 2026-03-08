@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, ExternalLink, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
+import { formatCurrency } from "@/lib/utils";
 import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates, useUpdateOrderAddresses } from "@/hooks/useOrderMutations";
 import { useInstallers } from "@/hooks/useInstallers";
 import { useAssignInstaller } from "@/hooks/useAssignInstaller";

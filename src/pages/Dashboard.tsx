@@ -7,15 +7,7 @@ import { AgendaToday } from "@/components/dashboard/AgendaToday";
 import { ServiceBudget } from "@/components/dashboard/ServiceBudget";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { Euro, FileText, Package, Target, Loader2 } from "lucide-react";
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 
 const Dashboard = () => {
   const { data: stats, isLoading } = useDashboardStats();

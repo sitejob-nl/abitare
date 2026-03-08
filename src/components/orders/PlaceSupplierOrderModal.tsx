@@ -41,12 +41,6 @@ interface PlaceSupplierOrderModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 export function PlaceSupplierOrderModal({
   orderId,
