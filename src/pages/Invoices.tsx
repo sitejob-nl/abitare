@@ -44,14 +44,6 @@ const invoiceTypeLabels: Record<string, string> = {
   creditnota: "Creditnota",
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
 
 const paymentStatusConfig = {
   open: { label: "Open", variant: "destructive" as const, icon: AlertCircle },

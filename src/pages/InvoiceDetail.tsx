@@ -32,14 +32,6 @@ const paymentStatusConfig = {
   betaald: { label: "Betaald", variant: "success" as const },
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
 
 function useUpdatePayment() {
   const queryClient = useQueryClient();

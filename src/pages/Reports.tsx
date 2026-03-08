@@ -6,16 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { nl } from "date-fns/locale";
-
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 
 function useReportStats() {
   return useQuery({

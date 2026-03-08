@@ -112,13 +112,6 @@ function ProductDocumentsCard({ productId }: { productId: string }) {
   );
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ -";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();

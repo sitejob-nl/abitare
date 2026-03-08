@@ -32,14 +32,6 @@ const statusStyles: Record<OrderStatus, "active" | "pending" | "inactive"> = {
   afgerond: "inactive",
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null || amount === undefined) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 function getCustomerName(customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null): string {

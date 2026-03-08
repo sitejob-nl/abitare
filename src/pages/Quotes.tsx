@@ -30,13 +30,6 @@ const statusConfig: Record<QuoteStatus, { label: string; variant: "default" | "s
   afgewezen: { label: "Afgewezen", variant: "destructive" },
 };
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 function formatDate(date: string | null): string {
   if (!date) return "-";

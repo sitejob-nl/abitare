@@ -22,15 +22,6 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   vervallen: { label: "Vervallen", variant: "outline" },
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null || amount === undefined) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 export function CustomerQuotesTab({ customerId }: CustomerQuotesTabProps) {
   const navigate = useNavigate();
