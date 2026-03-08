@@ -34,6 +34,7 @@ import { Search, Euro, AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, Upl
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link, useNavigate } from "react-router-dom";
+import { formatCurrency } from "@/lib/utils";
 
 const invoiceTypeLabels: Record<string, string> = {
   standaard: "Standaard",
