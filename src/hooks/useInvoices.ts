@@ -82,6 +82,8 @@ export interface Invoice {
   exact_invoice_id: string | null;
   division_id: string | null;
   division_name: string | null;
+  invoice_type: string | null;
+  parent_order_id: string | null;
 }
 
 interface UseInvoicesOptions {
