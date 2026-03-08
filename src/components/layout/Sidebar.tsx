@@ -233,11 +233,6 @@ export function Sidebar({ isOpen = true, onClose, isMobile = false }: SidebarPro
                   )}
                   <Icon className="h-5 w-5" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className="min-w-[20px] rounded-full bg-danger px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
-                      {item.badge}
-                    </span>
-                  )}
                 </Link>
               );
             })}
