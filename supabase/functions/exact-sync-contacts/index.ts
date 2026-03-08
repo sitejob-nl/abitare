@@ -78,7 +78,7 @@ async function pushContacts(supabase: any, accessToken: string, baseUrl: string,
       if (customer.mobile) contactData.BusinessMobile = customer.mobile;
       if (customer.city) contactData.City = customer.city;
       if (customer.postal_code) contactData.Postcode = customer.postal_code;
-      if (customer.street_address) contactData.AddressStreet = customer.street_address;
+      // Note: Contacts inherit address from Account, AddressStreet is not a valid field
 
       if (customer.exact_contact_id) {
         // PUT update
