@@ -5172,6 +5172,10 @@ export type Database = {
           }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_manager: { Args: { _user_id: string }; Returns: boolean }
+      is_work_report_owner: {
+        Args: { _user_id: string; _work_report_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role:
