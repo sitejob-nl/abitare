@@ -138,11 +138,10 @@ export function NotificationsDropdown() {
   // Add mention notifications first (highest priority)
   unreadMentions?.forEach((mention: any) => {
     const ticket = mention.ticket;
-    const mentioner = mention.mentioner;
     notifications.push({
       id: `mention-${mention.id}`,
       type: "mention",
-      title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+      title: "Je bent getagd in een opmerking",
       description: ticket ? `Ticket #${ticket.ticket_number}: ${mention.content_preview || ticket.subject}` : (mention.content_preview || ""),
       url: ticket ? `/service/${ticket.id}` : "/service",
       createdAt: new Date(mention.created_at),

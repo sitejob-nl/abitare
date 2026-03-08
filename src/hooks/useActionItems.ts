@@ -146,10 +146,9 @@ export function useActionItems(limit = 10) {
       // Unread mentions (highest priority - personal tasks)
       (mentionsResult.data as any[] || []).forEach((mention: any) => {
         const ticket = mention.ticket;
-        const mentioner = mention.mentioner;
         actions.push({
           id: `mention-${mention.id}`,
-          title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+          title: "Je bent getagd in een opmerking",
           meta: [
             ticket ? `Ticket #${ticket.ticket_number}` : "Serviceticket",
             mention.content_preview ? mention.content_preview.slice(0, 60) : "",
