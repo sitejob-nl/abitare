@@ -125,6 +125,7 @@ const App = () => (
               <Route path="/service" element={<ProtectedRoute><Service /></ProtectedRoute>} />
               <Route path="/service/:id" element={<ProtectedRoute><ServiceTicketDetail /></ProtectedRoute>} />
               <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
+              <Route path="/guide" element={<ProtectedRoute><Guide /></ProtectedRoute>} />
               
               {/* Installer routes */}
               <Route path="/monteur" element={<InstallerRoute><InstallerDashboard /></InstallerRoute>} />
