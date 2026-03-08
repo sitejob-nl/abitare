@@ -4,6 +4,7 @@ import { nl } from "date-fns/locale";
 import { Package, ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCustomerOrders } from "@/hooks/useCustomerOrders";
+import { formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 
 interface CustomerOrdersTabProps {
   customerId: string;
@@ -23,15 +24,6 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   afgerond: { label: "Afgerond", variant: "outline" },
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null || amount === undefined) return "€ 0";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 export function CustomerOrdersTab({ customerId }: CustomerOrdersTabProps) {
   const navigate = useNavigate();

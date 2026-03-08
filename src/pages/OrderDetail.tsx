@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, ExternalLink, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useOrder } from "@/hooks/useOrders";
+import { formatCurrency } from "@/lib/utils";
 import { useUpdateOrderStatus, useRegisterPayment, useUploadOrderDocument, useDeleteOrderDocument, useAddOrderNote, useDeleteOrderNote, useUpdateOrderDates, useUpdateOrderAddresses } from "@/hooks/useOrderMutations";
 import { useInstallers } from "@/hooks/useInstallers";
 import { useAssignInstaller } from "@/hooks/useAssignInstaller";
@@ -28,13 +29,6 @@ import type { Database } from "@/integrations/supabase/types";
 type OrderStatus = Database["public"]["Enums"]["order_status"];
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 function getCustomerName(customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null): string {
   if (!customer) return "Onbekend";
@@ -70,10 +64,22 @@ const OrderDetail = () => {
   }, [error, navigate]);
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
-    if (!id) return;
+    if (!id || !order) return;
 
     try {
-      await updateStatus.mutateAsync({ orderId: id, status: newStatus });
+      await updateStatus.mutateAsync({
+        orderId: id,
+        status: newStatus,
+        gateContext: {
+          currentStatus: order.status,
+          paymentStatus: order.payment_status,
+          depositRequired: (order as any).deposit_required !== false,
+          depositInvoiceSent: !!(order as any).deposit_invoice_sent,
+          checklistComplete: checklistComplete ?? undefined,
+          hasInstallationAddress: !!(order as any).installation_street_address,
+          hasDocuments: ((order as any).order_documents?.length || 0) > 0,
+        },
+      });
       toast({
         title: "Status bijgewerkt",
         description: `De status is gewijzigd.`,

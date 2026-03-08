@@ -1,114 +1,145 @@
 
 
-## Gevonden verbeteringen en inconsistenties
+## Plan: Alle 5 Exact Online API-verbeterpunten implementeren
 
-Na een grondige audit van de codebase heb ik de volgende problemen gevonden, gecategoriseerd op ernst.
+### Overzicht
 
----
+5 verbeterpunten in scope:
+1. **SalesInvoices API** i.p.v. SalesEntries
+2. **Contactpersonen** synchronisatie via `/crm/Contacts`
+3. **Offertes** synchronisatie via `/crm/Quotations`
+4. **Artikelen** synchronisatie via `/logistics/Items`
+5. **Webhook topics** uitbreiden + daadwerkelijke data-sync bij events
 
-### 1. Dubbel toast-systeem (inconsistentie)
+### Database migratie
 
-De app gebruikt **twee verschillende toast-systemen door elkaar**:
-- `toast` van `sonner` (17 bestanden)
-- `toast`/`useToast` van `@/hooks/use-toast` (44+ bestanden)
+Nieuwe kolommen toevoegen:
 
-Dit leidt tot inconsistente UX: sonner-toasts verschijnen rechtsonder, shadcn-toasts rechtsboven. Beide Toaster-componenten zijn gemount in `App.tsx`.
+```sql
+-- Customers: Exact contact ID voor contactpersonen-sync
+ALTER TABLE customers ADD COLUMN exact_contact_id text;
 
-**Fix:** Kies een van de twee en migreer alle imports naar een systeem. Sonner is moderner en eenvoudiger.
+-- Quotes: Exact quotation ID + nummer
+ALTER TABLE quotes ADD COLUMN exact_quotation_id text;
+ALTER TABLE quotes ADD COLUMN exact_quotation_number text;
 
----
-
-### 2. `formatCurrency` gedupliceerd in 10+ bestanden
-
-Dezelfde `formatCurrency` functie staat lokaal gedefinieerd in minstens 10 bestanden (`OrderDetail.tsx`, `Dashboard.tsx`, `Products.tsx`, `OrderKanbanCard.tsx`, `QuoteSectionCard.tsx`, etc.), telkens met subtiel andere defaults (sommige zonder decimalen, sommige met `€ -`, sommige met `€ 0,00`).
-
-**Fix:** Maak een enkele `formatCurrency` utility in `src/lib/utils.ts` met optionele parameters voor decimalen, en importeer overal.
-
----
-
-### 3. Excessief `as any` gebruik (type safety)
-
-**337 `as any` casts** in pagina-bestanden alleen al. Belangrijkste voorbeelden:
-- `OrderDetail.tsx`: `order.customer as any`, `(order as any).order_documents`, `(order as any).installation_street_address` — deze velden bestaan op het type maar worden niet correct getypt door de Supabase query.
-- `QuoteDetail.tsx`, `Installation.tsx`, `PriceGroups.tsx`: zelfde patroon.
-
-**Fix:** Verbeter de Supabase query types door expliciete return types te definiëren of de select-queries te matchen met het verwachte type.
-
----
-
-### 4. Order status gate wordt niet meegegeven bij status change
-
-In `OrderDetail.tsx` regel 76: `handleStatusChange` roept `updateStatus.mutateAsync` aan **zonder** `gateContext` mee te geven. De gate-validatie in `useUpdateOrderStatus` controleert alleen `if (gateContext)`, dus zonder context wordt de gate volledig overgeslagen. De gates werken alleen visueel (disabled items in de dropdown) maar zijn **niet server-side afgedwongen**.
-
-**Fix:** Stuur de `gateContext` mee bij `updateStatus.mutateAsync`:
-```typescript
-await updateStatus.mutateAsync({
-  orderId: id,
-  status: newStatus,
-  gateContext: { /* same context as passed to OrderStatusSelect */ }
-});
+-- Products: Exact item ID voor artikelen-sync
+ALTER TABLE products ADD COLUMN exact_item_id text;
 ```
 
----
+Geen `invoices` tabel gevonden — facturen worden via `orders.exact_invoice_id` bijgehouden. Dit blijft zo, maar de waarde wordt nu een Exact `InvoiceID` GUID i.p.v. een `EntryNumber`.
 
-### 5. Kanban drag-and-drop bypassed order gates
+### Stap 1: Factuur-sync naar SalesInvoices API
 
-In `OrderKanbanBoard.tsx` wordt `toast` van `sonner` gebruikt en `validateStatusTransition` aangeroepen, maar de gate-context die meegegeven wordt bevat **geen** `checklistComplete`, `hasInstallationAddress`, of `hasDocuments` — deze velden worden niet opgehaald in de orders query. Hierdoor kunnen orders via drag-and-drop naar statussen verplaatst worden die geblokkeerd zouden moeten zijn.
+**Bestand:** `supabase/functions/exact-sync-invoices/index.ts`
 
-**Fix:** Haal de benodigde gate-context velden op in de kanban query, of block drag naar gate-beveiligde statussen.
+Wijzigingen:
+- Vervang `SalesEntries` + `SalesEntryLines` interfaces door `SalesInvoices` + `SalesInvoiceLines`
+- POST endpoint wordt `/salesinvoice/SalesInvoices` met geneste `SalesInvoiceLines`
+- Regels krijgen `Item` (Exact item GUID als beschikbaar), `Quantity`, `NetPrice`, `Description`, `VATCode`
+- Fallback naar `GLAccount` als er geen `exact_item_id` gekoppeld is aan het product
+- Na succesvolle POST: sla `InvoiceID` op in `orders.exact_invoice_id` en `InvoiceNumber` als referentie
+- Verwijder `mapToExactSalesEntry` functie, vervang door `mapToExactSalesInvoice`
+- Journal code selectie: zoek Journal met Type 70 (verkoopfactuurjournaal) i.p.v. Type 50/20
 
----
+### Stap 2: Contactpersonen synchronisatie
 
-### 6. Test-migratiebestand met hardcoded UUIDs
+**Nieuw bestand:** `supabase/functions/exact-sync-contacts/index.ts`
 
-Het bestand `supabase/migrations/20260308084820_...sql` bevat hardcoded order UUIDs en test-data mutaties. Dit is een migratie die op elke omgeving draait en zal falen of ongewenst gedrag veroorzaken op productie.
+Acties: `push`, `pull`, `sync`
 
-**Fix:** Verwijder dit migratiebestand of verplaats naar een seed-script.
+**Push** (klant → Exact):
+- Per customer met `exact_account_id`: POST/PUT naar `/crm/Contacts`
+- Map: `first_name` → `FirstName`, `last_name` → `LastName`, `email` → `Email`, `phone` → `BusinessPhone`, `mobile` → `BusinessMobile`, `city` → `City`, `postal_code` → `Postcode`
+- Sla `exact_contact_id` op na POST
 
----
+**Pull** (Exact → klant):
+- GET `/crm/Contacts?$select=ID,Account,FirstName,LastName,Email,BusinessPhone,BusinessMobile,City,Postcode,IsMainContact`
+- Match op `Account` GUID → lokale customer via `exact_account_id`
+- Update contactgegevens als `IsMainContact = true`
 
-### 7. `useRealtimeSync` luistert op `schema: "public"` zonder tabelfilter
+**Config:** Voeg `exact-sync-contacts` toe aan `supabase/config.toml` met `verify_jwt = false`
 
-De realtime subscription in `useRealtimeSync.ts` luistert op **alle** `postgres_changes` in het `public` schema. Dit genereert veel onnodig verkeer voor tabellen die niet in `TABLE_QUERY_MAP` staan.
+### Stap 3: Offertes synchronisatie
 
-**Fix:** Maak per tabel een aparte `.on()` call of gebruik een filter op tabelnaam.
+**Nieuw bestand:** `supabase/functions/exact-sync-quotes/index.ts`
 
----
+Acties: `push`, `pull_status`
 
-### 8. Login redirect na inloggen werkt niet voor monteurs
+**Push:**
+- Per quote zonder `exact_quotation_id`: POST naar `/crm/Quotations`
+- Map: `customer.exact_account_id` → `OrderAccount`, `quote_date` → `QuotationDate`, `valid_until` → `ClosingDate`, `reference` → `Description`
+- Geneste `QuotationLines` uit `quote_lines` (filter `is_group_header`): `Description`, `Quantity`, `UnitPrice`, optioneel `Item` (via `product.exact_item_id`)
+- Sla `QuotationID` en `QuotationNumber` op
 
-In `Login.tsx` navigeert de app na inloggen naar `from` (default `/`). Maar `ProtectedRoute` redirect monteurs direct naar `/monteur`. Dit veroorzaakt een dubbele navigatie: login → `/` → redirect naar `/monteur`.
+**Pull status:**
+- GET bestaande quotations, update lokale status bij accept/reject in Exact
 
-**Fix:** Controleer de rollen direct na login en navigeer monteurs rechtstreeks naar `/monteur`.
+**Config:** Voeg `exact-sync-quotes` toe aan `supabase/config.toml`
 
----
+### Stap 4: Artikelen synchronisatie
 
-### 9. `activeDivisionId` niet gepersisteerd
+**Nieuw bestand:** `supabase/functions/exact-sync-items/index.ts`
 
-Wanneer een admin een vestiging selecteert in de sidebar, wordt `activeDivisionId` opgeslagen in React state. Na een pagina-refresh gaat de selectie verloren en valt het terug op het profiel-default.
+Acties: `push`, `pull`, `sync`
 
-**Fix:** Persist `activeDivisionId` in `localStorage`.
+**Push:**
+- Per product zonder `exact_item_id`: POST naar `/logistics/Items`
+- Map: `article_code` → `Code`, `name` → `Description`, `base_price` als `CostPriceStandard`, `IsSalesItem: true`
+- Sla `exact_item_id` op
 
----
+**Pull:**
+- Bulk GET `/bulk/Logistics/Items?$select=ID,Code,Description,CostPriceStandard,IsSalesItem`
+- Match op `Code` ↔ `article_code`, update of insert
 
-### 10. `useOrders` heeft geen `staleTime`
+**Config:** Voeg `exact-sync-items` toe aan `supabase/config.toml`
 
-De `useOrders` hook (de meest gebruikte orders query) heeft geen expliciete `staleTime`, waardoor het terugvalt op de default van 30 seconden. De `useQuotes` hook heeft 5 minuten. Dit is inconsistent.
+### Stap 5: Webhook topics uitbreiden + processing
 
----
+**Bestand:** `supabase/functions/exact-webhooks-manage/index.ts`
+- Voeg topics toe: `"SalesOrder.SalesOrders"`, `"Logistics.Items"`, `"CRM.Quotations"`
 
-### Samenvatting prioriteiten
+**Bestand:** `supabase/functions/exact-webhook/index.ts`
+- Voeg cases toe in de switch:
+  - `SalesOrder.SalesOrders`: bij Create/Update → fetch order data van Exact, update lokale `orders` tabel (`exact_sales_order_id`, status)
+  - `Logistics.Items`: bij Create/Update → fetch item, upsert product met matching `article_code`
+  - `CRM.Quotations`: bij Update → fetch quotation status, update lokale quote status
+  - `CRM.Accounts` Create/Update → fetch account data, upsert customer (nu alleen logging)
+  - `SalesInvoice.SalesInvoices` Create/Update → fetch invoice, update betaalstatus
 
-| # | Issue | Ernst | Inspanning |
-|---|-------|-------|------------|
-| 4 | Order gates niet server-side afgedwongen | Hoog | Klein |
-| 5 | Kanban bypassed gates | Hoog | Middel |
-| 6 | Test-migratie met hardcoded UUIDs | Hoog | Klein |
-| 1 | Dubbel toast-systeem | Middel | Middel |
-| 2 | `formatCurrency` duplicatie | Middel | Klein |
-| 3 | `as any` overmatig gebruik | Middel | Groot |
-| 7 | Realtime luistert op alles | Laag | Klein |
-| 8 | Login redirect voor monteurs | Laag | Klein |
-| 9 | Division niet gepersisteerd | Laag | Klein |
-| 10 | Inconsistente staleTime | Laag | Klein |
+Per webhook processing: haal het record op via GET `{ExactOnlineEndpoint}` met de access token en sync de data.
+
+### Stap 6: Frontend hooks
+
+**Bestand:** `src/hooks/useExactOnline.ts`
+
+Toevoegen:
+- `useSyncContacts` — mutation voor `exact-sync-contacts`
+- `useSyncQuotes` — mutation voor `exact-sync-quotes`
+- `useSyncItems` — mutation voor `exact-sync-items`
+
+### Stap 7: Frontend settings UI
+
+**Bestand:** `src/components/settings/ExactOnlineSettings.tsx`
+
+Sync-blokken uitbreiden met:
+- **Contactpersonen sync** (push/pull/sync buttons)
+- **Offertes sync** (push naar Exact / status ophalen)
+- **Artikelen sync** (push/pull/sync buttons)
+- Bestaand klanten-blok en webhooks behouden
+
+### Bestanden overzicht
+
+| Actie | Bestand |
+|---|---|
+| Migratie | Kolommen: `customers.exact_contact_id`, `quotes.exact_quotation_id/number`, `products.exact_item_id` |
+| Refactor | `supabase/functions/exact-sync-invoices/index.ts` (SalesEntries → SalesInvoices) |
+| Nieuw | `supabase/functions/exact-sync-contacts/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-quotes/index.ts` |
+| Nieuw | `supabase/functions/exact-sync-items/index.ts` |
+| Refactor | `supabase/functions/exact-webhooks-manage/index.ts` (3 extra topics) |
+| Refactor | `supabase/functions/exact-webhook/index.ts` (daadwerkelijke data-sync) |
+| Refactor | `src/hooks/useExactOnline.ts` (3 nieuwe mutations) |
+| Refactor | `src/components/settings/ExactOnlineSettings.tsx` (3 nieuwe sync-blokken) |
+| Config | `supabase/config.toml` (3 nieuwe functies) |
 

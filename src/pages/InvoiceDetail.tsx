@@ -22,6 +22,7 @@ import {
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import type { Database } from "@/integrations/supabase/types";
+import { formatCurrency } from "@/lib/utils";
 
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
 
@@ -31,14 +32,6 @@ const paymentStatusConfig = {
   betaald: { label: "Betaald", variant: "success" as const },
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount === null) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
 
 function useUpdatePayment() {
   const queryClient = useQueryClient();

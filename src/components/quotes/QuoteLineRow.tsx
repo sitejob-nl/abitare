@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { QuoteLine, useUpdateQuoteLine, useDeleteQuoteLine, useCreateQuoteLine, calculateLineTotal } from "@/hooks/useQuoteLines";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 interface QuoteLineRowProps {
@@ -14,13 +14,6 @@ interface QuoteLineRowProps {
   subLines?: QuoteLine[];
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 function formatDimension(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";

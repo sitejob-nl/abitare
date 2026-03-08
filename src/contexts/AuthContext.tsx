@@ -33,7 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [authInitError, setAuthInitError] = useState<string | null>(null);
-  const [activeDivisionId, setActiveDivisionId] = useState<string | null>(null);
+  const [activeDivisionId, setActiveDivisionIdState] = useState<string | null>(() => {
+    try { return localStorage.getItem("activeDivisionId"); } catch { return null; }
+  });
+
+  const setActiveDivisionId = (id: string | null) => {
+    setActiveDivisionIdState(id);
+    try {
+      if (id) localStorage.setItem("activeDivisionId", id);
+      else localStorage.removeItem("activeDivisionId");
+    } catch { /* ignore */ }
+  };
 
   const initStartedRef = useRef(false);
   const initCompleteRef = useRef(false);

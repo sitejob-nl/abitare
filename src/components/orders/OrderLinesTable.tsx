@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Package, Percent } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 interface OrderLine {
   id: string;
@@ -34,13 +35,6 @@ interface OrderLinesTableProps {
   sections?: OrderSection[];
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 const SECTION_TYPE_LABELS: Record<string, string> = {
   meubelen: "Keukenmeubelen",

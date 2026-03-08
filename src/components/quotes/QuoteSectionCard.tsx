@@ -16,6 +16,7 @@ import { AddProductDialog } from "./AddProductDialog";
 import { QuoteSectionConfig, SectionConfigDisplay } from "./QuoteSectionConfig";
 import { SectionDiscountEditor } from "./SectionDiscountEditor";
 import { useProductRange } from "@/hooks/useProductRanges";
+import { formatCurrency } from "@/lib/utils";
 
 interface QuoteSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
@@ -23,13 +24,6 @@ interface QuoteSectionCardProps {
   onEdit?: () => void;
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 export function QuoteSectionCard({ section, quoteId, onEdit }: QuoteSectionCardProps) {
   const [showAddProduct, setShowAddProduct] = useState(false);

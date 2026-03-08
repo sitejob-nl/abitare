@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { FileText, ExternalLink, Users } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 function ProductVariantsCard({ productId, parentProductId }: { productId: string; parentProductId?: string | null }) {
   const lookupId = parentProductId || productId;
@@ -112,13 +113,6 @@ function ProductDocumentsCard({ productId }: { productId: string }) {
   );
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ -";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();

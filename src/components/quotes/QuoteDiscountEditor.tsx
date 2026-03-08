@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useUpdateQuote } from "@/hooks/useQuotes";
 import { toast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/utils";
 
 interface QuoteDiscountEditorProps {
   quoteId: string;
@@ -19,12 +20,6 @@ interface QuoteDiscountEditorProps {
   subtotalExclVat: number;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 export function QuoteDiscountEditor({
   quoteId,

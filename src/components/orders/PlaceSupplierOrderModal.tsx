@@ -23,6 +23,7 @@ import { useSuppliers } from "@/hooks/useSuppliers";
 import { useCreateSupplierOrder } from "@/hooks/useSupplierOrders";
 import { useTradeplaceConfig, usePlaceSupplierOrder } from "@/hooks/useTradeplace";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/utils";
 
 interface OrderLine {
   id: string;
@@ -40,12 +41,6 @@ interface PlaceSupplierOrderModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 export function PlaceSupplierOrderModal({
   orderId,

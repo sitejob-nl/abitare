@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -24,13 +24,6 @@ const paymentStatusConfig: Record<PaymentStatus, { label: string; color: string 
   betaald: { label: "Betaald", color: "bg-green-100 text-green-800" },
 };
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 interface PaymentCardProps {
   totalInclVat: number;

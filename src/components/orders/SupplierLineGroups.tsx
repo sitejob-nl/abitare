@@ -18,6 +18,7 @@ import {
 import { useCreateSupplierOrder } from "@/hooks/useSupplierOrders";
 import { useTradeplaceConfig, usePlaceSupplierOrder } from "@/hooks/useTradeplace";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/utils";
 
 interface OrderLine {
   id: string;
@@ -40,13 +41,6 @@ interface SupplierLineGroupsProps {
   lines: OrderLine[];
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
 
 interface SupplierGroup {
   supplierId: string | null;

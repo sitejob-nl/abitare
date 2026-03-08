@@ -3,18 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { QuoteSection } from "@/hooks/useQuoteSections";
 import { QuoteLine } from "@/hooks/useQuoteLines";
+import { formatCurrency } from "@/lib/utils";
 
 interface QuoteTotalsProps {
   sections: (QuoteSection & { quote_lines: QuoteLine[] })[];
   discountAmount?: number;
   paymentTerms?: string;
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
 }
 
 export function QuoteTotals({ sections, discountAmount = 0, paymentTerms }: QuoteTotalsProps) {

@@ -54,6 +54,7 @@ export function useOrders(options: UseOrdersOptions = {}) {
       return data;
     },
     enabled,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
