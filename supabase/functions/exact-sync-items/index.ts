@@ -162,9 +162,7 @@ async function pullItems(supabase: any, accessToken: string, baseUrl: string, ex
 
     const nextUrl = data.d?.__next;
     if (nextUrl && items.length > 0) {
-      const tokenMatch = nextUrl.match(/\$skiptoken='([^']+)'/);
-      skipToken = tokenMatch ? `&$skiptoken='${tokenMatch[1]}'` : "";
-      hasMore = !!skipToken;
+      nextPageUrl = nextUrl;
     } else { hasMore = false; }
   }
 
