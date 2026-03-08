@@ -121,6 +121,8 @@ export function CreateInvoiceDialog({ open, onOpenChange, parentOrderId, default
           total_incl_vat: totalInclVat,
           amount_paid: 0,
           is_standalone_invoice: true,
+          invoice_type: invoiceType as any,
+          parent_order_id: parentOrderId || null,
           created_by: user?.id,
         })
         .select("id")
