@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCustomerQuotes, type CustomerQuote } from "@/hooks/useCustomerQuotes";
 import { useDuplicateQuote } from "@/hooks/useQuoteDuplicate";
 import { toast } from "@/hooks/use-toast";
+import { formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 
 interface CustomerQuotesTabProps {
   customerId: string;
