@@ -33,7 +33,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface SortableSectionCardProps {
   section: QuoteSection & { quote_lines: QuoteLine[] };
