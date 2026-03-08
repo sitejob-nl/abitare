@@ -16,3 +16,16 @@ export function formatCurrency(value: number | null | undefined): string {
     currency: "EUR",
   }).format(value);
 }
+
+/**
+ * Format currency without decimals — for dashboards, kanban cards, list views.
+ */
+export function formatCurrencyCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "€ 0";
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
