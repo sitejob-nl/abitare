@@ -1,11 +1,4 @@
-import { useState, useCallback } from "react";
 import { toast as sonnerToast } from "sonner";
-
-/**
- * Compatibility layer: bridges the old shadcn toast API to sonner.
- * Keeps placeholder React hooks so the hook count stays stable
- * for components that were compiled with the old implementation.
- */
 
 interface ToastOptions {
   title?: string;
@@ -24,10 +17,7 @@ function toast(opts: ToastOptions) {
 }
 
 function useToast() {
-  // Placeholder hooks to keep React hook count stable
-  useState(undefined);
-  const boundToast = useCallback((opts: ToastOptions) => toast(opts), []);
-  return { toast: boundToast, toasts: [] as never[], dismiss: () => {} };
+  return { toast, toasts: [] as never[], dismiss: () => {} };
 }
 
 export { useToast, toast };
