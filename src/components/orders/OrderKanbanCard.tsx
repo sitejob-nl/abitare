@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrencyCompact } from "@/lib/utils";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Calendar, User, Euro } from "lucide-react";
