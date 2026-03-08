@@ -319,6 +319,13 @@ const Invoices = () => {
                             </Link>
                           </TableCell>
                           <TableCell>
+                            {invoice.invoice_type ? (
+                              <Badge variant="outline" className="text-xs">
+                                {invoiceTypeLabels[invoice.invoice_type] || invoice.invoice_type}
+                              </Badge>
+                            ) : "-"}
+                          </TableCell>
+                          <TableCell>
                             {invoice.order_date
                               ? format(new Date(invoice.order_date), "d MMM yyyy", {
                                   locale: nl,
