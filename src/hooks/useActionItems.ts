@@ -115,9 +115,8 @@ export function useActionItems(limit = 10) {
         ? supabase
             .from("user_mentions")
             .select(`
-              id, content_preview, created_at,
-              ticket:service_tickets(id, ticket_number, subject),
-              mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+              id, content_preview, created_at, mentioned_by,
+              ticket:service_tickets(id, ticket_number, subject)
             `)
             .eq("user_id", user.id)
             .eq("is_read", false)

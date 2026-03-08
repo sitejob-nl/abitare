@@ -110,9 +110,8 @@ export function NotificationsDropdown() {
       const { data } = await supabase
         .from("user_mentions")
         .select(`
-          id, content_preview, created_at, is_read,
-          ticket:service_tickets(id, ticket_number, subject),
-          mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+          id, content_preview, created_at, is_read, mentioned_by,
+          ticket:service_tickets(id, ticket_number, subject)
         `)
         .eq("user_id", user.id)
         .eq("is_read", false)
