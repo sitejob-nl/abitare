@@ -172,9 +172,8 @@ async function pullContacts(supabase: any, accessToken: string, baseUrl: string,
 
     const nextUrl = data.d?.__next;
     if (nextUrl && contacts.length > 0) {
-      const tokenMatch = nextUrl.match(/\$skiptoken='([^']+)'/);
-      skipToken = tokenMatch ? `&$skiptoken='${tokenMatch[1]}'` : "";
-      hasMore = !!skipToken;
+      // Use __next URL directly instead of parsing skiptoken
+      nextPageUrl = nextUrl;
     } else { hasMore = false; }
   }
 
