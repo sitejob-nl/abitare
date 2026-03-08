@@ -285,6 +285,7 @@ const Invoices = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order #</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Datum</TableHead>
                       <TableHead>Klant</TableHead>
                       <TableHead>Vestiging</TableHead>
