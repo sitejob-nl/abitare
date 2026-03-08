@@ -110,6 +110,8 @@ export function useInvoices(options: UseInvoicesOptions = {}) {
           payment_status,
           amount_paid,
           exact_invoice_id,
+          invoice_type,
+          parent_order_id,
           customers!inner(first_name, last_name, company_name),
           divisions(name)
         `)
