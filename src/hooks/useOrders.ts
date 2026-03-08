@@ -21,7 +21,14 @@ export function useOrders(options: UseOrdersOptions = {}) {
       let query = supabase
         .from("orders")
         .select(`
-          *,
+          id, order_number, order_date, status, payment_status, total_excl_vat, total_incl_vat,
+          customer_id, division_id, created_at, updated_at, installer_id, 
+          expected_installation_date, expected_delivery_date, actual_delivery_date,
+          forecast_week, deposit_required, deposit_invoice_sent, amount_paid,
+          quote_id, salesperson_id, assistant_id, project_id, invoice_type,
+          is_standalone_invoice, exact_sales_order_id, exact_invoice_id,
+          total_vat, total_cost_price, margin_amount, margin_percentage,
+          subtotal_products, subtotal_montage, discount_amount,
           customer:customers(id, first_name, last_name, company_name),
           division:divisions(id, name)
         `)
@@ -37,6 +44,8 @@ export function useOrders(options: UseOrdersOptions = {}) {
 
       if (limit) {
         query = query.limit(limit);
+      } else {
+        query = query.limit(500);
       }
 
       const { data, error } = await query;
