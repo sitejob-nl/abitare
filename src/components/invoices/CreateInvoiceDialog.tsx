@@ -66,16 +66,17 @@ interface CreateInvoiceDialogProps {
   defaultCustomerId?: string;
 }
 
-export function CreateInvoiceDialog({ open, onOpenChange }: CreateInvoiceDialogProps) {
+export function CreateInvoiceDialog({ open, onOpenChange, parentOrderId, defaultInvoiceType, defaultCustomerId }: CreateInvoiceDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { activeDivisionId, user } = useAuth();
   const { data: customers } = useCustomers();
   
-  const [customerId, setCustomerId] = useState<string>("");
+  const [customerId, setCustomerId] = useState<string>(defaultCustomerId || "");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [paymentCondition, setPaymentCondition] = useState("14 dagen");
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(defaultInvoiceType || "standaard");
   const [internalNotes, setInternalNotes] = useState("");
   const [lines, setLines] = useState<InvoiceLine[]>([
     { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0, vatRate: 21 },
