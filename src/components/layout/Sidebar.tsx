@@ -54,8 +54,8 @@ const navSections: NavSection[] = [
   {
     title: "Verkoop",
     items: [
-      { icon: Users, label: "Klanten", href: "/customers", badge: 3, menuKey: "customers" },
-      { icon: FileText, label: "Offertes", href: "/quotes", badge: 8, menuKey: "quotes" },
+      { icon: Users, label: "Klanten", href: "/customers", menuKey: "customers" },
+      { icon: FileText, label: "Offertes", href: "/quotes", menuKey: "quotes" },
       { icon: Package, label: "Orders", href: "/orders", menuKey: "orders" },
       { icon: Receipt, label: "Facturen", href: "/invoices", menuKey: "invoices" },
     ],
