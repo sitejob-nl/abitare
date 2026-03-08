@@ -72,7 +72,7 @@ const navSections: NavSection[] = [
   {
     title: "Communicatie",
     items: [
-      { icon: MessageSquare, label: "Inbox", href: "/inbox", badge: 12, menuKey: "inbox" },
+      { icon: MessageSquare, label: "Inbox", href: "/inbox", menuKey: "inbox" },
     ],
   },
   {
