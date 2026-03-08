@@ -263,6 +263,21 @@ export function CreateInvoiceDialog({ open, onOpenChange, parentOrderId, default
             </Popover>
           </div>
 
+          {/* Invoice Type */}
+          <div className="space-y-2">
+            <Label>Factuurtype</Label>
+            <Select value={invoiceType} onValueChange={(v) => setInvoiceType(v as InvoiceType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(invoiceTypeLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Date and Payment Condition */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
