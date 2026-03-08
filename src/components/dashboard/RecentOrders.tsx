@@ -32,7 +32,6 @@ const statusStyles: Record<OrderStatus, "active" | "pending" | "inactive"> = {
   afgerond: "inactive",
 };
 
-}
 
 function getCustomerName(customer: { first_name?: string | null; last_name?: string | null; company_name?: string | null } | null): string {
   if (!customer) return "Onbekend";
