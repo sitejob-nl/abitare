@@ -205,7 +205,7 @@ async function pullPaymentStatusInternal(supabase: any, accessToken: string, bas
   for (const order of orders) {
     try {
       const invoiceId = order.exact_invoice_id;
-      const url = `${baseUrl}/api/v1/${exactDivision}/salesinvoice/SalesInvoices(guid'${invoiceId}')?$select=InvoiceID,AmountDC,AmountDiscount,Status,StarterSalesInvoiceStatus`;
+      const url = `${baseUrl}/api/v1/${exactDivision}/salesinvoice/SalesInvoices(guid'${invoiceId}')?$select=InvoiceID,AmountDC,AmountDiscount,Status`;
       const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
 
       if (!response.ok) {
