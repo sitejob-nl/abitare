@@ -70,10 +70,22 @@ const OrderDetail = () => {
   }, [error, navigate]);
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
-    if (!id) return;
+    if (!id || !order) return;
 
     try {
-      await updateStatus.mutateAsync({ orderId: id, status: newStatus });
+      await updateStatus.mutateAsync({
+        orderId: id,
+        status: newStatus,
+        gateContext: {
+          currentStatus: order.status,
+          paymentStatus: order.payment_status,
+          depositRequired: (order as any).deposit_required !== false,
+          depositInvoiceSent: !!(order as any).deposit_invoice_sent,
+          checklistComplete: checklistComplete ?? undefined,
+          hasInstallationAddress: !!(order as any).installation_street_address,
+          hasDocuments: ((order as any).order_documents?.length || 0) > 0,
+        },
+      });
       toast({
         title: "Status bijgewerkt",
         description: `De status is gewijzigd.`,
