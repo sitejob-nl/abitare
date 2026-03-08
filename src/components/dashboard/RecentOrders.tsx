@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn, formatCurrencyCompact as formatCurrency } from "@/lib/utils";
 import { useRecentOrders } from "@/hooks/useOrders";
 import { Loader2 } from "lucide-react";
 
