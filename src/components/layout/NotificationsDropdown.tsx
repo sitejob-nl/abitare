@@ -110,9 +110,8 @@ export function NotificationsDropdown() {
       const { data } = await supabase
         .from("user_mentions")
         .select(`
-          id, content_preview, created_at, is_read,
-          ticket:service_tickets(id, ticket_number, subject),
-          mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+          id, content_preview, created_at, is_read, mentioned_by,
+          ticket:service_tickets(id, ticket_number, subject)
         `)
         .eq("user_id", user.id)
         .eq("is_read", false)
@@ -139,11 +138,10 @@ export function NotificationsDropdown() {
   // Add mention notifications first (highest priority)
   unreadMentions?.forEach((mention: any) => {
     const ticket = mention.ticket;
-    const mentioner = mention.mentioner;
     notifications.push({
       id: `mention-${mention.id}`,
       type: "mention",
-      title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+      title: "Je bent getagd in een opmerking",
       description: ticket ? `Ticket #${ticket.ticket_number}: ${mention.content_preview || ticket.subject}` : (mention.content_preview || ""),
       url: ticket ? `/service/${ticket.id}` : "/service",
       createdAt: new Date(mention.created_at),

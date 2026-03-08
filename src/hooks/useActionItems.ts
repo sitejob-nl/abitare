@@ -115,9 +115,8 @@ export function useActionItems(limit = 10) {
         ? supabase
             .from("user_mentions")
             .select(`
-              id, content_preview, created_at,
-              ticket:service_tickets(id, ticket_number, subject),
-              mentioner:profiles!user_mentions_mentioned_by_fkey(full_name)
+              id, content_preview, created_at, mentioned_by,
+              ticket:service_tickets(id, ticket_number, subject)
             `)
             .eq("user_id", user.id)
             .eq("is_read", false)
@@ -147,10 +146,9 @@ export function useActionItems(limit = 10) {
       // Unread mentions (highest priority - personal tasks)
       (mentionsResult.data as any[] || []).forEach((mention: any) => {
         const ticket = mention.ticket;
-        const mentioner = mention.mentioner;
         actions.push({
           id: `mention-${mention.id}`,
-          title: `${mentioner?.full_name || "Iemand"} heeft je getagd`,
+          title: "Je bent getagd in een opmerking",
           meta: [
             ticket ? `Ticket #${ticket.ticket_number}` : "Serviceticket",
             mention.content_preview ? mention.content_preview.slice(0, 60) : "",
