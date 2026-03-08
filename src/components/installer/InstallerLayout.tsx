@@ -6,6 +6,7 @@ import { ClipboardList, FileCheck, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { OfflineQueueIndicator } from "@/components/pwa/OfflineQueueIndicator";
 
 interface InstallerLayoutProps {
   children: React.ReactNode;
