@@ -324,6 +324,13 @@ const Settings = () => {
             </TabsContent>
           )}
 
+          {/* Montage Tab - Admin only */}
+          {isAdmin && (
+            <TabsContent value="montage" className="space-y-6">
+              <InstallationRatesSettings />
+            </TabsContent>
+          )}
+
           {/* Menu Permissions Tab - Admin only */}
           {isAdmin && (
             <TabsContent value="menu-permissions" className="space-y-6">
