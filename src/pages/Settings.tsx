@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Link2, Pencil, User, Percent, Shield } from "lucide-react";
+import { Loader2, Building2, Users, Link2, Pencil, User, Percent, Shield, Wrench } from "lucide-react";
 import { CalendarColorPicker } from "@/components/calendar/CalendarColorPicker";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
