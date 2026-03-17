@@ -18,7 +18,10 @@ import {
   FileText,
   ArrowLeft,
   Building2,
+  Download,
 } from "lucide-react";
+import { generateInvoicePdf } from "@/lib/pdf/invoicePdfGenerator";
+import type { InvoiceData, InvoiceLine, InvoiceSection } from "@/lib/pdf/invoicePdfGenerator";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import type { Database } from "@/integrations/supabase/types";
