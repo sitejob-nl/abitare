@@ -42,6 +42,7 @@ import {
 } from "@/hooks/useTradeplace";
 import { useToast } from "@/hooks/use-toast";
 import { PlaceSupplierOrderModal } from "./PlaceSupplierOrderModal";
+import { formatCurrency } from "@/lib/utils";
 
 interface SupplierOrdersCardProps {
   orderId: string;
