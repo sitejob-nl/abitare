@@ -14,6 +14,7 @@ import { UserFormDialog } from "@/components/settings/UserFormDialog";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { SupplierDiscountsSettings } from "@/components/settings/SupplierDiscountsSettings";
 import { MenuPermissionsSettings } from "@/components/settings/MenuPermissionsSettings";
+import { InstallationRatesSettings } from "@/components/settings/InstallationRatesSettings";
 import { useAllDivisions, type Division } from "@/hooks/useDivisions";
 import { useProfiles, type ProfileWithRoles } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
