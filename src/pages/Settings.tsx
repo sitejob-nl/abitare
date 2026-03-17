@@ -101,6 +101,11 @@ const Settings = () => {
                   <span className="hidden sm:inline">Kortingen</span>
                   <span className="sm:hidden">Kort.</span>
                 </TabsTrigger>
+                <TabsTrigger value="montage" className="gap-2 text-xs sm:text-sm">
+                  <Wrench className="h-4 w-4" />
+                  <span className="hidden sm:inline">Montage</span>
+                  <span className="sm:hidden">Mont.</span>
+                </TabsTrigger>
                 <TabsTrigger value="menu-permissions" className="gap-2 text-xs sm:text-sm">
                   <Shield className="h-4 w-4" />
                   <span className="hidden sm:inline">Menu-rechten</span>
