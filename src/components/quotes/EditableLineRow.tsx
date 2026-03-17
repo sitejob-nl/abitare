@@ -23,7 +23,7 @@ import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface EditableLineRowProps {
   line: QuoteLine;
