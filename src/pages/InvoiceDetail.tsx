@@ -131,7 +131,60 @@ const InvoiceDetail = () => {
 
   const breadcrumb = `Facturen / Order #${invoice.order_number}`;
 
-  // Map order_lines and order_sections for OrderLinesTable
+  const handleExportPdf = () => {
+    const invoiceData: InvoiceData = {
+      order_number: invoice.order_number,
+      order_date: invoice.order_date,
+      payment_condition: (invoice as any).payment_condition || null,
+      invoice_type: (invoice as any).invoice_type || null,
+      parent_order_number: null, // Could be fetched if needed
+      total_excl_vat: invoice.total_excl_vat,
+      total_vat: invoice.total_vat,
+      total_incl_vat: invoice.total_incl_vat,
+      amount_paid: invoice.amount_paid,
+      payment_status: invoice.payment_status,
+      customer: customer ? {
+        salutation: null,
+        first_name: customer.first_name,
+        last_name: customer.last_name,
+        company_name: customer.company_name,
+        street_address: customer.street_address,
+        postal_code: customer.postal_code,
+        city: customer.city,
+        email: customer.email,
+        phone: customer.phone,
+      } : null,
+      division: invoice.divisions ? { name: invoice.divisions.name } : null,
+    };
+
+    const pdfLines: InvoiceLine[] = (invoice.order_lines || [])
+      .filter((l: any) => !l.is_group_header)
+      .map((l: any) => ({
+        description: l.description,
+        article_code: l.article_code,
+        quantity: l.quantity,
+        unit: l.unit,
+        unit_price: l.unit_price,
+        discount_percentage: l.discount_percentage,
+        line_total: l.line_total,
+        vat_rate: l.vat_rate,
+        is_group_header: l.is_group_header,
+        group_title: l.group_title,
+        section_type: l.section_type,
+      }));
+
+    const pdfSections: InvoiceSection[] = (invoice.order_sections || []).map((s: any) => ({
+      title: s.title,
+      section_type: s.section_type,
+      sort_order: s.sort_order,
+      subtotal: s.subtotal,
+      discount_percentage: s.discount_percentage,
+      discount_amount: s.discount_amount,
+      discount_description: s.discount_description,
+    }));
+
+    generateInvoicePdf(invoiceData, pdfLines, pdfSections);
+  };
   const orderLines = (invoice.order_lines || []).map((line: any) => ({
     id: line.id,
     description: line.description,
