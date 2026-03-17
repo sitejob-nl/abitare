@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Loader2, LayoutList, Kanban } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { useOrders, OrderStatus } from "@/hooks/useOrders";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useAuth } from "@/contexts/AuthContext";
