@@ -26,14 +26,7 @@ import { useProducts, useProductCategories, useSuppliers } from "@/hooks/useProd
 import { useProductStats } from "@/hooks/useProductStats";
 import { BulkActionsBar } from "@/components/products/BulkActionsBar";
 import { StatCard } from "@/components/dashboard/StatCard";
-
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ -";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
+import { formatCurrency } from "@/lib/utils";
 
 type SortField = "name" | "base_price" | "cost_price" | "created_at" | "article_code";
 type SortDirection = "asc" | "desc";

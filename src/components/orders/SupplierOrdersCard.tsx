@@ -73,10 +73,7 @@ const timelineSteps = [
   { key: 'delivered', label: 'Geleverd' },
 ];
 
-function formatCurrency(value: number | null): string {
-  if (value === null) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(value);
-}
+
 
 export function SupplierOrdersCard({ orderId, orderLines }: SupplierOrdersCardProps) {
   const { toast } = useToast();
