@@ -241,12 +241,18 @@ const InvoiceDetail = () => {
             </p>
           </div>
         </div>
-        <Button asChild variant="outline">
-          <Link to={`/orders/${invoice.id}`}>
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Bekijk order
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportPdf}>
+            <Download className="mr-2 h-4 w-4" />
+            PDF Exporteren
+          </Button>
+          <Button asChild variant="outline">
+            <Link to={`/orders/${invoice.id}`}>
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Bekijk order
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Main Content */}
