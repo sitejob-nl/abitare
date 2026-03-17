@@ -18,7 +18,11 @@ export function useInvoice(id: string | undefined) {
           total_excl_vat,
           total_vat,
           payment_status,
+          payment_condition,
           amount_paid,
+          exact_invoice_id,
+          invoice_type,
+          parent_order_id,
           exact_invoice_id,
           customers(
             id,
