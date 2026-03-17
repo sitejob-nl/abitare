@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, Users, Link2, Pencil, User, Percent, Shield } from "lucide-react";
+import { Loader2, Building2, Users, Link2, Pencil, User, Percent, Shield, Wrench } from "lucide-react";
 import { CalendarColorPicker } from "@/components/calendar/CalendarColorPicker";
 import { ExactOnlineSettings } from "@/components/settings/ExactOnlineSettings";
 import { TradeplaceSettings } from "@/components/settings/TradeplaceSettings";
@@ -14,6 +14,7 @@ import { UserFormDialog } from "@/components/settings/UserFormDialog";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { SupplierDiscountsSettings } from "@/components/settings/SupplierDiscountsSettings";
 import { MenuPermissionsSettings } from "@/components/settings/MenuPermissionsSettings";
+import { InstallationRatesSettings } from "@/components/settings/InstallationRatesSettings";
 import { useAllDivisions, type Division } from "@/hooks/useDivisions";
 import { useProfiles, type ProfileWithRoles } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -99,6 +100,11 @@ const Settings = () => {
                   <Percent className="h-4 w-4" />
                   <span className="hidden sm:inline">Kortingen</span>
                   <span className="sm:hidden">Kort.</span>
+                </TabsTrigger>
+                <TabsTrigger value="montage" className="gap-2 text-xs sm:text-sm">
+                  <Wrench className="h-4 w-4" />
+                  <span className="hidden sm:inline">Montage</span>
+                  <span className="sm:hidden">Mont.</span>
                 </TabsTrigger>
                 <TabsTrigger value="menu-permissions" className="gap-2 text-xs sm:text-sm">
                   <Shield className="h-4 w-4" />
@@ -315,6 +321,13 @@ const Settings = () => {
           {isAdmin && (
             <TabsContent value="discounts" className="space-y-6">
               <SupplierDiscountsSettings />
+            </TabsContent>
+          )}
+
+          {/* Montage Tab - Admin only */}
+          {isAdmin && (
+            <TabsContent value="montage" className="space-y-6">
+              <InstallationRatesSettings />
             </TabsContent>
           )}
 
