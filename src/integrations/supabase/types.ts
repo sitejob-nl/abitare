@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      _artimar_staging: {
+        Row: {
+          batch_data: Json
+          id: number
+          processed: boolean | null
+        }
+        Insert: {
+          batch_data: Json
+          id?: number
+          processed?: boolean | null
+        }
+        Update: {
+          batch_data?: Json
+          id?: number
+          processed?: boolean | null
+        }
+        Relationships: []
+      }
       calendar_subscriptions: {
         Row: {
           created_at: string
@@ -5181,6 +5199,7 @@ export type Database = {
             }
             Returns: boolean
           }
+      import_artimar_batch: { Args: { p_data: Json }; Returns: number }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_manager: { Args: { _user_id: string }; Returns: boolean }
       is_work_report_owner: {

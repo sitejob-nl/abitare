@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Loader2, LayoutList, Kanban } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { useOrders, OrderStatus } from "@/hooks/useOrders";
 import { useDivisions } from "@/hooks/useDivisions";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,13 +41,7 @@ const paymentStatusConfig: Record<string, { label: string; color: string }> = {
   betaald: { label: "Betaald", color: "bg-green-100 text-green-800" },
 };
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
+
 
 function formatDate(date: string | null): string {
   if (!date) return "-";

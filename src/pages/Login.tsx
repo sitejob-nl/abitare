@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +41,24 @@ export default function Login() {
         title: "Welkom terug!",
         description: "Je bent succesvol ingelogd.",
       });
-      navigate(from, { replace: true });
+
+      // Check if user is installer-only to redirect directly
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id);
+
+        const roles = rolesData?.map((r: any) => r.role) || [];
+        const isOnlyInstaller = roles.includes("monteur") &&
+          !roles.includes("admin") &&
+          !roles.includes("manager");
+
+        navigate(isOnlyInstaller ? "/monteur" : from, { replace: true });
+      } else {
+        navigate(from, { replace: true });
+      }
     }
   };
 

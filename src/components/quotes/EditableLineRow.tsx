@@ -23,7 +23,7 @@ import { useProductRanges, useProductRange } from "@/hooks/useProductRanges";
 import { usePriceGroups } from "@/hooks/usePriceGroups";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface EditableLineRowProps {
   line: QuoteLine;
@@ -36,13 +36,7 @@ interface EditableLineRowProps {
   sectionSupplierId?: string | null;
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "€ 0,00";
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
-}
+
 
 function formatDimension(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";
