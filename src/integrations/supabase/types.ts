@@ -5063,6 +5063,17 @@ export type Database = {
         }
         Returns: number
       }
+      convert_quote_to_order: {
+        Args: {
+          p_deposit_invoice_sent?: boolean
+          p_deposit_percentage?: number
+          p_deposit_reminder_date?: string
+          p_deposit_required?: boolean
+          p_quote_id: string
+          p_user_id?: string
+        }
+        Returns: Json
+      }
       generate_quote_reference: {
         Args: { p_category?: string; p_customer_name: string }
         Returns: string
