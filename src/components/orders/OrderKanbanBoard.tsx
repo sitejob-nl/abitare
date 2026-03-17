@@ -100,7 +100,14 @@ export function OrderKanbanBoard({ orders, isLoading }: OrderKanbanBoardProps) {
     const newStatus = over.id as OrderStatus;
     const order = orders?.find((o) => o.id === orderId);
 
-    if (!order || order.status === newStatus) return;
+    // Gate-protected statuses require full context only available on detail page
+    const GATE_PROTECTED_STATUSES: OrderStatus[] = ["controle", "bestel_klaar", "besteld"];
+    if (GATE_PROTECTED_STATUSES.includes(newStatus)) {
+      toast.info("Open de order om naar deze status te wijzigen", {
+        description: "Deze statuswijziging vereist extra controles.",
+      });
+      return;
+    }
 
     const isValidColumn = statusColumns.some((col) => col.id === newStatus);
     if (!isValidColumn) return;
