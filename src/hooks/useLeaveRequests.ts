@@ -14,6 +14,9 @@ export interface LeaveRequest {
   approved_at: string | null;
   created_at: string;
   division_id: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  is_partial_day: boolean;
   profile?: { full_name: string; email: string } | null;
   approver?: { full_name: string } | null;
 }
