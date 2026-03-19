@@ -740,10 +740,13 @@ export type Database = {
           created_at: string
           division_id: string | null
           end_date: string
+          end_time: string | null
           id: string
+          is_partial_day: boolean
           leave_type: string
           notes: string | null
           start_date: string
+          start_time: string | null
           status: string
           updated_at: string
           user_id: string
@@ -754,10 +757,13 @@ export type Database = {
           created_at?: string
           division_id?: string | null
           end_date: string
+          end_time?: string | null
           id?: string
+          is_partial_day?: boolean
           leave_type?: string
           notes?: string | null
           start_date: string
+          start_time?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -768,10 +774,13 @@ export type Database = {
           created_at?: string
           division_id?: string | null
           end_date?: string
+          end_time?: string | null
           id?: string
+          is_partial_day?: boolean
           leave_type?: string
           notes?: string | null
           start_date?: string
+          start_time?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -4443,6 +4452,60 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_schedules: {
+        Row: {
+          break_minutes: number
+          created_at: string
+          day_of_week: number
+          division_id: string | null
+          end_time: string
+          id: string
+          is_working_day: boolean
+          start_time: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          break_minutes?: number
+          created_at?: string
+          day_of_week: number
+          division_id?: string | null
+          end_time?: string
+          id?: string
+          is_working_day?: boolean
+          start_time?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          break_minutes?: number
+          created_at?: string
+          day_of_week?: number
+          division_id?: string | null
+          end_time?: string
+          id?: string
+          is_working_day?: boolean
+          start_time?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_schedules_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_schedules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

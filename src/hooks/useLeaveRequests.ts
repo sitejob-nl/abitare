@@ -14,6 +14,9 @@ export interface LeaveRequest {
   approved_at: string | null;
   created_at: string;
   division_id: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  is_partial_day: boolean;
   profile?: { full_name: string; email: string } | null;
   approver?: { full_name: string } | null;
 }
@@ -83,6 +86,9 @@ export function useCreateLeaveRequest() {
       end_date: string;
       leave_type: string;
       notes?: string;
+      start_time?: string | null;
+      end_time?: string | null;
+      is_partial_day?: boolean;
     }) => {
       const { data, error } = await supabase
         .from("leave_requests")
@@ -93,7 +99,10 @@ export function useCreateLeaveRequest() {
           leave_type: req.leave_type,
           notes: req.notes || null,
           division_id: activeDivisionId || null,
-        })
+          start_time: req.start_time || null,
+          end_time: req.end_time || null,
+          is_partial_day: req.is_partial_day || false,
+        } as any)
         .select()
         .single();
       if (error) throw error;
